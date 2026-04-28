@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "프로필 사진을 촬영하기 위해 카메라 접근 권한이 필요합니다.",
+        "NSPhotoLibraryUsageDescription": "프로필 사진을 변경하기 위해 사진 보관함 접근 권한이 필요합니다."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,6 +27,15 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "프로필 사진을 변경하기 위해 사진 보관함 접근 권한이 필요합니다.",
+          "cameraPermission": "프로필 사진을 촬영하기 위해 카메라 접근 권한이 필요합니다."
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     }
