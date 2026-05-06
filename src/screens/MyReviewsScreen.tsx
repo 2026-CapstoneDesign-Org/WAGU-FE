@@ -18,13 +18,16 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import TrashIcon from '../../assets/icons/trash.svg';
-import { myReviews } from '../data/myReviews';
+import { MyReview, myReviews } from '../data/myReviews';
 
 const REVIEW_IMAGE_SIZE = 172;
 
 type MyReviewsScreenProps = {
   onBack: () => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
+  reviewsData?: MyReview[];
+  title?: string;
+  isOwner?: boolean;
 };
 
 function ThumbUpIcon({ color }: { color: string }) {
@@ -75,10 +78,13 @@ function ReactionButton({
 export function MyReviewsScreen({
   onBack,
   onOpenRestaurantDetail,
+  reviewsData = myReviews,
+  title = '내 리뷰',
+  isOwner = true,
 }: MyReviewsScreenProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const [reviews, setReviews] = useState(myReviews);
+  const [reviews, setReviews] = useState(reviewsData);
   const previewScrollRef = useRef<ScrollView>(null);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [previewImageSizes, setPreviewImageSizes] = useState<
@@ -91,6 +97,10 @@ export function MyReviewsScreen({
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTranslateY = useRef(new Animated.Value(18)).current;
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setReviews(reviewsData);
+  }, [reviewsData]);
 
   useEffect(() => {
     return () => {

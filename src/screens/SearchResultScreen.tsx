@@ -19,12 +19,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import SearchIcon from '../../assets/icons/search.svg';
+import { userProfiles } from '../data/userProfiles';
 
 type SearchResultTab = 'restaurant' | 'user' | 'region' | 'photo';
 
 type SearchResultScreenProps = {
   onBack: () => void;
+  initialTab?: SearchResultTab;
+  onChangeTab?: (tab: SearchResultTab) => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
+  onOpenUserProfile?: (userId: string) => void;
   onSearch?: (query: string) => void;
   query: string;
 };
@@ -77,82 +81,45 @@ const RESTAURANT_RESULTS: RestaurantResult[] = [
     category: '한식',
     imageUri: 'https://www.figma.com/api/mcp/asset/9e567790-321f-46ed-b189-58f91d3c32f9',
   },
-  { id: 'restaurant-5', name: '스시몬', category: '일식' },
+  { id: 'restaurant-5', name: '다시봄', category: '일식' },
   { id: 'restaurant-6', name: '카레마스터', category: '인도식' },
-  { id: 'restaurant-7', name: '오븐스테이크', category: '양식' },
-  { id: 'restaurant-8', name: '샤브샤브하우스', category: '중식' },
+  { id: 'restaurant-7', name: '어반스테이크', category: '양식' },
+  { id: 'restaurant-8', name: '바브브라운', category: '중식' },
   { id: 'restaurant-9', name: '타코하우스', category: '멕시코식' },
-  { id: 'restaurant-10', name: '온더테이블', category: '브런치' },
-  { id: 'restaurant-11', name: '라멘공방', category: '일식' },
-  { id: 'restaurant-12', name: '하남돼지집', category: '한식' },
+  { id: 'restaurant-10', name: '오브테이블', category: '브런치' },
+  { id: 'restaurant-11', name: '연말공감', category: '일식' },
+  { id: 'restaurant-12', name: '하남돼지', category: '한식' },
   { id: 'restaurant-13', name: '버거스튜디오', category: '양식' },
-  { id: 'restaurant-14', name: '포메인', category: '베트남식' },
+  { id: 'restaurant-14', name: '라마르', category: '베트남식' },
   { id: 'restaurant-15', name: '마라천국', category: '중식' },
   { id: 'restaurant-16', name: '정성식당', category: '한식' },
 ];
 
 const USER_RESULTS: UserResult[] = [
-  {
-    id: 'user-1',
-    name: '용인맛집러',
-    meta: '리뷰 · 46',
-    imageUri: 'https://www.figma.com/api/mcp/asset/8da6a8b8-526c-45c9-aac5-c222ae166f41',
-  },
-  {
-    id: 'user-2',
-    name: 'JUnn',
-    meta: '리뷰 · 21',
-    imageUri: 'https://www.figma.com/api/mcp/asset/73c13bc3-435f-4d23-a011-2247291949e1',
-  },
-  {
-    id: 'user-3',
-    name: '강남치맥',
-    meta: '리뷰 · 118',
-    imageUri: 'https://www.figma.com/api/mcp/asset/bc373354-5752-4f1f-85a8-5d980b97a795',
-  },
-  {
-    id: 'user-4',
-    name: '다주',
-    meta: '리뷰 · 641',
-    imageUri: 'https://www.figma.com/api/mcp/asset/acbbdd90-dfd7-4079-a0ce-49c497d8773c',
-  },
-  {
-    id: 'user-5',
-    name: '서울떡볶이',
-    meta: '리뷰 · 89',
-    imageUri: 'https://www.figma.com/api/mcp/asset/8da6a8b8-526c-45c9-aac5-c222ae166f41',
-  },
-  {
-    id: 'user-6',
-    name: '부산해물탕',
-    meta: '리뷰 · 34',
-    imageUri: 'https://www.figma.com/api/mcp/asset/73c13bc3-435f-4d23-a011-2247291949e1',
-  },
-  {
-    id: 'user-7',
-    name: '전주비빔밥',
-    meta: '리뷰 · 76',
-    imageUri: 'https://www.figma.com/api/mcp/asset/bc373354-5752-4f1f-85a8-5d980b97a795',
-  },
-  {
-    id: 'user-8',
-    name: '홍대브런치',
-    meta: '리뷰 · 55',
-    imageUri: 'https://www.figma.com/api/mcp/asset/acbbdd90-dfd7-4079-a0ce-49c497d8773c',
-  },
-  {
-    id: 'user-9',
-    name: '인천회타운',
-    meta: '리뷰 · 112',
-    imageUri: 'https://www.figma.com/api/mcp/asset/8da6a8b8-526c-45c9-aac5-c222ae166f41',
-  },
-  {
-    id: 'user-10',
-    name: '대전칼국수',
-    meta: '리뷰 · 92',
-    imageUri: 'https://www.figma.com/api/mcp/asset/73c13bc3-435f-4d23-a011-2247291949e1',
-  },
-];
+  'following-1',
+  'follower-4',
+  'following-2',
+  'follower-5',
+  'following-3',
+  'follower-2',
+  'follower-1',
+  'following-5',
+  'follower-6',
+  'following-4',
+]
+  .map((id) => userProfiles.find((profile) => profile.id === id))
+  .filter((profile): profile is NonNullable<(typeof userProfiles)[number]> => Boolean(profile))
+  .map((profile, index) => ({
+    id: profile.id,
+    name: profile.nickname,
+    meta: `리뷰 · ${profile.reviewCount}`,
+    imageUri: [
+      'https://www.figma.com/api/mcp/asset/8da6a8b8-526c-45c9-aac5-c222ae166f41',
+      'https://www.figma.com/api/mcp/asset/73c13bc3-435f-4d23-a011-2247291949e1',
+      'https://www.figma.com/api/mcp/asset/bc373354-5752-4f1f-85a8-5d980b97a795',
+      'https://www.figma.com/api/mcp/asset/acbbdd90-dfd7-4079-a0ce-49c497d8773c',
+    ][index % 4],
+  }));
 
 const tabs: { id: SearchResultTab; label: string }[] = [
   { id: 'restaurant', label: '맛집' },
@@ -166,7 +133,7 @@ function ResultList({
   onPressItem,
 }: {
   items: { id: string; imageUri?: string; name: string; meta: string }[];
-  onPressItem?: (name: string) => void;
+  onPressItem?: (id: string, name: string) => void;
 }) {
   return (
     <ScrollView
@@ -178,7 +145,7 @@ function ResultList({
         <Pressable
           key={item.id}
           style={styles.resultRow}
-          onPress={() => onPressItem?.(item.name)}
+          onPress={() => onPressItem?.(item.id, item.name)}
         >
           <View style={styles.thumbnail}>
             {item.imageUri ? (
@@ -201,7 +168,10 @@ function EmptyTabState() {
 
 export function SearchResultScreen({
   onBack,
+  initialTab = 'restaurant',
+  onChangeTab,
   onOpenRestaurantDetail,
+  onOpenUserProfile,
   onSearch,
   query,
 }: SearchResultScreenProps) {
@@ -209,18 +179,27 @@ export function SearchResultScreen({
   const pagerRef = useRef<ScrollView | null>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
   const [value, setValue] = useState(query);
-  const [activeTab, setActiveTab] = useState<SearchResultTab>('restaurant');
+  const [activeTab, setActiveTab] = useState<SearchResultTab>(initialTab);
 
   useEffect(() => {
     setValue(query);
   }, [query]);
+
+  useEffect(() => {
+    const nextIndex = tabs.findIndex((item) => item.id === initialTab);
+    setActiveTab(initialTab);
+    scrollX.setValue(nextIndex * CONTENT_WIDTH);
+    requestAnimationFrame(() => {
+      pagerRef.current?.scrollTo({ x: nextIndex * CONTENT_WIDTH, animated: false });
+    });
+  }, [initialTab, scrollX]);
 
   const trimmedValue = value.trim();
 
   const indicatorTranslateX = scrollX.interpolate({
     inputRange: tabs.map((_, index) => index * CONTENT_WIDTH),
     outputRange: tabs.map(
-      (_, index) => index * (TAB_WIDTH + TAB_GAP) + (TAB_WIDTH - TAB_INDICATOR_WIDTH) / 2
+      (_, index) => index * (TAB_WIDTH + TAB_GAP) + (TAB_WIDTH - TAB_INDICATOR_WIDTH) / 2,
     ),
     extrapolate: 'clamp',
   });
@@ -238,11 +217,14 @@ export function SearchResultScreen({
     const nextIndex = tabs.findIndex((item) => item.id === tab);
     pagerRef.current?.scrollTo({ x: nextIndex * CONTENT_WIDTH, animated: true });
     setActiveTab(tab);
+    onChangeTab?.(tab);
   };
 
   const handlePagerMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const nextIndex = Math.round(event.nativeEvent.contentOffset.x / CONTENT_WIDTH);
-    setActiveTab(tabs[nextIndex]?.id ?? 'restaurant');
+    const nextTab = tabs[nextIndex]?.id ?? 'restaurant';
+    setActiveTab(nextTab);
+    onChangeTab?.(nextTab);
   };
 
   return (
@@ -265,7 +247,7 @@ export function SearchResultScreen({
                   style={styles.input}
                   value={value}
                   onChangeText={setValue}
-                  placeholder="맛집 / 유저 / 지역을 검색해보세요."
+                  placeholder="맛집 / 유저 / 지역을 검색해보세요"
                   placeholderTextColor="#D9D9D9"
                   selectionColor="#FF0000"
                   returnKeyType="search"
@@ -278,17 +260,8 @@ export function SearchResultScreen({
           <View style={styles.tabSection}>
             <View style={styles.tabRow}>
               {tabs.map((tab) => (
-                <Pressable
-                  key={tab.id}
-                  style={styles.tabButton}
-                  onPress={() => handlePressTab(tab.id)}
-                >
-                  <Text
-                    style={[
-                      styles.tabLabel,
-                      activeTab === tab.id && styles.activeTabLabel,
-                    ]}
-                  >
+                <Pressable key={tab.id} style={styles.tabButton} onPress={() => handlePressTab(tab.id)}>
+                  <Text style={[styles.tabLabel, activeTab === tab.id && styles.activeTabLabel]}>
                     {tab.label}
                   </Text>
                 </Pressable>
@@ -314,10 +287,9 @@ export function SearchResultScreen({
               showsHorizontalScrollIndicator={false}
               scrollEventThrottle={16}
               onMomentumScrollEnd={handlePagerMomentumEnd}
-              onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                { useNativeDriver: true }
-              )}
+              onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
+                useNativeDriver: true,
+              })}
             >
               <View style={styles.page}>
                 <ResultList
@@ -327,11 +299,11 @@ export function SearchResultScreen({
                     name: item.name,
                     meta: item.category,
                   }))}
-                  onPressItem={onOpenRestaurantDetail}
+                  onPressItem={(_, name) => onOpenRestaurantDetail?.(name)}
                 />
               </View>
               <View style={styles.page}>
-                <ResultList items={USER_RESULTS} />
+                <ResultList items={USER_RESULTS} onPressItem={(id) => onOpenUserProfile?.(id)} />
               </View>
               <View style={styles.page}>
                 <EmptyTabState />

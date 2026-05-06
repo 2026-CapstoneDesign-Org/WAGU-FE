@@ -4,14 +4,18 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppTab } from '../components/BottomTabBar';
 import { FriendTabKey } from '../data/myFriends';
+import { MY_FOLLOWER_USERS } from '../data/myFriends';
+import { userFriendConnectionsByUserId } from '../data/userFriendConnections';
 import { initialMyLists, MyList } from '../data/myLists';
+import { myReviews } from '../data/myReviews';
 import { Restaurant, restaurants as initialRestaurantPool } from '../data/restaurants';
+import { userReviewsByUserId } from '../data/userReviews';
 import { AddRestaurantToListRatingScreen } from '../screens/AddRestaurantToListRatingScreen';
 import { AddRestaurantToListSelectScreen } from '../screens/AddRestaurantToListSelectScreen';
 import { AiChatScreen } from '../screens/AiChatScreen';
 import { DeleteAccountScreen } from '../screens/DeleteAccountScreen';
 import { EditNicknameScreen } from '../screens/EditNicknameScreen';
-import { MainHomeScreen } from '../screens/MainHomeScreen';
+import { HomeScrollState, MainHomeScreen } from '../screens/MainHomeScreen';
 import { MapScreen } from '../screens/MapScreen';
 import { MapSearchScreen } from '../screens/MapSearchScreen';
 import { LoginProvider, MyInfoScreen } from '../screens/MyInfoScreen';
@@ -19,13 +23,13 @@ import { MyFriendsScreen } from '../screens/MyFriendsScreen';
 import { MyListDetailScreen } from '../screens/MyListDetailScreen';
 import { MyListPlaceEditScreen } from '../screens/MyListPlaceEditScreen';
 import { MyListsScreen } from '../screens/MyListsScreen';
-import { MyPageScreen } from '../screens/MyPageScreen';
+import { MyPageScreen, MyPageScrollState } from '../screens/MyPageScreen';
 import { MyReviewsScreen } from '../screens/MyReviewsScreen';
 import { NewsScreen } from '../screens/NewsScreen';
 import { OnboardingIntroScreen } from '../screens/OnboardingIntroScreen';
 import { OnboardingLoginScreen } from '../screens/OnboardingLoginScreen';
 import { RankingDetailScreen } from '../screens/RankingDetailScreen';
-import { RankingTabScreen } from '../screens/RankingTabScreen';
+import { RankingTabScreen, RankingTabScrollState } from '../screens/RankingTabScreen';
 import { RegistrationCompleteScreen } from '../screens/RegistrationCompleteScreen';
 import { RestaurantDetailScreen } from '../screens/RestaurantDetailScreen';
 import { SearchResultScreen } from '../screens/SearchResultScreen';
@@ -34,6 +38,11 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { TasteRatingScreen } from '../screens/TasteRatingScreen';
 import { TasteListNameScreen } from '../screens/TasteListNameScreen';
 import { TasteSelectionScreen } from '../screens/TasteSelectionScreen';
+import { UserReviewsScreen } from '../screens/UserReviewsScreen';
+import { UserProfileScreen } from '../screens/UserProfileScreen';
+import { userProfiles } from '../data/userProfiles';
+
+type SearchResultTabKey = 'restaurant' | 'user' | 'region' | 'photo';
 
 type FlowScreen =
   | 'login'
@@ -53,13 +62,16 @@ type FlowScreen =
   | 'settings'
   | 'my-info'
   | 'my-friends'
+  | 'user-friends'
   | 'my-lists'
   | 'my-list-detail'
   | 'my-list-place-edit'
   | 'my-reviews'
+  | 'user-reviews'
   | 'edit-nickname'
   | 'delete-account'
-  | 'restaurant-detail';
+  | 'restaurant-detail'
+  | 'user-profile';
 
 type RankingDetailState = {
   sourceTab: AppTab;
@@ -69,12 +81,37 @@ type RankingDetailState = {
 type RestaurantDetailSource =
   | { type: 'search-result' }
   | { type: 'my-reviews' }
+  | { type: 'user-reviews'; userId: string }
   | { type: 'my-list-detail'; listId: string }
+  | { type: 'user-profile'; userId: string }
   | { type: 'tabs'; tab: AppTab }
   | { type: 'ranking-detail'; detail: NonNullable<RankingDetailState> }
   | null;
 
+type UserProfileSource =
+  | { type: 'my-friends'; tab: FriendTabKey }
+  | { type: 'user-friends'; userId: string; tab: FriendTabKey }
+  | { type: 'search-result' }
+  | { type: 'home' }
+  | null;
+
 export function AppRoot() {
+  const initialHomeScrollState: HomeScrollState = {
+    bannerLoopIndex: 1,
+    influencersX: 0,
+    localRankingX: 0,
+    mealFriendsX: 0,
+    nationalRankingX: 0,
+    verticalY: 0,
+  };
+  const initialRankingScrollState: RankingTabScrollState = {
+    localRankingX: 0,
+    nationalRankingX: 0,
+    verticalY: 0,
+  };
+  const initialMyPageScrollState: MyPageScrollState = {
+    verticalY: 0,
+  };
   const [completionSource, setCompletionSource] = useState<'taste-flow' | 'add-to-list'>(
     'taste-flow',
   );
@@ -87,11 +124,25 @@ export function AppRoot() {
   const [selectedRestaurants, setSelectedRestaurants] = useState<Restaurant[]>([]);
   const [tasteListName, setTasteListName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResultTab, setSearchResultTab] = useState<SearchResultTabKey>('restaurant');
   const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [homeScrollState, setHomeScrollState] = useState<HomeScrollState>(initialHomeScrollState);
+  const [homeRestoreKey, setHomeRestoreKey] = useState(0);
+  const [homeRestoreAnimated, setHomeRestoreAnimated] = useState(false);
+  const [rankingScrollState, setRankingScrollState] =
+    useState<RankingTabScrollState>(initialRankingScrollState);
+  const [rankingRestoreKey, setRankingRestoreKey] = useState(0);
+  const [rankingRestoreAnimated, setRankingRestoreAnimated] = useState(false);
+  const [myPageScrollState, setMyPageScrollState] =
+    useState<MyPageScrollState>(initialMyPageScrollState);
+  const [myPageRestoreKey, setMyPageRestoreKey] = useState(0);
+  const [myPageRestoreAnimated, setMyPageRestoreAnimated] = useState(false);
   const [myFriendsInitialTab, setMyFriendsInitialTab] =
     useState<FriendTabKey>('following');
   const [myLists, setMyLists] = useState<MyList[]>(initialMyLists);
   const [selectedMyListId, setSelectedMyListId] = useState<string | null>(null);
+  const [selectedUserProfileId, setSelectedUserProfileId] = useState<string | null>(null);
+  const [userProfileSource, setUserProfileSource] = useState<UserProfileSource>(null);
   const [loginProvider, setLoginProvider] = useState<LoginProvider>('kakao');
   const [nickname, setNickname] = useState('먹부림');
   const [selectedRestaurantName, setSelectedRestaurantName] = useState('와이앤웍');
@@ -230,6 +281,40 @@ export function AppRoot() {
     setRankingDetail(null);
   };
 
+  const handleSelectTab = (tab: AppTab) => {
+    if (tab === 'home' && activeTab === 'home') {
+      setHomeRestoreAnimated(true);
+      setRankingRestoreAnimated(false);
+      setMyPageRestoreAnimated(false);
+      setHomeScrollState(initialHomeScrollState);
+      setHomeRestoreKey((current) => current + 1);
+      return;
+    }
+
+    if (tab === 'ranking' && activeTab === 'ranking') {
+      setHomeRestoreAnimated(false);
+      setRankingRestoreAnimated(true);
+      setMyPageRestoreAnimated(false);
+      setRankingScrollState(initialRankingScrollState);
+      setRankingRestoreKey((current) => current + 1);
+      return;
+    }
+
+    if (tab === 'my' && activeTab === 'my') {
+      setHomeRestoreAnimated(false);
+      setRankingRestoreAnimated(false);
+      setMyPageRestoreAnimated(true);
+      setMyPageScrollState(initialMyPageScrollState);
+      setMyPageRestoreKey((current) => current + 1);
+      return;
+    }
+
+    setHomeRestoreAnimated(false);
+    setRankingRestoreAnimated(false);
+    setMyPageRestoreAnimated(false);
+    setActiveTab(tab);
+  };
+
   const openRestaurantDetail = (
     restaurantName: string,
     source: Exclude<RestaurantDetailSource, null>,
@@ -255,14 +340,36 @@ export function AppRoot() {
       return;
     }
 
+    if (restaurantDetailSource.type === 'user-reviews') {
+      setSelectedUserProfileId(restaurantDetailSource.userId);
+      setScreen('user-reviews');
+      return;
+    }
+
     if (restaurantDetailSource.type === 'my-list-detail') {
       setSelectedMyListId(restaurantDetailSource.listId);
       setScreen('my-list-detail');
       return;
     }
 
+    if (restaurantDetailSource.type === 'user-profile') {
+      setSelectedUserProfileId(restaurantDetailSource.userId);
+      setScreen('user-profile');
+      return;
+    }
+
     if (restaurantDetailSource.type === 'tabs') {
       setActiveTab(restaurantDetailSource.tab);
+      if (restaurantDetailSource.tab === 'home') {
+        setHomeRestoreAnimated(false);
+        setHomeRestoreKey((current) => current + 1);
+      } else if (restaurantDetailSource.tab === 'ranking') {
+        setRankingRestoreAnimated(false);
+        setRankingRestoreKey((current) => current + 1);
+      } else if (restaurantDetailSource.tab === 'my') {
+        setMyPageRestoreAnimated(false);
+        setMyPageRestoreKey((current) => current + 1);
+      }
       setScreen('tabs');
       return;
     }
@@ -400,16 +507,24 @@ export function AppRoot() {
           onClose={() => setScreen('tabs')}
           onSearch={(query) => {
             setSearchQuery(query);
+            setSearchResultTab('restaurant');
             setScreen('search-result');
           }}
         />
       ) : screen === 'search-result' ? (
         <SearchResultScreen
           query={searchQuery}
+          initialTab={searchResultTab}
           onBack={() => setScreen('search')}
+          onChangeTab={setSearchResultTab}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, { type: 'search-result' })
           }
+          onOpenUserProfile={(userId) => {
+            setUserProfileSource({ type: 'search-result' });
+            setSelectedUserProfileId(userId);
+            setScreen('user-profile');
+          }}
           onSearch={(query) => setSearchQuery(query)}
         />
       ) : screen === 'map-search' ? (
@@ -452,6 +567,36 @@ export function AppRoot() {
         <MyFriendsScreen
           initialTab={myFriendsInitialTab}
           onBack={() => setScreen('tabs')}
+          onChangeTab={setMyFriendsInitialTab}
+          onOpenUserProfile={(userId) => {
+            setUserProfileSource({ type: 'my-friends', tab: myFriendsInitialTab });
+            setSelectedUserProfileId(userId);
+            setScreen('user-profile');
+          }}
+        />
+      ) : screen === 'user-friends' && selectedUserProfileId ? (
+        <MyFriendsScreen
+          initialTab={myFriendsInitialTab}
+          title={`${
+            userProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ?? ''
+          }님의 밥친구`}
+          followingUsersData={
+            userFriendConnectionsByUserId[selectedUserProfileId]?.following ?? []
+          }
+          followerUsersData={
+            userFriendConnectionsByUserId[selectedUserProfileId]?.followers ?? []
+          }
+          onBack={() => setScreen('user-profile')}
+          onChangeTab={setMyFriendsInitialTab}
+          onOpenUserProfile={(userId) => {
+            setUserProfileSource({
+              type: 'user-friends',
+              userId: selectedUserProfileId,
+              tab: myFriendsInitialTab,
+            });
+            setSelectedUserProfileId(userId);
+            setScreen('user-profile');
+          }}
         />
       ) : screen === 'my-lists' ? (
         <MyListsScreen
@@ -497,6 +642,20 @@ export function AppRoot() {
             openRestaurantDetail(restaurantName, { type: 'my-reviews' })
           }
         />
+      ) : screen === 'user-reviews' && selectedUserProfileId ? (
+        <UserReviewsScreen
+          title={`${
+            userProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ?? ''
+          }님의 리뷰`}
+          reviews={userReviewsByUserId[selectedUserProfileId] ?? []}
+          onBack={() => setScreen('user-profile')}
+          onOpenRestaurantDetail={(restaurantName) =>
+            openRestaurantDetail(restaurantName, {
+              type: 'user-reviews',
+              userId: selectedUserProfileId,
+            })
+          }
+        />
       ) : screen === 'edit-nickname' ? (
         <EditNicknameScreen
           initialNickname={nickname}
@@ -508,6 +667,50 @@ export function AppRoot() {
         />
       ) : screen === 'delete-account' ? (
         <DeleteAccountScreen onBack={() => setScreen('settings')} />
+      ) : screen === 'user-profile' && selectedUserProfileId ? (
+        <UserProfileScreen
+          profile={userProfiles.find((item) => item.id === selectedUserProfileId) ?? userProfiles[0]}
+          onBack={() => {
+            if (userProfileSource?.type === 'search-result') {
+              setScreen('search-result');
+              return;
+            }
+
+            if (userProfileSource?.type === 'home') {
+              setActiveTab('home');
+              setHomeRestoreAnimated(false);
+              setHomeRestoreKey((current) => current + 1);
+              setScreen('tabs');
+              return;
+            }
+
+            if (userProfileSource?.type === 'user-friends') {
+              setSelectedUserProfileId(userProfileSource.userId);
+              setMyFriendsInitialTab(userProfileSource.tab);
+              setScreen('user-friends');
+              return;
+            }
+
+            if (userProfileSource?.type === 'my-friends') {
+              setMyFriendsInitialTab(userProfileSource.tab);
+              setScreen('my-friends');
+              return;
+            }
+
+            setScreen('my-friends');
+          }}
+          onOpenFollowers={() => {
+            setMyFriendsInitialTab('followers');
+            setScreen('user-friends');
+          }}
+          onOpenReviews={() => setScreen('user-reviews')}
+          onOpenRestaurantDetail={(restaurantName) =>
+            openRestaurantDetail(restaurantName, {
+              type: 'user-profile',
+              userId: selectedUserProfileId,
+            })
+          }
+        />
       ) : rankingDetail ? (
         <RankingDetailScreen
           onBack={handleBackFromRankingDetail}
@@ -521,24 +724,41 @@ export function AppRoot() {
         />
       ) : activeTab === 'home' ? (
         <MainHomeScreen
+          initialScrollState={homeScrollState}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'home' })
           }
+          onOpenUserProfile={(userId) => {
+            setUserProfileSource({ type: 'home' });
+            setSelectedUserProfileId(userId);
+            setScreen('user-profile');
+          }}
           onPressAi={() => setScreen('ai-chat')}
           onPressNews={() => setScreen('news')}
           onPressLocalRanking={() => openRankingDetail('local')}
           onPressNationalRanking={() => openRankingDetail('national')}
           onPressSearch={() => setScreen('search')}
-          onSelectTab={setActiveTab}
+          onScrollStateChange={(nextState) =>
+            setHomeScrollState((current) => ({ ...current, ...nextState }))
+          }
+          onSelectTab={handleSelectTab}
+          restoreAnimated={homeRestoreAnimated}
+          restoreScrollKey={homeRestoreKey}
         />
       ) : activeTab === 'ranking' ? (
         <RankingTabScreen
+          initialScrollState={rankingScrollState}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'ranking' })
           }
           onPressLocalRanking={() => openRankingDetail('local')}
           onPressNationalRanking={() => openRankingDetail('national')}
-          onSelectTab={setActiveTab}
+          onScrollStateChange={(nextState) =>
+            setRankingScrollState((current) => ({ ...current, ...nextState }))
+          }
+          onSelectTab={handleSelectTab}
+          restoreAnimated={rankingRestoreAnimated}
+          restoreScrollKey={rankingRestoreKey}
         />
       ) : activeTab === 'map' ? (
         <MapScreen
@@ -552,10 +772,12 @@ export function AppRoot() {
           onPressSearchBar={() => setScreen('map-search')}
           searchQuery={mapSearchQuery}
           onClearSearch={() => setMapSearchQuery('')}
-          onSelectTab={setActiveTab}
+          onSelectTab={handleSelectTab}
         />
       ) : (
         <MyPageScreen
+          followerCount={MY_FOLLOWER_USERS.length}
+          initialScrollState={myPageScrollState}
           nickname={nickname}
           myLists={myLists}
           onOpenMyFollowers={() => {
@@ -575,8 +797,14 @@ export function AppRoot() {
             openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'my' })
           }
           onOpenMyReviews={() => setScreen('my-reviews')}
+          onScrollStateChange={(nextState) =>
+            setMyPageScrollState((current) => ({ ...current, ...nextState }))
+          }
           onOpenSettings={() => setScreen('settings')}
-          onSelectTab={setActiveTab}
+          onSelectTab={handleSelectTab}
+          reviewCount={myReviews.length}
+          restoreAnimated={myPageRestoreAnimated}
+          restoreScrollKey={myPageRestoreKey}
         />
       )}
     </SafeAreaProvider>

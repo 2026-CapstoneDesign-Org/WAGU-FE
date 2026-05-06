@@ -22,8 +22,13 @@ import {
 } from '../data/myFriends';
 
 type MyFriendsScreenProps = {
+  followerUsersData?: FriendUser[];
   initialTab?: FriendTabKey;
+  followingUsersData?: FriendUser[];
   onBack: () => void;
+  onChangeTab?: (tab: FriendTabKey) => void;
+  onOpenUserProfile?: (userId: string) => void;
+  title?: string;
 };
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -41,15 +46,17 @@ function sortFollowersForInitialView(users: FriendUser[]) {
 
 function FriendRow({
   onToggleFollow,
+  onOpenUserProfile,
   sourceTab,
   user,
 }: {
   onToggleFollow: (payload: FollowTogglePayload) => void;
+  onOpenUserProfile?: (userId: string) => void;
   sourceTab: FriendTabKey;
   user: FriendUser;
 }) {
   return (
-    <View style={styles.friendRow}>
+    <Pressable style={styles.friendRow} onPress={() => onOpenUserProfile?.(user.id)}>
       <View style={styles.thumbnail} />
       <View style={styles.friendCopy}>
         <Text style={styles.friendName}>{user.name}</Text>
@@ -61,13 +68,14 @@ function FriendRow({
             styles.followButton,
             user.isFollowing && styles.followingButton,
           ]}
-          onPress={() =>
+          onPress={(event) => {
+            event.stopPropagation();
             onToggleFollow({
               sourceTab,
               userId: user.id,
               nextIsFollowing: !user.isFollowing,
-            })
-          }
+            });
+          }}
         >
           <Text
             style={[
@@ -79,16 +87,18 @@ function FriendRow({
           </Text>
         </Pressable>
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 
 function FriendList({
   onToggleFollow,
+  onOpenUserProfile,
   sourceTab,
   users,
 }: {
   onToggleFollow: (payload: FollowTogglePayload) => void;
+  onOpenUserProfile?: (userId: string) => void;
   sourceTab: FriendTabKey;
   users: FriendUser[];
 }) {
@@ -101,6 +111,7 @@ function FriendList({
         <FriendRow
           key={user.id}
           onToggleFollow={onToggleFollow}
+          onOpenUserProfile={onOpenUserProfile}
           sourceTab={sourceTab}
           user={user}
         />
@@ -110,16 +121,31 @@ function FriendList({
 }
 
 export function MyFriendsScreen({
+  followerUsersData,
   initialTab = 'following',
+  followingUsersData,
   onBack,
+  onChangeTab,
+  onOpenUserProfile,
+  title = '\uBC25\uCE5C\uAD6C',
 }: MyFriendsScreenProps) {
   const pagerRef = useRef<ScrollView | null>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
   const [activeTab, setActiveTab] = useState<FriendTabKey>(initialTab);
-  const [followingUsers, setFollowingUsers] = useState(MY_FOLLOWING_USERS);
-  const [followerUsers, setFollowerUsers] = useState(() =>
-    sortFollowersForInitialView(MY_FOLLOWER_USERS),
+  const [followingUsers, setFollowingUsers] = useState(
+    followingUsersData ?? MY_FOLLOWING_USERS,
   );
+  const [followerUsers, setFollowerUsers] = useState(() =>
+    sortFollowersForInitialView(followerUsersData ?? MY_FOLLOWER_USERS),
+  );
+
+  useEffect(() => {
+    setFollowingUsers(followingUsersData ?? MY_FOLLOWING_USERS);
+  }, [followingUsersData]);
+
+  useEffect(() => {
+    setFollowerUsers(sortFollowersForInitialView(followerUsersData ?? MY_FOLLOWER_USERS));
+  }, [followerUsersData]);
 
   const tabs = useMemo(
     () => [
@@ -145,7 +171,8 @@ export function MyFriendsScreen({
       pagerRef.current?.scrollTo({ x: targetX, animated: false });
     });
     setActiveTab(initialTab);
-  }, [initialIndex, initialTab, scrollX]);
+    onChangeTab?.(initialTab);
+  }, [initialIndex, initialTab, onChangeTab, scrollX]);
 
   const indicatorTranslateX = scrollX.interpolate({
     inputRange: [0, screenWidth],
@@ -160,6 +187,7 @@ export function MyFriendsScreen({
       animated: true,
     });
     setActiveTab(nextTab);
+    onChangeTab?.(nextTab);
   };
 
   const handleMomentumEnd = (
@@ -168,7 +196,9 @@ export function MyFriendsScreen({
     const nextIndex = Math.round(
       event.nativeEvent.contentOffset.x / screenWidth,
     );
-    setActiveTab(tabs[nextIndex]?.key ?? 'following');
+    const nextTab = tabs[nextIndex]?.key ?? 'following';
+    setActiveTab(nextTab);
+    onChangeTab?.(nextTab);
   };
 
   const handleToggleFollow = ({
@@ -224,7 +254,7 @@ export function MyFriendsScreen({
             <Pressable style={styles.backButton} onPress={onBack}>
               <ArrowLeftIcon width={24} height={24} />
             </Pressable>
-            <Text style={styles.title}>{'\uBC25\uCE5C\uAD6C'}</Text>
+            <Text style={styles.title}>{title}</Text>
           </View>
 
           <View style={styles.tabSection}>
@@ -274,6 +304,7 @@ export function MyFriendsScreen({
           <View style={styles.page}>
             <FriendList
               onToggleFollow={handleToggleFollow}
+              onOpenUserProfile={onOpenUserProfile}
               sourceTab="following"
               users={followingUsers}
             />
@@ -281,6 +312,7 @@ export function MyFriendsScreen({
           <View style={styles.page}>
             <FriendList
               onToggleFollow={handleToggleFollow}
+              onOpenUserProfile={onOpenUserProfile}
               sourceTab="followers"
               users={followerUsers}
             />

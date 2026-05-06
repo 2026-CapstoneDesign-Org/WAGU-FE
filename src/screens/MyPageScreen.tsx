@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +15,10 @@ const HORIZONTAL_PADDING = 16;
 const CARD_GAP = 6;
 const CARD_WIDTH = (screenWidth - HORIZONTAL_PADDING * 2 - CARD_GAP) / 2;
 
+export type MyPageScrollState = {
+  verticalY: number;
+};
+
 const quickMenus = [
   { id: 'list', label: '리스트', type: 'list' as const },
   { id: 'review', label: '리뷰', type: 'review' as const },
@@ -23,6 +27,8 @@ const quickMenus = [
 ];
 
 type MyPageScreenProps = {
+  followerCount?: number;
+  initialScrollState?: MyPageScrollState;
   nickname?: string;
   myLists: MyList[];
   onOpenMyFollowers?: () => void;
@@ -31,8 +37,12 @@ type MyPageScreenProps = {
   onOpenRepresentativeList?: (listId: string) => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onOpenMyReviews?: () => void;
+  onScrollStateChange?: (state: Partial<MyPageScrollState>) => void;
   onOpenSettings: () => void;
   onSelectTab: (tab: AppTab) => void;
+  restoreAnimated?: boolean;
+  restoreScrollKey?: number;
+  reviewCount?: number;
 };
 
 function QuickMenuIcon({ type }: { type: (typeof quickMenus)[number]['type'] }) {
@@ -52,6 +62,8 @@ function QuickMenuIcon({ type }: { type: (typeof quickMenus)[number]['type'] }) 
 }
 
 export function MyPageScreen({
+  followerCount = 0,
+  initialScrollState,
   nickname = '먹부림',
   myLists,
   onOpenMyFollowers,
@@ -60,10 +72,15 @@ export function MyPageScreen({
   onOpenRepresentativeList,
   onOpenRestaurantDetail,
   onOpenMyReviews,
+  onScrollStateChange,
   onOpenSettings,
   onSelectTab,
+  restoreAnimated = false,
+  restoreScrollKey = 0,
+  reviewCount = 0,
 }: MyPageScreenProps) {
   const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView | null>(null);
   const [visibleCount, setVisibleCount] = useState(10);
   const contentBottomPadding = 40 + TAB_BAR_HEIGHT + insets.bottom;
 
@@ -71,6 +88,7 @@ export function MyPageScreen({
     () => myLists.find((item) => item.isRepresentative) ?? myLists[0],
     [myLists],
   );
+
   const restaurantMetaMap = useMemo(
     () =>
       new Map(
@@ -93,12 +111,27 @@ export function MyPageScreen({
     setVisibleCount(10);
   }, [representativeList?.id]);
 
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({
+        x: 0,
+        y: initialScrollState?.verticalY ?? 0,
+        animated: restoreAnimated,
+      });
+    });
+  }, [restoreAnimated, restoreScrollKey]);
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.screen}>
         <ScrollView
+          ref={scrollRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.container, { paddingBottom: contentBottomPadding }]}
+          onScroll={(event) =>
+            onScrollStateChange?.({ verticalY: event.nativeEvent.contentOffset.y })
+          }
+          scrollEventThrottle={16}
         >
           <View style={styles.profileSection}>
             <View style={styles.profileHeader}>
@@ -108,14 +141,16 @@ export function MyPageScreen({
                   <Text style={styles.metricLabel}>매너온도</Text>
                   <Text style={styles.temperatureValue}>36.5°</Text>
                 </View>
-                <View style={styles.metricGroup}>
-                  <Text style={styles.metricLabel}>리뷰</Text>
-                  <Text style={styles.metricValue}>248</Text>
-                </View>
+                <Pressable style={styles.metricPressable} hitSlop={8} onPress={onOpenMyReviews}>
+                  <View style={styles.metricGroup}>
+                    <Text style={styles.metricLabel}>리뷰</Text>
+                    <Text style={styles.metricValue}>{reviewCount.toLocaleString()}</Text>
+                  </View>
+                </Pressable>
                 <Pressable style={styles.metricPressable} hitSlop={8} onPress={onOpenMyFollowers}>
                   <View style={styles.metricGroup}>
                     <Text style={styles.metricLabel}>팔로워</Text>
-                    <Text style={styles.metricValue}>1,234</Text>
+                    <Text style={styles.metricValue}>{followerCount.toLocaleString()}</Text>
                   </View>
                 </Pressable>
               </View>
@@ -160,9 +195,7 @@ export function MyPageScreen({
               }}
               disabled={!representativeList && !onOpenMyLists}
             >
-              <Text style={styles.sectionTitle}>
-                {representativeList?.title ?? '대표 리스트'}
-              </Text>
+              <Text style={styles.sectionTitle}>{representativeList?.title ?? '대표 리스트'}</Text>
               {representativeList ? (
                 <View style={styles.representativeBadge}>
                   <Text style={styles.representativeBadgeLabel}>대표</Text>
@@ -188,7 +221,7 @@ export function MyPageScreen({
                   )}
                   <View style={styles.cardOverlay} />
                   <View style={styles.cardTextBlock}>
-                  <Text style={styles.cardTitle}>{`${index + 1}. ${item.name}`}</Text>
+                    <Text style={styles.cardTitle}>{`${index + 1}. ${item.name}`}</Text>
                     <Text numberOfLines={1} ellipsizeMode="tail" style={styles.cardAddress}>
                       {restaurantMetaMap.get(item.id)?.address || item.address}
                     </Text>

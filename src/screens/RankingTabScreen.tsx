@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,33 +8,56 @@ import { localRankingEntries, nationalRankingEntries, RankingEntry } from '../da
 const { width: screenWidth } = Dimensions.get('window');
 const rankingPageWidth = screenWidth - 32;
 
+export type RankingTabScrollState = {
+  localRankingX: number;
+  nationalRankingX: number;
+  verticalY: number;
+};
+
 type RankingTabScreenProps = {
+  initialScrollState?: RankingTabScrollState;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onPressLocalRanking?: () => void;
   onPressNationalRanking?: () => void;
+  onScrollStateChange?: (state: Partial<RankingTabScrollState>) => void;
   onSelectTab: (tab: AppTab) => void;
+  restoreAnimated?: boolean;
+  restoreScrollKey?: number;
 };
 
 type RankingPreviewSectionProps = {
   accentTitle?: string;
+  initialScrollX?: number;
   items: RankingEntry[];
+  onScrollPositionChange?: (x: number) => void;
   onPressItem?: (restaurantName: string) => void;
   onPressMore?: () => void;
+  restoreScrollKey?: number;
   title: string;
 };
 
 function RankingPreviewSection({
   accentTitle,
+  initialScrollX = 0,
   items,
+  onScrollPositionChange,
   onPressItem,
   onPressMore,
+  restoreScrollKey = 0,
   title,
 }: RankingPreviewSectionProps) {
+  const scrollRef = useRef<ScrollView | null>(null);
   const pages: RankingEntry[][] = [];
 
   for (let index = 0; index < items.length; index += 4) {
     pages.push(items.slice(index, index + 4));
   }
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ x: initialScrollX, animated: false });
+    });
+  }, [restoreScrollKey]);
 
   return (
     <View style={styles.section}>
@@ -49,6 +73,7 @@ function RankingPreviewSection({
 
       <View style={styles.rankCarousel}>
         <ScrollView
+          ref={scrollRef}
           horizontal
           decelerationRate="fast"
           snapToInterval={rankingPageWidth}
@@ -56,6 +81,8 @@ function RankingPreviewSection({
           disableIntervalMomentum
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.rankScrollContent}
+          onScroll={(event) => onScrollPositionChange?.(event.nativeEvent.contentOffset.x)}
+          scrollEventThrottle={16}
         >
           {pages.map((page, pageIndex) => (
             <View key={`${title}-${pageIndex}`} style={styles.rankPage}>
@@ -89,33 +116,59 @@ function RankingPreviewSection({
 }
 
 export function RankingTabScreen({
+  initialScrollState,
   onOpenRestaurantDetail,
   onPressLocalRanking,
   onPressNationalRanking,
+  onScrollStateChange,
   onSelectTab,
+  restoreAnimated = false,
+  restoreScrollKey = 0,
 }: RankingTabScreenProps) {
   const insets = useSafeAreaInsets();
   const contentBottomPadding = 40 + TAB_BAR_HEIGHT + insets.bottom;
+  const contentScrollRef = useRef<ScrollView | null>(null);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      contentScrollRef.current?.scrollTo({
+        x: 0,
+        y: initialScrollState?.verticalY ?? 0,
+        animated: restoreAnimated,
+      });
+    });
+  }, [restoreAnimated, restoreScrollKey]);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.screen}>
         <ScrollView
+          ref={contentScrollRef}
           contentContainerStyle={[styles.container, { paddingBottom: contentBottomPadding }]}
           showsVerticalScrollIndicator={false}
+          onScroll={(event) =>
+            onScrollStateChange?.({ verticalY: event.nativeEvent.contentOffset.y })
+          }
+          scrollEventThrottle={16}
         >
           <RankingPreviewSection
             accentTitle="용인"
             title=" 맛집 순위"
+            initialScrollX={initialScrollState?.localRankingX ?? 0}
             items={localRankingEntries.slice(0, 20)}
+            onScrollPositionChange={(x) => onScrollStateChange?.({ localRankingX: x })}
             onPressItem={onOpenRestaurantDetail}
             onPressMore={onPressLocalRanking}
+            restoreScrollKey={restoreScrollKey}
           />
           <RankingPreviewSection
             title="전국 맛집 순위"
+            initialScrollX={initialScrollState?.nationalRankingX ?? 0}
             items={nationalRankingEntries.slice(0, 20)}
+            onScrollPositionChange={(x) => onScrollStateChange?.({ nationalRankingX: x })}
             onPressItem={onOpenRestaurantDetail}
             onPressMore={onPressNationalRanking}
+            restoreScrollKey={restoreScrollKey}
           />
         </ScrollView>
 
