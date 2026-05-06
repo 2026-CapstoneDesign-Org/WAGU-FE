@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
@@ -26,10 +27,13 @@ import { RestaurantReview, restaurantReviews } from '../data/restaurantReviews';
 
 type RestaurantDetailTab = 'home' | 'menu' | 'review' | 'photo';
 type ReviewSort = 'latest' | 'popular';
+type ReviewReaction = 'like' | 'dislike' | null;
 
 type RestaurantDetailScreenProps = {
   onBack: () => void;
   restaurantName?: string;
+  onAddToList?: (restaurantName: string) => void;
+  favoriteColor?: string;
 };
 
 type RestaurantMeta = {
@@ -48,6 +52,10 @@ type TabScrollProps = {
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 };
 
+type RestaurantReviewDisplay = RestaurantReview & {
+  currentReaction?: ReviewReaction;
+};
+
 const { width: screenWidth } = Dimensions.get('window');
 
 const HORIZONTAL_PADDING = 16;
@@ -57,6 +65,7 @@ const TAB_INDICATOR_WIDTH = 31;
 const TAB_ROW_WIDTH = screenWidth - HORIZONTAL_PADDING * 2 - TAB_SIDE_PADDING * 2;
 const TAB_GAP = (TAB_ROW_WIDTH - TAB_WIDTH * 4) / 3;
 const PHOTO_CARD_SIZE = (screenWidth - HORIZONTAL_PADDING * 2 - 6) / 2;
+const REVIEW_IMAGE_SIZE = 172;
 const PHOTO_LOAD_BATCH = 10;
 const HERO_HEIGHT = 284;
 const COLLAPSE_TRIGGER = 18;
@@ -293,32 +302,69 @@ function MenuList({ menuItems }: { menuItems: RestaurantMenuItem[] }) {
 
 function ThumbUpIcon({ color }: { color: string }) {
   return (
-    <Text style={[styles.reactionIcon, { color }]}>👍</Text>
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M9 21H5.4C4.84 21 4.56 21 4.346 20.891C4.157 20.795 4.005 20.643 3.909 20.454C3.8 20.24 3.8 19.96 3.8 19.4V11.6C3.8 11.04 3.8 10.76 3.909 10.546C4.005 10.357 4.157 10.205 4.346 10.109C4.56 10 4.84 10 5.4 10H9M9 21V10M9 21L13.649 21C14.593 21 15.441 20.417 15.777 19.535L18.467 12.475C18.961 11.178 18.002 9.8 16.614 9.8H13.2V6.6C13.2 5.495 12.305 4.6 11.2 4.6C10.869 4.6 10.6 4.869 10.6 5.2V7.076C10.6 7.551 10.431 8.011 10.123 8.374L9 10"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
   );
 }
 
 function ThumbDownIcon({ color }: { color: string }) {
   return (
-    <Text style={[styles.reactionIcon, { color }]}>👎</Text>
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M9 3H5.4C4.84 3 4.56 3 4.346 3.109C4.157 3.205 4.005 3.357 3.909 3.546C3.8 3.76 3.8 4.04 3.8 4.6V12.4C3.8 12.96 3.8 13.24 3.909 13.454C4.005 13.643 4.157 13.795 4.346 13.891C4.56 14 4.84 14 5.4 14H9M9 3V14M9 3L13.649 3C14.593 3 15.441 3.583 15.777 4.465L18.467 11.525C18.961 12.822 18.002 14.2 16.614 14.2H13.2V17.4C13.2 18.505 12.305 19.4 11.2 19.4C10.869 19.4 10.6 19.131 10.6 18.8V16.924C10.6 16.449 10.431 15.989 10.123 15.626L9 14"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
   );
 }
 
 function ReviewReactionButton({
   count,
   icon,
+  active = false,
+  onPress,
 }: {
   count: number;
   icon: React.ReactNode;
+  active?: boolean;
+  onPress: () => void;
 }) {
   return (
-    <View style={styles.reviewReactionButton}>
+    <Pressable
+      onPress={onPress}
+      style={[styles.reviewReactionButton, active ? styles.reviewReactionButtonActive : null]}
+    >
       {icon}
-      <Text style={styles.reviewReactionCount}>{count}</Text>
-    </View>
+      <Text
+        style={[styles.reviewReactionCount, active ? styles.reviewReactionCountActive : null]}
+      >
+        {count}
+      </Text>
+    </Pressable>
   );
 }
 
-function ReviewCard({ review }: { review: RestaurantReview }) {
+function ReviewCard({
+  review,
+  onToggleFollow,
+  onToggleReaction,
+  onOpenImagePreview,
+}: {
+  review: RestaurantReviewDisplay;
+  onToggleFollow: (reviewId: string) => void;
+  onToggleReaction: (reviewId: string, reaction: Exclude<ReviewReaction, null>) => void;
+  onOpenImagePreview: (images: string[], index: number) => void;
+}) {
   return (
     <View style={styles.reviewCard}>
       <View style={styles.reviewCardHeader}>
@@ -330,26 +376,79 @@ function ReviewCard({ review }: { review: RestaurantReview }) {
           </View>
         </View>
 
-        <View style={styles.reviewReactionRow}>
-          <ReviewReactionButton count={review.likes} icon={<ThumbUpIcon color="#666666" />} />
-          <ReviewReactionButton
-            count={review.dislikes}
-            icon={<ThumbDownIcon color="#666666" />}
-          />
-        </View>
+        <Pressable
+          onPress={() => onToggleFollow(review.id)}
+          style={[
+            styles.reviewFollowButton,
+            review.isFollowing ? styles.reviewFollowingButton : null,
+          ]}
+        >
+          <Text
+            style={[
+              styles.reviewFollowButtonLabel,
+              review.isFollowing ? styles.reviewFollowingButtonLabel : null,
+            ]}
+          >
+            {review.isFollowing ? '팔로잉' : '팔로우'}
+          </Text>
+        </Pressable>
       </View>
 
       <Text style={styles.reviewText}>{review.content}</Text>
 
-      {review.imageUris?.length ? (
+      {false && review.imageUris?.length ? (
         <View style={styles.reviewImageRow}>
-          {review.imageUris.slice(0, 3).map((imageUri, index) => (
+          {review.imageUris?.slice(0, 3).map((imageUri, index) => (
             <View key={`${review.id}-${index}`} style={styles.reviewImageCard}>
               <Text style={styles.reviewImagePlaceholder}>사진</Text>
             </View>
           ))}
         </View>
       ) : null}
+
+      {review.imageUris?.length ? (
+        <View style={[styles.reviewImagesCarousel, { width: screenWidth }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.reviewImagesRow}
+          >
+            {review.imageUris?.slice(0, 5).map((imageUri, index, images) => (
+              <Pressable
+                key={`${review.id}-carousel-${index}`}
+                style={[
+                  styles.reviewImage,
+                  index < images.length - 1 ? styles.reviewImageSpacing : null,
+                ]}
+                onPress={() => onOpenImagePreview(images, index)}
+              >
+                <Image source={{ uri: imageUri }} style={styles.reviewImageFill} />
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      <View style={styles.reviewReactionRow}>
+        <ReviewReactionButton
+          count={review.likes}
+          active={review.currentReaction === 'like'}
+          onPress={() => onToggleReaction(review.id, 'like')}
+          icon={
+            <ThumbUpIcon color={review.currentReaction === 'like' ? '#F92A1D' : '#666666'} />
+          }
+        />
+        <ReviewReactionButton
+          count={review.dislikes}
+          active={review.currentReaction === 'dislike'}
+          onPress={() => onToggleReaction(review.id, 'dislike')}
+          icon={
+            <ThumbDownIcon
+              color={review.currentReaction === 'dislike' ? '#F92A1D' : '#666666'}
+            />
+          }
+        />
+      </View>
     </View>
   );
 }
@@ -470,13 +569,16 @@ function PhotoGalleryTabContent({
   onScroll,
 }: {
   visiblePhotoUris: string[];
-  onOpenPreview: (index: number) => void;
+  onOpenPreview: (images: string[], index: number) => void;
 } & TabScrollProps) {
   return (
     <BaseTabScroll scrollEnabled={scrollEnabled} onScroll={onScroll}>
       <View style={styles.photoGrid}>
         {visiblePhotoUris.map((photoUri, index) => (
-          <Pressable key={`${photoUri}-${index}`} onPress={() => onOpenPreview(index)}>
+          <Pressable
+            key={`${photoUri}-${index}`}
+            onPress={() => onOpenPreview(visiblePhotoUris, index)}
+          >
             <Image source={{ uri: photoUri }} style={styles.photoCard} />
           </Pressable>
         ))}
@@ -489,12 +591,18 @@ function ReviewTabContent({
   reviews,
   reviewSort,
   onChangeSort,
+  onToggleFollow,
+  onToggleReaction,
+  onOpenImagePreview,
   scrollEnabled,
   onScroll,
 }: {
-  reviews: RestaurantReview[];
+  reviews: RestaurantReviewDisplay[];
   reviewSort: ReviewSort;
   onChangeSort: (sort: ReviewSort) => void;
+  onToggleFollow: (reviewId: string) => void;
+  onToggleReaction: (reviewId: string, reaction: Exclude<ReviewReaction, null>) => void;
+  onOpenImagePreview: (images: string[], index: number) => void;
 } & TabScrollProps) {
   return (
     <BaseTabScroll scrollEnabled={scrollEnabled} onScroll={onScroll}>
@@ -539,7 +647,12 @@ function ReviewTabContent({
           {reviews.length > 0 ? (
             reviews.map((review, index) => (
               <View key={review.id}>
-                <ReviewCard review={review} />
+                <ReviewCard
+                  review={review}
+                  onToggleFollow={onToggleFollow}
+                  onToggleReaction={onToggleReaction}
+                  onOpenImagePreview={onOpenImagePreview}
+                />
                 {index < reviews.length - 1 ? <View style={styles.reviewDivider} /> : null}
               </View>
             ))
@@ -560,6 +673,8 @@ function ReviewTabContent({
 export function RestaurantDetailScreen({
   onBack,
   restaurantName = '와이앤웍',
+  onAddToList,
+  favoriteColor = '#D9D9D9',
 }: RestaurantDetailScreenProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const indicatorX = useRef(new Animated.Value(0)).current;
@@ -573,8 +688,13 @@ export function RestaurantDetailScreen({
   const [isHeroCollapsed, setIsHeroCollapsed] = useState(false);
   const [isTabScrollEnabled, setIsTabScrollEnabled] = useState(true);
   const [visiblePhotoCount, setVisiblePhotoCount] = useState(PHOTO_LOAD_BATCH);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [previewCurrentIndex, setPreviewCurrentIndex] = useState(0);
+  const [reviewFollowStates, setReviewFollowStates] = useState<Record<string, boolean>>({});
+  const [reviewReactionStates, setReviewReactionStates] = useState<
+    Record<string, ReviewReaction>
+  >({});
   const [previewImageSizes, setPreviewImageSizes] = useState<
     Record<string, { width: number; height: number }>
   >({});
@@ -660,7 +780,15 @@ export function RestaurantDetailScreen({
         review.restaurantName === matchedRestaurant?.shortName,
     );
 
-    return [...filteredReviews].sort((left, right) => {
+    const reviewsWithFollowState = filteredReviews.map((review) => ({
+      ...review,
+      isFollowing: reviewFollowStates[review.id] ?? review.isFollowing ?? false,
+      currentReaction: reviewReactionStates[review.id] ?? null,
+      likes: review.likes + (reviewReactionStates[review.id] === 'like' ? 1 : 0),
+      dislikes: review.dislikes + (reviewReactionStates[review.id] === 'dislike' ? 1 : 0),
+    }));
+
+    return [...reviewsWithFollowState].sort((left, right) => {
       if (reviewSort === 'popular') {
         return right.likes - left.likes;
       }
@@ -669,10 +797,37 @@ export function RestaurantDetailScreen({
       const rightDate = Number(right.date.replaceAll('.', ''));
       return rightDate - leftDate;
     });
-  }, [restaurantName, reviewSort]);
+  }, [restaurantName, reviewSort, reviewFollowStates, reviewReactionStates]);
+
+  const handleToggleReviewFollow = (reviewId: string) => {
+    setReviewFollowStates((current) => {
+      const targetReview = restaurantReviews.find((review) => review.id === reviewId);
+      const currentValue = current[reviewId] ?? targetReview?.isFollowing ?? false;
+
+      return {
+        ...current,
+        [reviewId]: !currentValue,
+      };
+    });
+  };
+
+  const handleToggleReviewReaction = (
+    reviewId: string,
+    reaction: Exclude<ReviewReaction, null>,
+  ) => {
+    setReviewReactionStates((current) => {
+      const currentValue = current[reviewId] ?? null;
+
+      return {
+        ...current,
+        [reviewId]: currentValue === reaction ? null : reaction,
+      };
+    });
+  };
 
   useEffect(() => {
     setVisiblePhotoCount(PHOTO_LOAD_BATCH);
+    setPreviewImages([]);
     setSelectedPhotoIndex(null);
     setPreviewCurrentIndex(0);
   }, [restaurantName]);
@@ -686,7 +841,7 @@ export function RestaurantDetailScreen({
   }, []);
 
   useEffect(() => {
-    restaurantMeta.photoUris.forEach((photoUri) => {
+    previewImages.forEach((photoUri) => {
       if (previewImageSizes[photoUri]) {
         return;
       }
@@ -707,7 +862,7 @@ export function RestaurantDetailScreen({
         },
       );
     });
-  }, [previewImageSizes, restaurantMeta.photoUris]);
+  }, [previewImageSizes, previewImages]);
 
   const finishHeroTransition = () => {
     if (transitionTimeoutRef.current) {
@@ -829,7 +984,8 @@ export function RestaurantDetailScreen({
     }
   };
 
-  const openPhotoPreview = (index: number) => {
+  const openPhotoPreview = (images: string[], index: number) => {
+    setPreviewImages(images);
     setSelectedPhotoIndex(index);
     setPreviewCurrentIndex(index);
     requestAnimationFrame(() => {
@@ -917,8 +1073,11 @@ export function RestaurantDetailScreen({
               {restaurantName}
             </Animated.Text>
           </View>
-          <Pressable style={styles.favoriteButton}>
-            <StarIcon width={22} height={22} />
+          <Pressable
+            style={styles.favoriteButton}
+            onPress={() => onAddToList?.(restaurantName)}
+          >
+            <StarIcon width={22} height={22} color={favoriteColor} />
           </Pressable>
         </View>
 
@@ -1013,6 +1172,9 @@ export function RestaurantDetailScreen({
               reviews={restaurantReviewList}
               reviewSort={reviewSort}
               onChangeSort={setReviewSort}
+              onToggleFollow={handleToggleReviewFollow}
+              onToggleReaction={handleToggleReviewReaction}
+              onOpenImagePreview={openPhotoPreview}
               scrollEnabled={isTabScrollEnabled}
               onScroll={handleTabScroll}
             />
@@ -1037,13 +1199,13 @@ export function RestaurantDetailScreen({
             <View style={styles.photoPreviewHeader}>
               <View style={styles.imageIndexBadge}>
                 <Text style={styles.imageIndexBadgeText}>
-                  {restaurantMeta.photoUris.length ? (
+                  {previewImages.length ? (
                     <>
                       <Text style={styles.imageIndexBadgeTextCurrent}>
                         {previewCurrentIndex + 1}
                       </Text>
                       <Text style={styles.imageIndexBadgeTextMuted}>
-                        /{restaurantMeta.photoUris.length}
+                        /{previewImages.length}
                       </Text>
                     </>
                   ) : (
@@ -1070,7 +1232,7 @@ export function RestaurantDetailScreen({
                 setPreviewCurrentIndex(nextIndex);
               }}
             >
-              {restaurantMeta.photoUris.map((photoUri, index) => {
+              {previewImages.map((photoUri, index) => {
                 const imageFrame = getPreviewImageFrame(photoUri);
 
                 return (
@@ -1407,16 +1569,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  reviewFollowButton: {
+    minWidth: 62,
+    height: 31,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewFollowingButton: {
+    backgroundColor: '#F5F5F5',
+  },
+  reviewFollowButtonLabel: {
+    fontSize: 14,
+    lineHeight: 19.5,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  reviewFollowingButtonLabel: {
+    color: '#666666',
+  },
   reviewReactionButton: {
     minWidth: 44,
     height: 27.5,
     paddingHorizontal: 10,
     borderRadius: 999,
     backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#F5F5F5',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+  },
+  reviewReactionButtonActive: {
+    backgroundColor: '#FFF0EE',
+    borderColor: '#FFC4BC',
   },
   reactionIcon: {
     fontSize: 12,
@@ -1427,6 +1616,10 @@ const styles = StyleSheet.create({
     lineHeight: 19.5,
     fontWeight: '500',
     color: '#666666',
+  },
+  reviewReactionCountActive: {
+    color: '#F92A1D',
+    fontWeight: '600',
   },
   reviewText: {
     fontSize: 15,
@@ -1453,6 +1646,28 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#8A8A8A',
   },
+  reviewImagesCarousel: {
+    overflow: 'hidden',
+    marginLeft: -HORIZONTAL_PADDING,
+  },
+  reviewImagesRow: {
+    flexDirection: 'row',
+    paddingLeft: 16,
+  },
+  reviewImage: {
+    width: REVIEW_IMAGE_SIZE,
+    height: REVIEW_IMAGE_SIZE,
+    borderRadius: 5,
+    backgroundColor: '#F0F0F0',
+    overflow: 'hidden',
+  },
+  reviewImageFill: {
+    width: '100%',
+    height: '100%',
+  },
+  reviewImageSpacing: {
+    marginRight: 4,
+  },
   reviewDivider: {
     width: '100%',
     height: 1,
@@ -1477,7 +1692,7 @@ const styles = StyleSheet.create({
   },
   photoPreviewHeader: {
     position: 'absolute',
-    top: 18,
+    top: 34,
     right: 16,
     zIndex: 2,
   },

@@ -272,4 +272,18 @@ export const restaurants: Restaurant[] = [
     features: '예약, 포장, 무선 인터넷',
     menuItems: westernMenuItems,
   },
+  {
+    id: 'yullimgak',
+    name: '유림각',
+    shortName: '유림각',
+    category: '중식',
+    imageUri: PHOTO_URI_2,
+    photoUris: [PHOTO_URI_2, PHOTO_URI_3, PHOTO_URI_1],
+    reviewCount: '487',
+    address: '경기 용인시 처인구 금령로 72 1층',
+    openingHours: '매일 11:00 - 21:00',
+    phone: '031-334-1188',
+    features: '포장, 배달, 무선 인터넷, 단체 이용 가능',
+    menuItems: chineseMenuItems,
+  },
 ];

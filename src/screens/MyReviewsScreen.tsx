@@ -255,8 +255,12 @@ export function MyReviewsScreen({
               <View style={styles.reviewBody}>
                 <View style={styles.reviewHeader}>
                   <View style={styles.reviewMeta}>
-                    <Pressable onPress={() => onOpenRestaurantDetail?.(review.restaurantName)}>
+                    <Pressable
+                      style={styles.restaurantLinkRow}
+                      onPress={() => onOpenRestaurantDetail?.(review.restaurantName)}
+                    >
                       <Text style={styles.restaurantName}>{review.restaurantName}</Text>
+                      <Text style={styles.restaurantChevron}>›</Text>
                     </Pressable>
                     <View style={styles.metaRow}>
                       <Text style={styles.metaText}>{review.category}</Text>
@@ -266,16 +270,6 @@ export function MyReviewsScreen({
                   </View>
 
                   <View style={styles.actionRow}>
-                    <ReactionButton
-                      count={review.likes}
-                      icon={<ThumbUpIcon color="#9A9A9A" />}
-                      onPress={showSelfReactionToast}
-                    />
-                    <ReactionButton
-                      count={review.dislikes}
-                      icon={<ThumbDownIcon color="#9A9A9A" />}
-                      onPress={showSelfReactionToast}
-                    />
                     <Pressable
                       style={styles.deleteButton}
                       onPress={() => handleDeleteReview(review.id)}
@@ -315,6 +309,19 @@ export function MyReviewsScreen({
                   </ScrollView>
                 </View>
               ) : null}
+
+              <View style={styles.reviewReactionRow}>
+                <ReactionButton
+                  count={review.likes}
+                  icon={<ThumbUpIcon color="#9A9A9A" />}
+                  onPress={showSelfReactionToast}
+                />
+                <ReactionButton
+                  count={review.dislikes}
+                  icon={<ThumbDownIcon color="#9A9A9A" />}
+                  onPress={showSelfReactionToast}
+                />
+              </View>
 
               {index < sortedReviews.length - 1 ? <View style={styles.divider} /> : null}
             </View>
@@ -458,11 +465,24 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  restaurantLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+  },
   restaurantName: {
     fontSize: 17,
     lineHeight: 24,
     fontWeight: '600',
     color: '#000000',
+  },
+  restaurantChevron: {
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '400',
+    color: '#6F6F6F',
+    marginTop: -1,
   },
   metaRow: {
     flexDirection: 'row',
@@ -516,6 +536,12 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: '400',
     color: '#000000',
+  },
+  reviewReactionRow: {
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   reviewImagesCarousel: {
     overflow: 'hidden',

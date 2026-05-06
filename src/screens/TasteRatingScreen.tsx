@@ -19,6 +19,7 @@ type RatingLabel = (typeof ratingLabels)[number];
 type RestaurantRatings = Record<string, Record<RatingLabel, number>>;
 
 type TasteRatingScreenProps = {
+  listName?: string;
   restaurants: Restaurant[];
   onBack: () => void;
   onSubmit: (ratings: RestaurantRatings) => void;
@@ -37,23 +38,26 @@ function createInitialRatings(items: Restaurant[]): RestaurantRatings {
 }
 
 export function TasteRatingScreen({
+  listName,
   restaurants,
   onBack,
   onSubmit,
 }: TasteRatingScreenProps) {
   const [ratings, setRatings] = useState<RestaurantRatings>(() =>
-    createInitialRatings(restaurants)
+    createInitialRatings(restaurants),
   );
 
   const visibleRestaurants = useMemo(
     () => (restaurants.length > 0 ? restaurants : []),
-    [restaurants]
+    [restaurants],
   );
+
+  const trimmedListName = listName?.trim() ?? '';
 
   const updateRating = (
     restaurantId: string,
     category: RatingLabel,
-    value: number
+    value: number,
   ) => {
     setRatings((current) => ({
       ...current,
@@ -67,7 +71,7 @@ export function TasteRatingScreen({
   const isEveryRestaurantRated =
     visibleRestaurants.length > 0 &&
     visibleRestaurants.every((restaurant) =>
-      ratingLabels.every((label) => (ratings[restaurant.id]?.[label] ?? 0) > 0)
+      ratingLabels.every((label) => (ratings[restaurant.id]?.[label] ?? 0) > 0),
     );
 
   return (
@@ -77,7 +81,14 @@ export function TasteRatingScreen({
           <Pressable hitSlop={10} onPress={onBack} style={styles.backButton}>
             <ArrowLeftIcon width={24} height={24} />
           </Pressable>
-          <Text style={styles.headerTitle}>나만의 맛집 점수를 완성해주세요.</Text>
+          {trimmedListName ? (
+            <Text style={styles.headerTitle}>
+              <Text style={styles.headerTitleStrong}>{trimmedListName}</Text>
+              {' 리스트의 맛집을 평가해주세요.'}
+            </Text>
+          ) : (
+            <Text style={styles.headerTitle}>나만의 맛집 점수를 완성해주세요.</Text>
+          )}
         </View>
 
         <ScrollView
@@ -164,6 +175,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: '500',
     color: '#000000',
+  },
+  headerTitleStrong: {
+    fontWeight: '700',
   },
   scrollContent: {
     paddingTop: 25,

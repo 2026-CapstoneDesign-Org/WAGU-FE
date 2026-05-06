@@ -246,7 +246,7 @@ export function SearchResultScreen({
   };
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
   listContent: {
     gap: 15,
     paddingTop: 10,
-    paddingBottom: 24,
+    paddingBottom: 52,
   },
   resultRow: {
     flexDirection: 'row',

@@ -2,6 +2,7 @@ export type RestaurantReview = {
   id: string;
   restaurantName: string;
   authorName: string;
+  isFollowing?: boolean;
   date: string;
   content: string;
   likes: number;
@@ -13,10 +14,11 @@ export const restaurantReviews: RestaurantReview[] = [
   {
     id: 'ynw-review-1',
     restaurantName: '와이앤웍 용인직영점',
-    authorName: '김민준',
+    authorName: '김민지',
+    isFollowing: false,
     date: '2026.04.10',
     content:
-      '짜장면이 정말 맛있어요! 춘장이 진하고 면도 쫄깃해서 다음에 또 올 것 같아요. 탕수육도 바삭하고 소스가 달콤해서 아이들도 좋아했습니다.',
+      '짜장면이 정말 맛있어요. 면도 쫄깃하고 고기도 넉넉하게 들어 있어서 다음에도 다시 올 것 같아요. 탕수육도 바삭하고 소스가 달지 않아서 좋았습니다.',
     likes: 24,
     dislikes: 2,
     imageUris: [
@@ -28,10 +30,11 @@ export const restaurantReviews: RestaurantReview[] = [
   {
     id: 'ynw-review-2',
     restaurantName: '와이앤웍 용인직영점',
-    authorName: '이서연',
+    authorName: '이서윤',
+    isFollowing: true,
     date: '2026.04.08',
     content:
-      '매운짬뽕 먹었는데 국물이 칼칼하니 맛있었어요. 양도 푸짐하고 재료도 신선했습니다. 다만 조금 더 매웠으면 좋겠어요.',
+      '매운 짬뽕 먹었는데 국물이 칼칼하니 맛있었어요. 양도 넉넉하고 재료도 신선했습니다. 다만 조금 더 뜨거우면 좋겠어요.',
     likes: 18,
     dislikes: 1,
   },
@@ -39,9 +42,10 @@ export const restaurantReviews: RestaurantReview[] = [
     id: 'ynw-review-3',
     restaurantName: '와이앤웍 용인직영점',
     authorName: '감자',
+    isFollowing: false,
     date: '2026.04.01',
     content:
-      '짜장면이 정말 맛있어요! 춘장이 진하고 면도 쫄깃해서 다음에 또 올 것 같아요. 탕수육도 바삭하고 소스가 달콤해서 아이들도 좋아했습니다.',
+      '짬뽕이 생각보다 자극적이지 않고 깔끔해서 좋았어요. 탕수육이랑 같이 시키면 조합이 정말 괜찮습니다.',
     likes: 24,
     dislikes: 2,
     imageUris: [
@@ -53,10 +57,11 @@ export const restaurantReviews: RestaurantReview[] = [
   {
     id: 'ynw-review-4',
     restaurantName: '와이앤웍 용인직영점',
-    authorName: '먹잘알',
+    authorName: '먹래용',
+    isFollowing: true,
     date: '2026.03.28',
     content:
-      '탕수육이 생각보다 훨씬 바삭했고 소스가 너무 달지 않아서 좋았습니다. 짜장면이랑 같이 시키면 조합이 좋아요.',
+      '탕수육이 기대 이상으로 바삭하고 소스가 너무 세지 않아서 좋았습니다. 짜장면이랑 같이 시키면 조합이 좋아요.',
     likes: 11,
     dislikes: 0,
   },
@@ -64,9 +69,10 @@ export const restaurantReviews: RestaurantReview[] = [
     id: 'ynw-review-5',
     restaurantName: '와이앤웍 용인직영점',
     authorName: '짬뽕사랑',
+    isFollowing: false,
     date: '2026.03.20',
     content:
-      '해물 짬뽕 재료가 푸짐하고 불향이 좋아서 만족했어요. 매장도 깔끔해서 가족끼리 가기에도 괜찮았습니다.',
+      '해물 짬뽕 재료가 신선하고 불향도 좋아서 만족했어요. 매장도 깔끔해서 가족끼리 가기에도 괜찮았습니다.',
     likes: 29,
     dislikes: 3,
     imageUris: [
@@ -78,8 +84,10 @@ export const restaurantReviews: RestaurantReview[] = [
     id: 'gongtang-review-1',
     restaurantName: '공탕 용산본점',
     authorName: '공탕러버',
+    isFollowing: false,
     date: '2026.04.12',
-    content: '국물이 진하고 고기도 부드러워요. 웨이팅만 감수하면 만족도가 높습니다.',
+    content:
+      '국밥이 진하고 고기가 부드러워요. 밥 양도 많아서 든든하게 한 끼 하기 좋았습니다.',
     likes: 15,
     dislikes: 1,
   },
@@ -87,8 +95,10 @@ export const restaurantReviews: RestaurantReview[] = [
     id: 'misik-review-1',
     restaurantName: '미식회관',
     authorName: '양식덕후',
+    isFollowing: true,
     date: '2026.04.06',
-    content: '파스타가 꾸덕하고 트러플 향이 좋아요. 데이트 장소로도 괜찮았습니다.',
+    content:
+      '파스타가 꾸덕하고 플레이팅이 좋아서 데이트 장소로도 괜찮았어요.',
     likes: 21,
     dislikes: 0,
   },
@@ -96,8 +106,10 @@ export const restaurantReviews: RestaurantReview[] = [
     id: 'jeju-review-1',
     restaurantName: '제주둘레국수',
     authorName: '국수매니아',
+    isFollowing: false,
     date: '2026.04.03',
-    content: '고기국수 육수가 진하고 깔끔해요. 돔베고기도 같이 먹으면 좋습니다.',
+    content:
+      '고기국수 국물이 진하고 깔끔해요. 돔베고기랑 같이 먹으면 더 좋습니다.',
     likes: 12,
     dislikes: 0,
   },

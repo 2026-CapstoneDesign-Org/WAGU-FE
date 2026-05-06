@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import FollowIcon from '../../assets/icons/follow.svg';
@@ -7,6 +7,8 @@ import ListIcon from '../../assets/icons/list.svg';
 import ReviewIcon from '../../assets/icons/review.svg';
 import SettingIcon from '../../assets/icons/setting.svg';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar';
+import { MyList } from '../data/myLists';
+import { restaurants as allRestaurants } from '../data/restaurants';
 
 const { width: screenWidth } = Dimensions.get('window');
 const HORIZONTAL_PADDING = 16;
@@ -20,34 +22,14 @@ const quickMenus = [
   { id: 'settings', label: '설정', type: 'setting' as const },
 ];
 
-const mainListCards = [
-  { id: 'card-1', title: '와이앤웍 용인직영점' },
-  { id: 'card-2', title: '공탕 용산본점' },
-  { id: 'card-3', title: '킨토토 역북점' },
-  { id: 'card-4', title: '육심' },
-  { id: 'card-5', title: '짬뽕관 용인역북점' },
-  { id: 'card-6', title: '제주둘레국수 강남점' },
-  { id: 'card-7', title: '미식회관 성수점' },
-  { id: 'card-8', title: '오븐스테이크 수지점' },
-  { id: 'card-9', title: '샤브하우스 분당점' },
-  { id: 'card-10', title: '포메인 역삼점' },
-  { id: 'card-11', title: '라멘공방 판교점' },
-  { id: 'card-12', title: '버거스튜디오 홍대점' },
-  { id: 'card-13', title: '마라천국 광교점' },
-  { id: 'card-14', title: '카레마스터 죽전점' },
-  { id: 'card-15', title: '타코하우스 성복점' },
-  { id: 'card-16', title: '브런치테이블 서현점' },
-  { id: 'card-17', title: '스시몬 동탄점' },
-  { id: 'card-18', title: '정성식당 수원점' },
-  { id: 'card-19', title: '한우마을 광교점' },
-  { id: 'card-20', title: '로제파스타랩 강남점' },
-  { id: 'card-21', title: '초밥정원 판교점' },
-  { id: 'card-22', title: '곱창공방 잠실점' },
-  { id: 'card-23', title: '담솥 용인수지점' },
-];
-
 type MyPageScreenProps = {
   nickname?: string;
+  myLists: MyList[];
+  onOpenMyFollowers?: () => void;
+  onOpenMyFriends?: () => void;
+  onOpenMyLists?: () => void;
+  onOpenRepresentativeList?: (listId: string) => void;
+  onOpenRestaurantDetail?: (restaurantName: string) => void;
   onOpenMyReviews?: () => void;
   onOpenSettings: () => void;
   onSelectTab: (tab: AppTab) => void;
@@ -71,6 +53,12 @@ function QuickMenuIcon({ type }: { type: (typeof quickMenus)[number]['type'] }) 
 
 export function MyPageScreen({
   nickname = '먹부림',
+  myLists,
+  onOpenMyFollowers,
+  onOpenMyFriends,
+  onOpenMyLists,
+  onOpenRepresentativeList,
+  onOpenRestaurantDetail,
   onOpenMyReviews,
   onOpenSettings,
   onSelectTab,
@@ -79,8 +67,31 @@ export function MyPageScreen({
   const [visibleCount, setVisibleCount] = useState(10);
   const contentBottomPadding = 40 + TAB_BAR_HEIGHT + insets.bottom;
 
-  const visibleCards = mainListCards.slice(0, visibleCount);
-  const hasMoreCards = visibleCount < mainListCards.length;
+  const representativeList = useMemo(
+    () => myLists.find((item) => item.isRepresentative) ?? myLists[0],
+    [myLists],
+  );
+  const restaurantMetaMap = useMemo(
+    () =>
+      new Map(
+        allRestaurants.map((restaurant) => [
+          restaurant.id,
+          {
+            imageUri: restaurant.photoUris?.[0] ?? restaurant.imageUri ?? null,
+            address: restaurant.address ?? '',
+          },
+        ]),
+      ),
+    [],
+  );
+
+  const representativeCards = representativeList?.restaurants ?? [];
+  const visibleCards = representativeCards.slice(0, visibleCount);
+  const hasMoreCards = visibleCount < representativeCards.length;
+
+  useEffect(() => {
+    setVisibleCount(10);
+  }, [representativeList?.id]);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
@@ -95,12 +106,18 @@ export function MyPageScreen({
               <View style={styles.metricsRow}>
                 <View style={styles.metricGroup}>
                   <Text style={styles.metricLabel}>매너온도</Text>
-                  <Text style={styles.temperatureValue}>36.5°C</Text>
+                  <Text style={styles.temperatureValue}>36.5°</Text>
                 </View>
                 <View style={styles.metricGroup}>
-                  <Text style={styles.metricLabel}>팔로워</Text>
-                  <Text style={styles.metricValue}>1,234</Text>
+                  <Text style={styles.metricLabel}>리뷰</Text>
+                  <Text style={styles.metricValue}>248</Text>
                 </View>
+                <Pressable style={styles.metricPressable} hitSlop={8} onPress={onOpenMyFollowers}>
+                  <View style={styles.metricGroup}>
+                    <Text style={styles.metricLabel}>팔로워</Text>
+                    <Text style={styles.metricValue}>1,234</Text>
+                  </View>
+                </Pressable>
               </View>
             </View>
 
@@ -110,11 +127,15 @@ export function MyPageScreen({
                   key={item.id}
                   style={styles.quickMenuItem}
                   onPress={
-                    item.id === 'settings'
-                      ? onOpenSettings
-                      : item.id === 'review'
-                        ? onOpenMyReviews
-                        : undefined
+                    item.id === 'list'
+                      ? onOpenMyLists
+                      : item.id === 'settings'
+                        ? onOpenSettings
+                        : item.id === 'review'
+                          ? onOpenMyReviews
+                          : item.id === 'friend'
+                            ? onOpenMyFriends
+                            : undefined
                   }
                 >
                   <View style={styles.quickMenuIconWrap}>
@@ -127,12 +148,51 @@ export function MyPageScreen({
           </View>
 
           <View style={styles.mainListSection}>
-            <Text style={styles.sectionTitle}>메인 리스트</Text>
+            <Pressable
+              style={styles.sectionHeader}
+              onPress={() => {
+                if (representativeList && onOpenRepresentativeList) {
+                  onOpenRepresentativeList(representativeList.id);
+                  return;
+                }
+
+                onOpenMyLists?.();
+              }}
+              disabled={!representativeList && !onOpenMyLists}
+            >
+              <Text style={styles.sectionTitle}>
+                {representativeList?.title ?? '대표 리스트'}
+              </Text>
+              {representativeList ? (
+                <View style={styles.representativeBadge}>
+                  <Text style={styles.representativeBadgeLabel}>대표</Text>
+                </View>
+              ) : null}
+            </Pressable>
 
             <View style={styles.cardGrid}>
-              {visibleCards.map((item) => (
-                <Pressable key={item.id} style={styles.card}>
-                  <Text style={styles.cardTitle}>{item.title}</Text>
+              {visibleCards.map((item, index) => (
+                <Pressable
+                  key={item.id}
+                  style={styles.card}
+                  onPress={() => onOpenRestaurantDetail?.(item.name)}
+                >
+                  {restaurantMetaMap.get(item.id)?.imageUri ? (
+                    <Image
+                      source={{ uri: restaurantMetaMap.get(item.id)?.imageUri ?? undefined }}
+                      style={styles.cardImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.cardImage} />
+                  )}
+                  <View style={styles.cardOverlay} />
+                  <View style={styles.cardTextBlock}>
+                  <Text style={styles.cardTitle}>{`${index + 1}. ${item.name}`}</Text>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.cardAddress}>
+                      {restaurantMetaMap.get(item.id)?.address || item.address}
+                    </Text>
+                  </View>
                 </Pressable>
               ))}
             </View>
@@ -141,12 +201,10 @@ export function MyPageScreen({
               <Pressable
                 style={styles.moreButton}
                 onPress={() =>
-                  setVisibleCount((current) =>
-                    Math.min(current + 10, mainListCards.length)
-                  )
+                  setVisibleCount((current) => Math.min(current + 10, representativeCards.length))
                 }
               >
-                <Text style={styles.moreButtonLabel}>더 보기</Text>
+                <Text style={styles.moreButtonLabel}>더보기</Text>
               </Pressable>
             ) : null}
           </View>
@@ -193,16 +251,20 @@ const styles = StyleSheet.create({
   metricsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15,
+    gap: 24,
   },
   metricGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
   },
+  metricPressable: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
   metricLabel: {
-    fontSize: 13,
-    lineHeight: 19.5,
+    fontSize: 15,
+    lineHeight: 21.5,
     fontWeight: '500',
     color: '#000000',
   },
@@ -245,11 +307,32 @@ const styles = StyleSheet.create({
   mainListSection: {
     gap: 15,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+  },
   sectionTitle: {
     fontSize: 20,
     lineHeight: 22,
     fontWeight: '600',
     color: '#000000',
+  },
+  representativeBadge: {
+    minWidth: 37,
+    height: 21,
+    borderRadius: 10.5,
+    backgroundColor: '#FCE3E1',
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  representativeBadgeLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    color: '#FF3B30',
   },
   cardGrid: {
     flexDirection: 'row',
@@ -261,15 +344,33 @@ const styles = StyleSheet.create({
     height: 224,
     borderRadius: 5,
     backgroundColor: '#D9D9D9',
+    overflow: 'hidden',
     justifyContent: 'flex-end',
     paddingHorizontal: 8,
     paddingBottom: 8,
+  },
+  cardImage: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#D9D9D9',
+  },
+  cardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
+  },
+  cardTextBlock: {
+    gap: 2,
   },
   cardTitle: {
     fontSize: 15,
     lineHeight: 18,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  cardAddress: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.92)',
   },
   moreButton: {
     width: '100%',

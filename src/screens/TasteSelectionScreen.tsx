@@ -117,6 +117,10 @@ export function TasteSelectionScreen({
   } as const;
 
   const confirmSelection = () => {
+    if (selectedRestaurants.length < 5) {
+      return;
+    }
+
     const chosenRestaurants = restaurants.filter((restaurant) =>
       selectedRestaurants.includes(restaurant.name)
     );
@@ -131,7 +135,7 @@ export function TasteSelectionScreen({
           <Pressable hitSlop={10} onPress={onBack} style={styles.backButton}>
             <ArrowLeftIcon width={24} height={24} />
           </Pressable>
-          <Text style={styles.headerTitle}>나만의 맛집 순위를 완성해주세요.</Text>
+          <Text style={styles.headerTitle}>나만의 맛집을 골라주세요.</Text>
         </View>
 
         <Animated.View style={[styles.searchWrapper, searchContainerStyle]}>
@@ -140,7 +144,7 @@ export function TasteSelectionScreen({
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="원하는 맛집을 찾아보세요"
+              placeholder="찾으시는 맛집을 검색해 보세요"
               placeholderTextColor="#D9D9D9"
               style={styles.searchInput}
             />
@@ -184,13 +188,13 @@ export function TasteSelectionScreen({
         <View style={styles.bottomBar}>
           <Pressable
             onPress={confirmSelection}
-            disabled={selectedRestaurants.length === 0}
+            disabled={selectedRestaurants.length < 5}
             style={[
               styles.confirmButton,
-              selectedRestaurants.length === 0 && styles.confirmButtonDisabled,
+              selectedRestaurants.length < 5 && styles.confirmButtonDisabled,
             ]}
           >
-            <Text style={styles.confirmLabel}>결정하기 ({selectedRestaurants.length}개)</Text>
+            <Text style={styles.confirmLabel}>{`결정(${selectedRestaurants.length})`}</Text>
           </Pressable>
         </View>
       </View>

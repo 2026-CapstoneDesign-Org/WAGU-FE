@@ -1,0 +1,614 @@
+import { Alert, Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect, useMemo, useState } from 'react';
+
+import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
+import { MyList, MyListRestaurant } from '../data/myLists';
+import { restaurants as allRestaurants } from '../data/restaurants';
+
+type MyListDetailScreenProps = {
+  list: MyList;
+  lists: MyList[];
+  onBack: () => void;
+  onChangeLists: (lists: MyList[]) => void;
+  onOpenPlaceEdit: () => void;
+  onOpenRestaurantDetail: (restaurantName: string) => void;
+};
+
+const { width: screenWidth } = Dimensions.get('window');
+const HORIZONTAL_PADDING = 16;
+const CARD_GAP = 6;
+const CARD_WIDTH = (screenWidth - HORIZONTAL_PADDING * 2 - CARD_GAP) / 2;
+const CARD_HEIGHT = 224;
+
+function buildNextListsAfterDelete(lists: MyList[], targetId: string) {
+  const nextLists = lists.filter((item) => item.id !== targetId);
+
+  if (!nextLists.some((item) => item.isRepresentative) && nextLists.length > 0) {
+    return nextLists.map((item, index) => ({
+      ...item,
+      isRepresentative: index === 0,
+      isPrivate: index === 0 ? false : item.isPrivate,
+    }));
+  }
+
+  return nextLists;
+}
+
+export function MyListDetailScreen({
+  list,
+  lists,
+  onBack,
+  onChangeLists,
+  onOpenPlaceEdit,
+  onOpenRestaurantDetail,
+}: MyListDetailScreenProps) {
+  const insets = useSafeAreaInsets();
+  const [isEditMenuVisible, setIsEditMenuVisible] = useState(false);
+  const [isRenameVisible, setIsRenameVisible] = useState(false);
+  const [renameValue, setRenameValue] = useState(list.title);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRenameValue(list.title);
+  }, [list.title]);
+
+  const orderedRestaurants = useMemo(() => list.restaurants, [list.restaurants]);
+
+  const selectedCard = useMemo(
+    () => orderedRestaurants.find((item) => item.id === selectedCardId) ?? null,
+    [orderedRestaurants, selectedCardId],
+  );
+
+  const restaurantImageMap = useMemo(() => {
+    return new Map(
+      allRestaurants.map((restaurant) => [
+        restaurant.id,
+        restaurant.photoUris?.[0] ?? restaurant.imageUri ?? null,
+      ]),
+    );
+  }, []);
+
+  const updateListRestaurants = (nextRestaurants: MyListRestaurant[]) => {
+    onChangeLists(
+      lists.map((item) =>
+        item.id === list.id
+          ? {
+              ...item,
+              restaurants: nextRestaurants,
+              restaurantCount: nextRestaurants.length,
+            }
+          : item,
+      ),
+    );
+  };
+
+  const handleRenameSubmit = () => {
+    const trimmed = renameValue.trim();
+
+    if (!trimmed) {
+      return;
+    }
+
+    onChangeLists(
+      lists.map((item) =>
+        item.id === list.id
+          ? {
+              ...item,
+              title: trimmed,
+            }
+          : item,
+      ),
+    );
+    setIsRenameVisible(false);
+  };
+
+  const handleOpenCardMenu = (cardId: string) => {
+    setSelectedCardId((current) => (current === cardId ? null : cardId));
+  };
+
+  const handleDeleteCard = () => {
+    if (!selectedCard) {
+      return;
+    }
+
+    if (orderedRestaurants.length <= 5) {
+      setSelectedCardId(null);
+      Alert.alert('안내', '리스트 내 가게는 최소 5개를 유지해야 합니다.');
+      return;
+    }
+
+    updateListRestaurants(orderedRestaurants.filter((item) => item.id !== selectedCard.id));
+    setSelectedCardId(null);
+  };
+
+  return (
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
+      <View style={styles.screen}>
+        <View style={styles.header}>
+          <Pressable style={styles.backButton} onPress={onBack}>
+            <ArrowLeftIcon width={24} height={24} />
+          </Pressable>
+
+          <View style={styles.headerInfo}>
+            <View style={styles.headerTitleRow}>
+              <Text style={styles.headerTitle}>{list.title}</Text>
+              {list.isRepresentative ? (
+                <View style={styles.representativeBadge}>
+                  <Text style={styles.representativeBadgeLabel}>대표</Text>
+                </View>
+              ) : null}
+            </View>
+
+            <Text style={styles.metaText}>
+              {list.isPrivate ? '비공개' : '공개'}
+              <Text style={styles.metaDot}> · </Text>
+              장소 {list.restaurantCount}개
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.metaSection}>
+          <Pressable style={styles.editButton} onPress={() => setIsEditMenuVisible(true)}>
+            <Text style={styles.editButtonLabel}>편집</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}
+        >
+          <View style={styles.grid}>
+            {orderedRestaurants.map((item, index) => (
+              <Pressable
+                key={item.id}
+                style={styles.card}
+                onPress={() => onOpenRestaurantDetail(item.name)}
+              >
+                {restaurantImageMap.get(item.id) ? (
+                  <Image
+                    source={{ uri: restaurantImageMap.get(item.id) ?? undefined }}
+                    style={styles.cardImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.cardImage} />
+                )}
+                <Pressable
+                  hitSlop={8}
+                  style={styles.cardMoreButton}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    handleOpenCardMenu(item.id);
+                  }}
+                >
+                  <View style={styles.cardMoreDots}>
+                    <View style={styles.cardMoreDot} />
+                    <View style={styles.cardMoreDot} />
+                    <View style={styles.cardMoreDot} />
+                  </View>
+                </Pressable>
+
+                {selectedCardId === item.id ? (
+                  <View style={styles.cardDropdown}>
+                    <Pressable
+                      onPress={handleDeleteCard}
+                      style={({ pressed }) => [
+                        styles.cardDropdownItem,
+                        pressed ? styles.cardDropdownItemPressed : null,
+                      ]}
+                    >
+                      <Text style={styles.cardDropdownLabel}>삭제하기</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                <View style={styles.cardTextBlock}>
+                  <Text style={styles.cardTitle}>{`${index + 1}. ${item.name}`}</Text>
+                  <Text numberOfLines={1} ellipsizeMode="tail" style={styles.cardAddress}>
+                    {item.address}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+
+        <Modal
+          transparent
+          animationType="fade"
+          visible={isEditMenuVisible}
+          onRequestClose={() => setIsEditMenuVisible(false)}
+        >
+          <Pressable style={styles.overlay} onPress={() => setIsEditMenuVisible(false)}>
+            <Pressable style={styles.actionSheet} onPress={() => {}}>
+              <View style={styles.actionGroup}>
+                <Pressable
+                  onPress={() => {
+                    setIsEditMenuVisible(false);
+                    onOpenPlaceEdit();
+                  }}
+                  style={({ pressed }) => [
+                    styles.menuItem,
+                    styles.menuItemNoBorder,
+                    pressed ? styles.menuItemPressed : null,
+                  ]}
+                >
+                  <Text style={styles.menuItemLabel}>장소 편집하기</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    setIsEditMenuVisible(false);
+                    setIsRenameVisible(true);
+                  }}
+                  style={({ pressed }) => [styles.menuItem, pressed ? styles.menuItemPressed : null]}
+                >
+                  <Text style={styles.menuItemLabel}>이름 변경</Text>
+                </Pressable>
+              </View>
+
+              <Pressable
+                onPress={() => setIsEditMenuVisible(false)}
+                style={({ pressed }) => [styles.cancelButton, pressed ? styles.menuItemPressed : null]}
+              >
+                <Text style={styles.cancelButtonLabel}>취소</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        <Modal
+          transparent
+          animationType="fade"
+          visible={isRenameVisible}
+          onRequestClose={() => setIsRenameVisible(false)}
+        >
+          <Pressable style={styles.overlay} onPress={() => setIsRenameVisible(false)}>
+            <Pressable style={styles.renameModal} onPress={() => {}}>
+              <Text style={styles.renameTitle}>리스트 이름 변경</Text>
+
+              <TextInput
+                autoFocus
+                value={renameValue}
+                onChangeText={setRenameValue}
+                placeholder="리스트 이름을 입력해 주세요"
+                placeholderTextColor="#A6A6A6"
+                style={styles.renameInput}
+                maxLength={20}
+              />
+
+              <View style={styles.renameActions}>
+                <Pressable
+                  onPress={() => setIsRenameVisible(false)}
+                  style={({ pressed }) => [
+                    styles.renameButton,
+                    styles.renameCancelButton,
+                    pressed ? styles.menuItemPressed : null,
+                  ]}
+                >
+                  <Text style={styles.renameCancelLabel}>취소</Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={renameValue.trim().length === 0}
+                  onPress={handleRenameSubmit}
+                  style={({ pressed }) => [
+                    styles.renameButton,
+                    styles.renameConfirmButton,
+                    renameValue.trim().length === 0 ? styles.renameConfirmButtonDisabled : null,
+                    pressed && renameValue.trim().length > 0 ? styles.renameConfirmButtonPressed : null,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.renameConfirmLabel,
+                      renameValue.trim().length === 0 ? styles.renameConfirmLabelDisabled : null,
+                    ]}
+                  >
+                    완료
+                  </Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingTop: 25,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: HORIZONTAL_PADDING,
+  },
+  backButton: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerInfo: {
+    flex: 1,
+    gap: 6,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerTitle: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '500',
+    color: '#000000',
+  },
+  representativeBadge: {
+    minWidth: 31,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FCE3E1',
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  representativeBadgeLabel: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+    color: '#FF3B30',
+  },
+  metaSection: {
+    paddingTop: 16,
+    paddingBottom: 8,
+    paddingHorizontal: HORIZONTAL_PADDING,
+    gap: 12,
+  },
+  metaText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    color: '#666666',
+  },
+  metaDot: {
+    color: '#A0A0A0',
+  },
+  editButton: {
+    alignSelf: 'flex-end',
+    minWidth: 66,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#000000',
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editButtonLabel: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  content: {
+    paddingTop: 12,
+    paddingHorizontal: HORIZONTAL_PADDING,
+  },
+  grid: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: CARD_GAP,
+  },
+  card: {
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    borderRadius: 5,
+    backgroundColor: '#D9D9D9',
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+  },
+  cardImage: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#D9D9D9',
+  },
+  cardMoreButton: {
+    position: 'absolute',
+    top: 11,
+    right: 8,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+  },
+  cardMoreDots: {
+    width: 4,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardMoreDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+  },
+  cardTextBlock: {
+    gap: 2,
+  },
+  cardDropdown: {
+    position: 'absolute',
+    top: 34,
+    right: 8,
+    minWidth: 82,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    elevation: 5,
+    overflow: 'hidden',
+    zIndex: 4,
+  },
+  cardDropdownItem: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardDropdownItemPressed: {
+    backgroundColor: '#F5F5F5',
+  },
+  cardDropdownLabel: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '600',
+    color: '#000000',
+  },
+  cardTitle: {
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  cardAddress: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.92)',
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.24)',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 12,
+    paddingBottom: 18,
+  },
+  actionSheet: {
+    gap: 12,
+  },
+  actionGroup: {
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+  },
+  menuItem: {
+    minHeight: 58,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E5E5',
+  },
+  menuItemNoBorder: {
+    borderBottomWidth: 0,
+  },
+  menuItemPressed: {
+    backgroundColor: '#F5F5F5',
+  },
+  menuItemDestructive: {
+    color: '#FF3B30',
+  },
+  menuItemLabel: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '500',
+    color: '#000000',
+  },
+  cancelButton: {
+    minHeight: 58,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonLabel: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  renameModal: {
+    marginHorizontal: 16,
+    marginTop: 'auto',
+    marginBottom: 'auto',
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    gap: 18,
+  },
+  renameTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
+    color: '#000000',
+    textAlign: 'center',
+  },
+  renameInput: {
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E4E4E4',
+    paddingHorizontal: 16,
+    fontSize: 16,
+    lineHeight: 20,
+    color: '#000000',
+  },
+  renameActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  renameButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  renameCancelButton: {
+    backgroundColor: '#F3F3F3',
+  },
+  renameCancelLabel: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: '#444444',
+  },
+  renameConfirmButton: {
+    backgroundColor: '#FF0000',
+  },
+  renameConfirmButtonDisabled: {
+    backgroundColor: '#F1B0B0',
+  },
+  renameConfirmButtonPressed: {
+    opacity: 0.88,
+  },
+  renameConfirmLabel: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  renameConfirmLabelDisabled: {
+    color: '#FFF6F6',
+  },
+});

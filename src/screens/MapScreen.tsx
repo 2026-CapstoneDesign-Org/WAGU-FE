@@ -137,6 +137,8 @@ const mapRestaurants: MapRestaurant[] = [
 
 type MapScreenProps = {
   onOpenRestaurantDetail?: (restaurantName: string) => void;
+  onAddToList?: (restaurantName: string) => void;
+  getFavoriteColor?: (restaurantName: string) => string;
   onPressSearchBar?: () => void;
   searchQuery?: string;
   onClearSearch?: () => void;
@@ -145,6 +147,8 @@ type MapScreenProps = {
 
 export function MapScreen({
   onOpenRestaurantDetail,
+  onAddToList,
+  getFavoriteColor,
   onPressSearchBar,
   searchQuery = '',
   onClearSearch,
@@ -647,11 +651,19 @@ export function MapScreen({
                           {restaurant.category} · {restaurant.status}
                         </Text>
                       </View>
-                      <StarIcon
-                        width={22}
-                        height={22}
-                        color={restaurant.featured ? '#FF0000' : '#D9D9D9'}
-                      />
+                      <Pressable
+                        hitSlop={8}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          onAddToList?.(restaurant.name);
+                        }}
+                      >
+                        <StarIcon
+                          width={22}
+                          height={22}
+                          color={getFavoriteColor?.(restaurant.name) ?? '#D9D9D9'}
+                        />
+                      </Pressable>
                     </Pressable>
 
                     <View style={styles.reviewRow}>
