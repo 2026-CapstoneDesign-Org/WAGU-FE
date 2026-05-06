@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 
 import FilterIcon from '../../assets/icons/filter.svg';
 import MyLocationIcon from '../../assets/icons/mylocation.svg';
@@ -21,8 +22,6 @@ import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-const MAP_IMAGE_URI =
-  'https://www.figma.com/api/mcp/asset/95c0cbd7-adc7-47f7-971c-28602bac3944';
 const CARD_IMAGE_1 =
   'https://www.figma.com/api/mcp/asset/8bf81c7c-6e21-49dd-8de2-e71b0d4be811';
 const CARD_IMAGE_2 =
@@ -38,6 +37,7 @@ const FILTER_OPTIONS = ['영업 중', '영업 전', '한식', '양식', '중식'
 const REVIEW_CARD_WIDTH = 270;
 const MAP_CENTER_X = screenWidth / 2;
 const MAP_CENTER_Y = 250;
+const NAVER_MAP_WEB_URL = 'https://map.naver.com/v5';
 
 type SheetStage = 'collapsed' | 'medium' | 'expanded';
 
@@ -155,6 +155,7 @@ export function MapScreen({
   onSelectTab,
 }: MapScreenProps) {
   const insets = useSafeAreaInsets();
+  const webViewRef = useRef<WebView>(null);
   const sheetContentBottomPadding = TAB_BAR_HEIGHT + insets.bottom + 24;
   const snapTops = useMemo(
     () => ({
@@ -181,6 +182,13 @@ export function MapScreen({
   const panStartTopRef = useRef(snapTops.collapsed);
   const contentPanStartStageRef = useRef<SheetStage>('collapsed');
   const trimmedSearchQuery = searchQuery.trim();
+  const mapWebUrl = useMemo(
+    () =>
+      trimmedSearchQuery
+        ? `${NAVER_MAP_WEB_URL}/search/${encodeURIComponent(trimmedSearchQuery)}`
+        : NAVER_MAP_WEB_URL,
+    [trimmedSearchQuery],
+  );
 
   const animateSheetTo = (stage: SheetStage) => {
     setSheetStage(stage);
@@ -200,9 +208,9 @@ export function MapScreen({
   };
 
   const animateMapToRestaurant = (restaurant: MapRestaurant | null) => {
-    const targetX = restaurant ? MAP_CENTER_X - restaurant.markerX : 0;
-    const targetY = restaurant ? MAP_CENTER_Y - restaurant.markerY : 0;
-    const targetScale = restaurant ? 1.08 : 1;
+    const targetX = 0;
+    const targetY = 0;
+    const targetScale = 1;
 
     Animated.parallel([
       Animated.timing(mapTranslateX, {
@@ -343,22 +351,15 @@ export function MapScreen({
   };
 
   const handlePressMapBackground = () => {
-    if (!selectedMarkerRestaurantId) {
-      return;
-    }
-
     clearPendingAutoOpen();
     setSelectedMarkerRestaurantId(null);
-
-    if (baseFilteredRestaurants.length > 0) {
-      setFocusedRestaurantId(baseFilteredRestaurants[0].id);
-      animateSheetTo('medium');
-      animateMapToRestaurant(baseFilteredRestaurants[0]);
-      return;
-    }
-
-    setFocusedRestaurantId(null);
+    setFocusedRestaurantId(baseFilteredRestaurants[0]?.id ?? null);
+    animateSheetTo('medium');
     animateMapToRestaurant(null);
+  };
+
+  const handlePressLocationButton = () => {
+    webViewRef.current?.reload();
   };
 
   const panResponder = useMemo(
@@ -483,7 +484,7 @@ export function MapScreen({
     <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <StatusBar style="dark" translucent backgroundColor="transparent" />
       <View style={styles.screen}>
-        <Pressable style={styles.mapPressLayer} onPress={handlePressMapBackground}>
+        <View style={styles.mapPressLayer}>
           <Animated.View
             style={[
               styles.mapLayer,
@@ -496,29 +497,19 @@ export function MapScreen({
               },
             ]}
           >
-            <Image source={{ uri: MAP_IMAGE_URI }} style={styles.mapBackground} resizeMode="cover" />
-
-            {mapRestaurants.map((restaurant) => {
-              const active = restaurant.id === focusedRestaurantId;
-              return (
-                <Pressable
-                  key={restaurant.id}
-                  style={[
-                    styles.markerWrap,
-                    {
-                      left: restaurant.markerX - 12,
-                      top: restaurant.markerY - 30,
-                    },
-                  ]}
-                  onPress={() => handlePressMarker(restaurant)}
-                >
-                  <View style={[styles.markerStem, active && styles.markerStemActive]} />
-                  <View style={[styles.markerHead, active && styles.markerHeadActive]} />
-                </Pressable>
-              );
-            })}
+            <WebView
+              ref={webViewRef}
+              source={{ uri: mapWebUrl }}
+              style={styles.mapWebView}
+              allowsBackForwardNavigationGestures
+              bounces={false}
+              javaScriptEnabled
+              setSupportMultipleWindows={false}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+            />
           </Animated.View>
-        </Pressable>
+        </View>
 
         <Animated.View
           pointerEvents="none"
@@ -570,7 +561,7 @@ export function MapScreen({
             },
           ]}
         >
-          <Pressable style={styles.locationButtonInner}>
+          <Pressable style={styles.locationButtonInner} onPress={handlePressLocationButton}>
             <View style={styles.locationIconWrap}>
               <MyLocationIcon width={24} height={24} />
             </View>
@@ -728,6 +719,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   mapBackground: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  mapWebView: {
     ...StyleSheet.absoluteFillObject,
   },
   markerWrap: {

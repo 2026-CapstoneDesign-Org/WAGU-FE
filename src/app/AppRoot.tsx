@@ -93,7 +93,13 @@ type UserProfileSource =
   | { type: 'user-friends'; userId: string; tab: FriendTabKey }
   | { type: 'search-result' }
   | { type: 'home' }
+  | { type: 'restaurant-detail' }
   | null;
+
+type UserProfileHistoryEntry = {
+  userId: string;
+  source: UserProfileSource;
+};
 
 export function AppRoot() {
   const initialHomeScrollState: HomeScrollState = {
@@ -143,6 +149,7 @@ export function AppRoot() {
   const [selectedMyListId, setSelectedMyListId] = useState<string | null>(null);
   const [selectedUserProfileId, setSelectedUserProfileId] = useState<string | null>(null);
   const [userProfileSource, setUserProfileSource] = useState<UserProfileSource>(null);
+  const [userProfileHistory, setUserProfileHistory] = useState<UserProfileHistoryEntry[]>([]);
   const [loginProvider, setLoginProvider] = useState<LoginProvider>('kakao');
   const [nickname, setNickname] = useState('먹부림');
   const [selectedRestaurantName, setSelectedRestaurantName] = useState('와이앤웍');
@@ -322,6 +329,34 @@ export function AppRoot() {
     setSelectedRestaurantName(restaurantName);
     setRestaurantDetailSource(source);
     setScreen('restaurant-detail');
+  };
+
+  const openUserProfileFromRestaurantDetail = (authorName: string) => {
+    const matchedProfile = userProfiles.find((item) => item.nickname === authorName);
+
+    if (!matchedProfile) {
+      return;
+    }
+
+    setUserProfileSource({ type: 'restaurant-detail' });
+    setSelectedUserProfileId(matchedProfile.id);
+    setScreen('user-profile');
+  };
+
+  const openNestedUserProfile = (userId: string, source: UserProfileSource) => {
+    if (selectedUserProfileId) {
+      setUserProfileHistory((current) => [
+        ...current,
+        {
+          userId: selectedUserProfileId,
+          source: userProfileSource,
+        },
+      ]);
+    }
+
+    setUserProfileSource(source);
+    setSelectedUserProfileId(userId);
+    setScreen('user-profile');
   };
 
   const handleBackFromRestaurantDetail = () => {
@@ -548,6 +583,7 @@ export function AppRoot() {
           onAddToList={(restaurantName) =>
             openAddRestaurantToListFlow(restaurantName, 'restaurant-detail')
           }
+          onOpenUserProfile={openUserProfileFromRestaurantDetail}
         />
       ) : screen === 'settings' ? (
         <SettingsScreen
@@ -564,8 +600,8 @@ export function AppRoot() {
           nickname={nickname}
         />
       ) : screen === 'my-friends' ? (
-        <MyFriendsScreen
-          initialTab={myFriendsInitialTab}
+          <MyFriendsScreen
+            initialTab={myFriendsInitialTab}
           onBack={() => setScreen('tabs')}
           onChangeTab={setMyFriendsInitialTab}
           onOpenUserProfile={(userId) => {
@@ -586,18 +622,16 @@ export function AppRoot() {
           followerUsersData={
             userFriendConnectionsByUserId[selectedUserProfileId]?.followers ?? []
           }
-          onBack={() => setScreen('user-profile')}
-          onChangeTab={setMyFriendsInitialTab}
-          onOpenUserProfile={(userId) => {
-            setUserProfileSource({
-              type: 'user-friends',
-              userId: selectedUserProfileId,
-              tab: myFriendsInitialTab,
-            });
-            setSelectedUserProfileId(userId);
-            setScreen('user-profile');
-          }}
-        />
+            onBack={() => setScreen('user-profile')}
+            onChangeTab={setMyFriendsInitialTab}
+            onOpenUserProfile={(userId) => {
+              openNestedUserProfile(userId, {
+                type: 'user-friends',
+                userId: selectedUserProfileId,
+                tab: myFriendsInitialTab,
+              });
+            }}
+          />
       ) : screen === 'my-lists' ? (
         <MyListsScreen
           lists={myLists}
@@ -676,20 +710,28 @@ export function AppRoot() {
               return;
             }
 
-            if (userProfileSource?.type === 'home') {
-              setActiveTab('home');
-              setHomeRestoreAnimated(false);
-              setHomeRestoreKey((current) => current + 1);
-              setScreen('tabs');
-              return;
-            }
+              if (userProfileSource?.type === 'home') {
+                setActiveTab('home');
+                setHomeRestoreAnimated(false);
+                setHomeRestoreKey((current) => current + 1);
+                setScreen('tabs');
+                return;
+              }
 
-            if (userProfileSource?.type === 'user-friends') {
-              setSelectedUserProfileId(userProfileSource.userId);
-              setMyFriendsInitialTab(userProfileSource.tab);
-              setScreen('user-friends');
-              return;
-            }
+              if (userProfileSource?.type === 'restaurant-detail') {
+                setScreen('restaurant-detail');
+                return;
+              }
+
+              if (userProfileSource?.type === 'user-friends') {
+                const previousProfile = userProfileHistory[userProfileHistory.length - 1];
+                setSelectedUserProfileId(userProfileSource.userId);
+                setUserProfileSource(previousProfile?.source ?? null);
+                setUserProfileHistory((current) => current.slice(0, -1));
+                setMyFriendsInitialTab(userProfileSource.tab);
+                setScreen('user-friends');
+                return;
+              }
 
             if (userProfileSource?.type === 'my-friends') {
               setMyFriendsInitialTab(userProfileSource.tab);

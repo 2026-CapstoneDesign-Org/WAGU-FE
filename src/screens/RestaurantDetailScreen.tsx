@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -33,6 +34,7 @@ type RestaurantDetailScreenProps = {
   onBack: () => void;
   restaurantName?: string;
   onAddToList?: (restaurantName: string) => void;
+  onOpenUserProfile?: (authorName: string) => void;
   favoriteColor?: string;
 };
 
@@ -359,22 +361,28 @@ function ReviewCard({
   onToggleFollow,
   onToggleReaction,
   onOpenImagePreview,
+  onOpenUserProfile,
 }: {
   review: RestaurantReviewDisplay;
   onToggleFollow: (reviewId: string) => void;
   onToggleReaction: (reviewId: string, reaction: Exclude<ReviewReaction, null>) => void;
   onOpenImagePreview: (images: string[], index: number) => void;
+  onOpenUserProfile?: (authorName: string) => void;
 }) {
   return (
     <View style={styles.reviewCard}>
       <View style={styles.reviewCardHeader}>
-        <View style={styles.reviewAuthorRow}>
+        <Pressable
+          style={styles.reviewAuthorRow}
+          onPress={() => onOpenUserProfile?.(review.authorName)}
+          disabled={!onOpenUserProfile}
+        >
           <View style={styles.reviewAvatar} />
           <View style={styles.reviewAuthorCopy}>
             <Text style={styles.reviewAuthorName}>{review.authorName}</Text>
             <Text style={styles.reviewDate}>{review.date}</Text>
           </View>
-        </View>
+        </Pressable>
 
         <Pressable
           onPress={() => onToggleFollow(review.id)}
@@ -594,6 +602,8 @@ function ReviewTabContent({
   onToggleFollow,
   onToggleReaction,
   onOpenImagePreview,
+  onOpenUserProfile,
+  onPressWriteReview,
   scrollEnabled,
   onScroll,
 }: {
@@ -603,6 +613,8 @@ function ReviewTabContent({
   onToggleFollow: (reviewId: string) => void;
   onToggleReaction: (reviewId: string, reaction: Exclude<ReviewReaction, null>) => void;
   onOpenImagePreview: (images: string[], index: number) => void;
+  onOpenUserProfile?: (authorName: string) => void;
+  onPressWriteReview: () => void;
 } & TabScrollProps) {
   return (
     <BaseTabScroll scrollEnabled={scrollEnabled} onScroll={onScroll}>
@@ -652,6 +664,7 @@ function ReviewTabContent({
                   onToggleFollow={onToggleFollow}
                   onToggleReaction={onToggleReaction}
                   onOpenImagePreview={onOpenImagePreview}
+                  onOpenUserProfile={onOpenUserProfile}
                 />
                 {index < reviews.length - 1 ? <View style={styles.reviewDivider} /> : null}
               </View>
@@ -662,6 +675,9 @@ function ReviewTabContent({
               <Text style={styles.emptyReviewDescription}>
                 이 가게의 첫 리뷰를 남겨보세요.
               </Text>
+              <Pressable style={styles.writeReviewInlineButton} onPress={onPressWriteReview}>
+                <Text style={styles.writeReviewInlineButtonLabel}>+  리뷰 쓰기</Text>
+              </Pressable>
             </View>
           )}
         </View>
@@ -674,6 +690,7 @@ export function RestaurantDetailScreen({
   onBack,
   restaurantName = '와이앤웍',
   onAddToList,
+  onOpenUserProfile,
   favoriteColor = '#D9D9D9',
 }: RestaurantDetailScreenProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -698,6 +715,10 @@ export function RestaurantDetailScreen({
   const [previewImageSizes, setPreviewImageSizes] = useState<
     Record<string, { width: number; height: number }>
   >({});
+
+  const handlePressWriteReview = () => {
+    Alert.alert('리뷰 쓰기', '리뷰 작성 기능은 곧 추가됩니다.');
+  };
 
   const restaurantMeta = useMemo(
     () => {
@@ -1175,6 +1196,8 @@ export function RestaurantDetailScreen({
               onToggleFollow={handleToggleReviewFollow}
               onToggleReaction={handleToggleReviewReaction}
               onOpenImagePreview={openPhotoPreview}
+              onOpenUserProfile={onOpenUserProfile}
+              onPressWriteReview={handlePressWriteReview}
               scrollEnabled={isTabScrollEnabled}
               onScroll={handleTabScroll}
             />
@@ -1188,6 +1211,15 @@ export function RestaurantDetailScreen({
             />
           ) : null}
         </View>
+
+        {activeTab === 'review' && restaurantReviewList.length > 0 ? (
+          <Pressable
+            style={styles.writeReviewFloatingButton}
+            onPress={handlePressWriteReview}
+          >
+            <Text style={styles.writeReviewFloatingButtonLabel}>+  리뷰 쓰기</Text>
+          </Pressable>
+        ) : null}
 
         <Modal
           visible={selectedPhotoIndex !== null}
@@ -1528,6 +1560,45 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: '#999999',
     textAlign: 'center',
+  },
+  writeReviewInlineButton: {
+    minWidth: 116,
+    height: 42,
+    marginTop: 10,
+    paddingHorizontal: 22,
+    borderRadius: 21,
+    backgroundColor: '#FF0000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  writeReviewInlineButtonLabel: {
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  writeReviewFloatingButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    minWidth: 110,
+    height: 44,
+    paddingHorizontal: 20,
+    borderRadius: 22,
+    backgroundColor: '#FF0000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 7,
+  },
+  writeReviewFloatingButtonLabel: {
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   reviewCard: {
     gap: 12,
