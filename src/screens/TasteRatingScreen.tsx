@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -22,7 +23,7 @@ type TasteRatingScreenProps = {
   listName?: string;
   restaurants: Restaurant[];
   onBack: () => void;
-  onSubmit: (ratings: RestaurantRatings) => void;
+  onSubmit: (ratings: RestaurantRatings) => Promise<void> | void;
 };
 
 function createInitialRatings(items: Restaurant[]): RestaurantRatings {
@@ -46,6 +47,7 @@ export function TasteRatingScreen({
   const [ratings, setRatings] = useState<RestaurantRatings>(() =>
     createInitialRatings(restaurants),
   );
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const visibleRestaurants = useMemo(
     () => (restaurants.length > 0 ? restaurants : []),
@@ -73,6 +75,23 @@ export function TasteRatingScreen({
     visibleRestaurants.every((restaurant) =>
       ratingLabels.every((label) => (ratings[restaurant.id]?.[label] ?? 0) > 0),
     );
+
+  const handleSubmit = async () => {
+    if (!isEveryRestaurantRated || isSubmitting) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await onSubmit(ratings);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : '리스트를 저장하지 못했어요.';
+      Alert.alert('저장 실패', message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
@@ -132,14 +151,16 @@ export function TasteRatingScreen({
 
         <View style={styles.bottomBar}>
           <Pressable
-            onPress={() => onSubmit(ratings)}
-            disabled={!isEveryRestaurantRated}
+            onPress={() => void handleSubmit()}
+            disabled={!isEveryRestaurantRated || isSubmitting}
             style={[
               styles.confirmButton,
-              !isEveryRestaurantRated && styles.confirmButtonDisabled,
+              (!isEveryRestaurantRated || isSubmitting) && styles.confirmButtonDisabled,
             ]}
           >
-            <Text style={styles.confirmLabel}>순서 확정하기</Text>
+            <Text style={styles.confirmLabel}>
+              {isSubmitting ? '저장 중...' : '순서 확정하기'}
+            </Text>
           </Pressable>
         </View>
       </View>

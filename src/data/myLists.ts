@@ -2,6 +2,7 @@ export type MyListRestaurant = {
   id: string;
   name: string;
   address: string;
+  imageUri?: string;
   ratings?: {
     taste: number;
     service: number;

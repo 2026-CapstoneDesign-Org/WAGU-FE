@@ -109,9 +109,9 @@ export function MyListPlaceEditScreen({
                   style={[styles.card, isSelected ? styles.cardSelected : null]}
                   onPress={() => toggleSelection(item.id)}
                 >
-                  {restaurantImageMap.get(item.id) ? (
+                  {item.imageUri || restaurantImageMap.get(item.id) ? (
                     <Image
-                      source={{ uri: restaurantImageMap.get(item.id) ?? undefined }}
+                      source={{ uri: item.imageUri || restaurantImageMap.get(item.id) || undefined }}
                       style={styles.cardImage}
                       resizeMode="cover"
                     />

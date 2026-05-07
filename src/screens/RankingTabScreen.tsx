@@ -16,6 +16,8 @@ export type RankingTabScrollState = {
 
 type RankingTabScreenProps = {
   initialScrollState?: RankingTabScrollState;
+  localRankingItems?: RankingEntry[];
+  nationalRankingItems?: RankingEntry[];
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onPressLocalRanking?: () => void;
   onPressNationalRanking?: () => void;
@@ -117,6 +119,8 @@ function RankingPreviewSection({
 
 export function RankingTabScreen({
   initialScrollState,
+  localRankingItems,
+  nationalRankingItems,
   onOpenRestaurantDetail,
   onPressLocalRanking,
   onPressNationalRanking,
@@ -155,7 +159,7 @@ export function RankingTabScreen({
             accentTitle="용인"
             title=" 맛집 순위"
             initialScrollX={initialScrollState?.localRankingX ?? 0}
-            items={localRankingEntries.slice(0, 20)}
+            items={(localRankingItems ?? localRankingEntries).slice(0, 20)}
             onScrollPositionChange={(x) => onScrollStateChange?.({ localRankingX: x })}
             onPressItem={onOpenRestaurantDetail}
             onPressMore={onPressLocalRanking}
@@ -164,7 +168,7 @@ export function RankingTabScreen({
           <RankingPreviewSection
             title="전국 맛집 순위"
             initialScrollX={initialScrollState?.nationalRankingX ?? 0}
-            items={nationalRankingEntries.slice(0, 20)}
+            items={(nationalRankingItems ?? nationalRankingEntries).slice(0, 20)}
             onScrollPositionChange={(x) => onScrollStateChange?.({ nationalRankingX: x })}
             onPressItem={onOpenRestaurantDetail}
             onPressMore={onPressNationalRanking}

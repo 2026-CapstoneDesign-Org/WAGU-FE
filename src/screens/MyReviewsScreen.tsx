@@ -17,6 +17,7 @@ import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
+import { MOCK_DATA_ENABLED } from '../config/mockData';
 import TrashIcon from '../../assets/icons/trash.svg';
 import { MyReview, myReviews } from '../data/myReviews';
 
@@ -78,7 +79,7 @@ function ReactionButton({
 export function MyReviewsScreen({
   onBack,
   onOpenRestaurantDetail,
-  reviewsData = myReviews,
+  reviewsData = MOCK_DATA_ENABLED ? myReviews : [],
   title = '내 리뷰',
   isOwner = true,
 }: MyReviewsScreenProps) {

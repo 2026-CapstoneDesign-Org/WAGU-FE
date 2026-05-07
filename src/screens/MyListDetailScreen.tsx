@@ -165,9 +165,9 @@ export function MyListDetailScreen({
                 style={styles.card}
                 onPress={() => onOpenRestaurantDetail(item.name)}
               >
-                {restaurantImageMap.get(item.id) ? (
+                {item.imageUri || restaurantImageMap.get(item.id) ? (
                   <Image
-                    source={{ uri: restaurantImageMap.get(item.id) ?? undefined }}
+                    source={{ uri: item.imageUri || restaurantImageMap.get(item.id) || undefined }}
                     style={styles.cardImage}
                     resizeMode="cover"
                   />

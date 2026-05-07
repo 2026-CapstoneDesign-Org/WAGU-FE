@@ -18,7 +18,14 @@ import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
+import {
+  ApiRestaurant,
+  getRestaurant,
+  getRestaurantPhotoUris,
+  searchRestaurants,
+} from '../api/wagu';
 import ClockIcon from '../../assets/icons/clock.svg';
+import { MOCK_DATA_ENABLED } from '../config/mockData';
 import LocationIcon from '../../assets/icons/location.svg';
 import PhoneIcon from '../../assets/icons/phone.svg';
 import ShopIcon from '../../assets/icons/shop.svg';
@@ -31,6 +38,7 @@ type ReviewSort = 'latest' | 'popular';
 type ReviewReaction = 'like' | 'dislike' | null;
 
 type RestaurantDetailScreenProps = {
+  accessToken?: string | null;
   onBack: () => void;
   restaurantName?: string;
   onAddToList?: (restaurantName: string) => void;
@@ -43,6 +51,7 @@ type RestaurantMeta = {
   photoUris: string[];
   reviewCount: string;
   address: string;
+  regionName?: string;
   openingHours: string;
   phone: string;
   features: string;
@@ -132,6 +141,18 @@ const defaultRestaurantMeta: RestaurantMeta = {
   features:
     '포장, 배달, 무선 인터넷, 예약, 남/녀 화장실 구분, 단체 이용 가능',
   menuItems: defaultMenuItems,
+};
+
+const emptyRestaurantMeta: RestaurantMeta = {
+  category: '',
+  photoUris: [],
+  reviewCount: '0',
+  address: '',
+  regionName: '',
+  openingHours: '',
+  phone: '',
+  features: '',
+  menuItems: [],
 };
 
 const restaurantMetaByName: Record<string, Partial<RestaurantMeta>> = {
@@ -484,41 +505,58 @@ function BaseTabScroll({
 
 function HomeTabContent({
   restaurantMeta,
+  isLoading,
+  hasLoadError,
   scrollEnabled,
   onScroll,
   onPressMoreMenu,
 }: {
   restaurantMeta: RestaurantMeta;
+  isLoading: boolean;
+  hasLoadError: boolean;
   onPressMoreMenu: () => void;
 } & TabScrollProps) {
+  const hasInfo =
+    Boolean(restaurantMeta.address) ||
+    Boolean(restaurantMeta.openingHours) ||
+    Boolean(restaurantMeta.phone) ||
+    Boolean(restaurantMeta.features) ||
+    Boolean(restaurantMeta.regionName);
+  const hasMenuItems = restaurantMeta.menuItems.length > 0;
+
   return (
     <BaseTabScroll scrollEnabled={scrollEnabled} onScroll={onScroll}>
       <View style={styles.tabInner}>
-        <View style={styles.infoList}>
-          <View style={styles.infoRow}>
-            <LocationIcon width={18} height={18} color="#C4C4C4" />
-            <Text style={styles.infoText}>
-              {restaurantMeta.address} <Text style={styles.linkText}>복사</Text>
-            </Text>
+        {hasInfo ? (
+          <View style={styles.infoList}>
+            <DetailInfoRow
+              icon={<LocationIcon width={18} height={18} color="#C4C4C4" />}
+              text={restaurantMeta.address}
+            />
+            <DetailInfoRow
+              icon={<ClockIcon width={18} height={18} color="#C4C4C4" />}
+              text={restaurantMeta.openingHours}
+            />
+            <DetailInfoRow
+              icon={<PhoneIcon width={18} height={18} color="#C4C4C4" />}
+              text={restaurantMeta.phone}
+            />
+            <DetailInfoRow
+              icon={<ShopIcon width={18} height={18} color="#C4C4C4" />}
+              text={restaurantMeta.features || restaurantMeta.regionName || ''}
+            />
           </View>
-
-          <View style={styles.infoRow}>
-            <ClockIcon width={18} height={18} color="#C4C4C4" />
-            <Text style={styles.infoText}>{restaurantMeta.openingHours}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <PhoneIcon width={18} height={18} color="#C4C4C4" />
-            <Text style={styles.infoText}>
-              {restaurantMeta.phone} <Text style={styles.linkText}>전화</Text>
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <ShopIcon width={18} height={18} color="#C4C4C4" />
-            <Text style={styles.infoText}>{restaurantMeta.features}</Text>
-          </View>
-        </View>
+        ) : (
+          <EmptySectionState
+            title={isLoading ? '식당 정보를 불러오는 중이에요' : '아직 등록된 상세 정보가 없어요'}
+            description={
+              hasLoadError
+                ? '잠시 후 다시 시도해 주세요.'
+                : '주소와 기본 정보가 준비되면 여기에 보여드릴게요.'
+            }
+            compact
+          />
+        )}
       </View>
 
       <View style={styles.fullBleedDividerWrap}>
@@ -527,11 +565,18 @@ function HomeTabContent({
 
       <View style={styles.tabInner}>
         <Text style={styles.menuSectionTitle}>메뉴</Text>
-        <MenuList menuItems={restaurantMeta.menuItems.slice(0, 4)} />
+        {hasMenuItems ? <MenuList menuItems={restaurantMeta.menuItems.slice(0, 4)} /> : null}
         {restaurantMeta.menuItems.length > 4 ? (
           <Pressable style={styles.moreMenuButton} onPress={onPressMoreMenu}>
             <Text style={styles.moreMenuButtonText}>더보기</Text>
           </Pressable>
+        ) : null}
+        {!hasMenuItems ? (
+          <EmptySectionState
+            title="메뉴 정보가 아직 없어요"
+            description="이 식당의 메뉴 정보는 준비되는 대로 업데이트할게요."
+            compact
+          />
         ) : null}
       </View>
     </BaseTabScroll>
@@ -548,7 +593,14 @@ function MenuTabContent({
   return (
     <BaseTabScroll scrollEnabled={scrollEnabled} onScroll={onScroll}>
       <View style={styles.tabInner}>
-        <MenuList menuItems={restaurantMeta.menuItems} />
+        {restaurantMeta.menuItems.length ? (
+          <MenuList menuItems={restaurantMeta.menuItems} />
+        ) : (
+          <EmptySectionState
+            title="메뉴 정보가 아직 없어요"
+            description="백엔드에서 메뉴 데이터를 주면 이 탭에 바로 연결할게요."
+          />
+        )}
       </View>
     </BaseTabScroll>
   );
@@ -581,17 +633,62 @@ function PhotoGalleryTabContent({
 } & TabScrollProps) {
   return (
     <BaseTabScroll scrollEnabled={scrollEnabled} onScroll={onScroll}>
-      <View style={styles.photoGrid}>
-        {visiblePhotoUris.map((photoUri, index) => (
-          <Pressable
-            key={`${photoUri}-${index}`}
-            onPress={() => onOpenPreview(visiblePhotoUris, index)}
-          >
-            <Image source={{ uri: photoUri }} style={styles.photoCard} />
-          </Pressable>
-        ))}
-      </View>
+      {visiblePhotoUris.length ? (
+        <View style={styles.photoGrid}>
+          {visiblePhotoUris.map((photoUri, index) => (
+            <Pressable
+              key={`${photoUri}-${index}`}
+              onPress={() => onOpenPreview(visiblePhotoUris, index)}
+            >
+              <Image source={{ uri: photoUri }} style={styles.photoCard} />
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.tabInner}>
+          <EmptySectionState
+            title="등록된 사진이 아직 없어요"
+            description="식당 사진은 준비되는 대로 여기에 보여드릴게요."
+          />
+        </View>
+      )}
     </BaseTabScroll>
+  );
+}
+
+function EmptySectionState({
+  title,
+  description,
+  compact = false,
+}: {
+  title: string;
+  description: string;
+  compact?: boolean;
+}) {
+  return (
+    <View style={[styles.emptySectionState, compact ? styles.emptySectionStateCompact : null]}>
+      <Text style={styles.emptySectionTitle}>{title}</Text>
+      <Text style={styles.emptySectionDescription}>{description}</Text>
+    </View>
+  );
+}
+
+function DetailInfoRow({
+  icon,
+  text,
+}: {
+  icon: React.ReactNode;
+  text: string;
+}) {
+  if (!text) {
+    return null;
+  }
+
+  return (
+    <View style={styles.infoRow}>
+      {icon}
+      <Text style={styles.infoText}>{text}</Text>
+    </View>
   );
 }
 
@@ -686,7 +783,12 @@ function ReviewTabContent({
   );
 }
 
+function normalizeRestaurantName(value: string) {
+  return value.replace(/\s+/g, '').trim().toLowerCase();
+}
+
 export function RestaurantDetailScreen({
+  accessToken,
   onBack,
   restaurantName = '와이앤웍',
   onAddToList,
@@ -712,6 +814,9 @@ export function RestaurantDetailScreen({
   const [reviewReactionStates, setReviewReactionStates] = useState<
     Record<string, ReviewReaction>
   >({});
+  const [remoteRestaurant, setRemoteRestaurant] = useState<ApiRestaurant | null>(null);
+  const [isRestaurantLoading, setIsRestaurantLoading] = useState(false);
+  const [hasRestaurantLoadError, setHasRestaurantLoadError] = useState(false);
   const [previewImageSizes, setPreviewImageSizes] = useState<
     Record<string, { width: number; height: number }>
   >({});
@@ -720,20 +825,91 @@ export function RestaurantDetailScreen({
     Alert.alert('리뷰 쓰기', '리뷰 작성 기능은 곧 추가됩니다.');
   };
 
+  useEffect(() => {
+    if (!accessToken) {
+      setRemoteRestaurant(null);
+      setIsRestaurantLoading(false);
+      setHasRestaurantLoadError(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRestaurant = async () => {
+      setIsRestaurantLoading(true);
+      setHasRestaurantLoadError(false);
+
+      try {
+        const candidates = await searchRestaurants(accessToken, restaurantName);
+        const normalizedTargetName = normalizeRestaurantName(restaurantName);
+        const matchedCandidate =
+          candidates.find((item) => normalizeRestaurantName(item.name) === normalizedTargetName) ??
+          candidates.find((item) =>
+            normalizeRestaurantName(item.name).includes(normalizedTargetName),
+          ) ??
+          candidates.find((item) =>
+            normalizedTargetName.includes(normalizeRestaurantName(item.name)),
+          ) ??
+          candidates[0];
+
+        if (!matchedCandidate) {
+          if (!cancelled) {
+            setRemoteRestaurant(null);
+            setHasRestaurantLoadError(true);
+            setIsRestaurantLoading(false);
+          }
+          return;
+        }
+
+        try {
+          const detail = await getRestaurant(accessToken, Number(matchedCandidate.id));
+
+          if (!cancelled) {
+            setRemoteRestaurant(detail);
+          }
+        } catch {
+          if (!cancelled) {
+            setRemoteRestaurant(matchedCandidate);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setRemoteRestaurant(null);
+          setHasRestaurantLoadError(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsRestaurantLoading(false);
+        }
+      }
+    };
+
+    void loadRestaurant();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, restaurantName]);
+
   const restaurantMeta = useMemo(
     () => {
-      const matchedRestaurant = restaurants.find(
-        (item) => item.name === restaurantName || item.shortName === restaurantName,
-      );
-      const matchedMeta =
-        restaurantMetaByName[restaurantName] ??
-        (matchedRestaurant
-          ? restaurantMetaByName[matchedRestaurant.name] ??
-            restaurantMetaByName[matchedRestaurant.shortName]
-          : undefined);
+      const matchedRestaurant = MOCK_DATA_ENABLED
+        ? restaurants.find(
+            (item) => item.name === restaurantName || item.shortName === restaurantName,
+          )
+        : undefined;
+      const matchedMeta = MOCK_DATA_ENABLED
+        ? restaurantMetaByName[restaurantName] ??
+          (matchedRestaurant
+            ? restaurantMetaByName[matchedRestaurant.name] ??
+              restaurantMetaByName[matchedRestaurant.shortName]
+            : undefined)
+        : undefined;
+      const baseRestaurantMeta = MOCK_DATA_ENABLED ? defaultRestaurantMeta : emptyRestaurantMeta;
+      const remotePhotoUris = remoteRestaurant ? getRestaurantPhotoUris(remoteRestaurant) : [];
 
       return {
-        ...defaultRestaurantMeta,
+        ...baseRestaurantMeta,
         ...(matchedRestaurant
           ? {
               category: matchedRestaurant.category,
@@ -746,42 +922,57 @@ export function RestaurantDetailScreen({
               menuItems: matchedRestaurant.menuItems,
             }
           : {}),
+        ...(remoteRestaurant
+          ? {
+              category: remoteRestaurant.categories?.[0] ?? remoteRestaurant.regionName,
+              photoUris: remotePhotoUris,
+              address: remoteRestaurant.address,
+              regionName: remoteRestaurant.regionName,
+            }
+          : {}),
         ...matchedMeta,
         category:
+          remoteRestaurant?.categories?.[0] ??
           matchedRestaurant?.category ??
           matchedMeta?.category ??
-          defaultRestaurantMeta.category,
+          baseRestaurantMeta.category,
         photoUris:
+          (remotePhotoUris.length ? remotePhotoUris : undefined) ??
           matchedRestaurant?.photoUris ??
           matchedMeta?.photoUris ??
-          defaultRestaurantMeta.photoUris,
+          baseRestaurantMeta.photoUris,
         reviewCount:
           matchedRestaurant?.reviewCount ??
           matchedMeta?.reviewCount ??
-          defaultRestaurantMeta.reviewCount,
+          baseRestaurantMeta.reviewCount,
         address:
+          remoteRestaurant?.address ??
           matchedRestaurant?.address ??
           matchedMeta?.address ??
-          defaultRestaurantMeta.address,
+          baseRestaurantMeta.address,
+        regionName:
+          remoteRestaurant?.regionName ??
+          matchedMeta?.regionName ??
+          baseRestaurantMeta.regionName,
         openingHours:
           matchedRestaurant?.openingHours ??
           matchedMeta?.openingHours ??
-          defaultRestaurantMeta.openingHours,
+          baseRestaurantMeta.openingHours,
         phone:
           matchedRestaurant?.phone ??
           matchedMeta?.phone ??
-          defaultRestaurantMeta.phone,
+          baseRestaurantMeta.phone,
         features:
           matchedRestaurant?.features ??
           matchedMeta?.features ??
-          defaultRestaurantMeta.features,
+          baseRestaurantMeta.features,
         menuItems:
           matchedRestaurant?.menuItems ??
           matchedMeta?.menuItems ??
-          defaultRestaurantMeta.menuItems,
+          baseRestaurantMeta.menuItems,
       };
     },
-    [restaurantName],
+    [remoteRestaurant, restaurantName],
   );
 
   const visiblePhotoUris = useMemo(
@@ -790,16 +981,20 @@ export function RestaurantDetailScreen({
   );
 
   const restaurantReviewList = useMemo(() => {
-    const matchedRestaurant = restaurants.find(
-      (item) => item.name === restaurantName || item.shortName === restaurantName,
-    );
+    const resolvedRestaurantName = remoteRestaurant?.name ?? restaurantName;
+    const matchedRestaurant = MOCK_DATA_ENABLED
+      ? restaurants.find((item) => item.name === restaurantName || item.shortName === restaurantName)
+      : undefined;
 
-    const filteredReviews = restaurantReviews.filter(
-      (review) =>
-        review.restaurantName === restaurantName ||
-        review.restaurantName === matchedRestaurant?.name ||
-        review.restaurantName === matchedRestaurant?.shortName,
-    );
+    const filteredReviews = MOCK_DATA_ENABLED
+      ? restaurantReviews.filter(
+          (review) =>
+            review.restaurantName === resolvedRestaurantName ||
+            review.restaurantName === restaurantName ||
+            review.restaurantName === matchedRestaurant?.name ||
+            review.restaurantName === matchedRestaurant?.shortName,
+        )
+      : [];
 
     const reviewsWithFollowState = filteredReviews.map((review) => ({
       ...review,
@@ -818,7 +1013,17 @@ export function RestaurantDetailScreen({
       const rightDate = Number(right.date.replaceAll('.', ''));
       return rightDate - leftDate;
     });
-  }, [restaurantName, reviewSort, reviewFollowStates, reviewReactionStates]);
+  }, [remoteRestaurant?.name, restaurantName, reviewSort, reviewFollowStates, reviewReactionStates]);
+
+  const displayReviewCount = restaurantReviewList.length
+    ? String(restaurantReviewList.length)
+    : restaurantMeta.reviewCount;
+  const heroMetaParts = [
+    restaurantMeta.category,
+    restaurantMeta.regionName,
+    displayReviewCount ? `리뷰 ${displayReviewCount}` : '',
+  ].filter(Boolean);
+  const hasHeroPhotos = restaurantMeta.photoUris.length > 0;
 
   const handleToggleReviewFollow = (reviewId: string) => {
     setReviewFollowStates((current) => {
@@ -1045,6 +1250,8 @@ export function RestaurantDetailScreen({
     };
   };
 
+  const displayRestaurantName = remoteRestaurant?.name ?? restaurantName;
+
   const heroSectionHeight = heroProgress.interpolate({
     inputRange: [0, 1],
     outputRange: [HERO_HEIGHT, 0],
@@ -1091,7 +1298,7 @@ export function RestaurantDetailScreen({
                 },
               ]}
             >
-              {restaurantName}
+              {displayRestaurantName}
             </Animated.Text>
           </View>
           <Pressable
@@ -1114,26 +1321,44 @@ export function RestaurantDetailScreen({
           ]}
         >
           <View style={styles.heroCopy}>
-            <Text style={styles.heroTitle}>{restaurantName}</Text>
-            <Text style={styles.heroMeta}>
-              {restaurantMeta.category} · 리뷰 {restaurantMeta.reviewCount}
-            </Text>
+            <Text style={styles.heroTitle}>{displayRestaurantName}</Text>
+            {heroMetaParts.length ? (
+              <Text style={styles.heroMeta}>{heroMetaParts.join(' · ')}</Text>
+            ) : (
+              <Text style={styles.heroMetaMuted}>
+                {isRestaurantLoading
+                  ? '식당 정보를 불러오는 중이에요'
+                  : hasRestaurantLoadError
+                    ? '식당 정보를 다시 불러와 주세요'
+                    : '등록된 기본 정보가 아직 없어요'}
+              </Text>
+            )}
           </View>
 
           <View style={styles.galleryWrap}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.galleryContent}
-            >
-              {restaurantMeta.photoUris.slice(0, 5).map((photoUri, index) => (
-                <Image
-                  key={`${photoUri}-${index}`}
-                  source={{ uri: photoUri }}
-                  style={styles.galleryCard}
-                />
-              ))}
-            </ScrollView>
+            {hasHeroPhotos ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.galleryContent}
+              >
+                {restaurantMeta.photoUris.slice(0, 5).map((photoUri, index) => (
+                  <Image
+                    key={`${photoUri}-${index}`}
+                    source={{ uri: photoUri }}
+                    style={styles.galleryCard}
+                  />
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.galleryPlaceholderWrap}>
+                <View style={styles.galleryPlaceholderCard}>
+                  <Text style={styles.galleryPlaceholderLabel}>
+                    {isRestaurantLoading ? '사진을 불러오는 중' : '등록된 사진이 아직 없어요'}
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
         </Animated.View>
 
@@ -1176,6 +1401,8 @@ export function RestaurantDetailScreen({
           {activeTab === 'home' ? (
             <HomeTabContent
               restaurantMeta={restaurantMeta}
+              isLoading={isRestaurantLoading}
+              hasLoadError={hasRestaurantLoadError}
               scrollEnabled={isTabScrollEnabled}
               onScroll={handleTabScroll}
               onPressMoreMenu={handlePressMoreMenu}
@@ -1358,12 +1585,35 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#000000',
   },
+  heroMetaMuted: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '500',
+    color: '#8A8A8A',
+  },
   galleryWrap: {
     marginTop: 25,
   },
   galleryContent: {
     paddingLeft: HORIZONTAL_PADDING,
     gap: 6,
+  },
+  galleryPlaceholderWrap: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+  },
+  galleryPlaceholderCard: {
+    width: screenWidth - HORIZONTAL_PADDING * 2,
+    height: 161,
+    borderRadius: 12,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  galleryPlaceholderLabel: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '500',
+    color: '#8A8A8A',
   },
   galleryCard: {
     width: 161,
@@ -1507,6 +1757,31 @@ const styles = StyleSheet.create({
   },
   emptyTabContent: {
     flex: 1,
+  },
+  emptySectionState: {
+    width: '100%',
+    minHeight: 180,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptySectionStateCompact: {
+    minHeight: 140,
+  },
+  emptySectionTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600',
+    color: '#000000',
+    textAlign: 'center',
+  },
+  emptySectionDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '400',
+    color: '#999999',
+    textAlign: 'center',
   },
   reviewTabInner: {
     paddingHorizontal: HORIZONTAL_PADDING,

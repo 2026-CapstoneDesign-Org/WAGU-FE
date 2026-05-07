@@ -23,7 +23,9 @@ type MyInfoScreenProps = {
   onBack: () => void;
   onOpenEditNickname?: () => void;
   loginProvider?: LoginProvider;
-  onChangeLoginProvider?: (provider: LoginProvider) => void;
+  profileImageUrl?: string | null;
+  genderLabel?: string | null;
+  birthDateLabel?: string | null;
   nickname?: string;
 };
 
@@ -84,7 +86,9 @@ export function MyInfoScreen({
   onBack,
   onOpenEditNickname,
   loginProvider = 'kakao',
-  onChangeLoginProvider,
+  profileImageUrl,
+  genderLabel,
+  birthDateLabel,
   nickname = '먹부림',
 }: MyInfoScreenProps) {
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
@@ -188,6 +192,8 @@ export function MyInfoScreen({
     outputRange: [280, 0],
   });
 
+  const displayProfileImageUri = profileImageUri ?? profileImageUrl ?? null;
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.screen}>
@@ -200,8 +206,8 @@ export function MyInfoScreen({
 
         <View style={styles.profileSection}>
           <Pressable style={styles.profileBox} onPress={openProfileSheet}>
-            {profileImageUri ? (
-              <Image source={{ uri: profileImageUri }} style={styles.profileImage} />
+            {displayProfileImageUri ? (
+              <Image source={{ uri: displayProfileImageUri }} style={styles.profileImage} />
             ) : null}
             <View style={styles.cameraButton}>
               <CameraIcon width={18} height={18} />
@@ -222,39 +228,9 @@ export function MyInfoScreen({
             label="로그인 방식"
             value={<LoginMethodValue provider={loginProvider} />}
           />
-
-          {__DEV__ && onChangeLoginProvider ? (
-            <View style={styles.previewChipsRow}>
-              {(['kakao', 'naver', 'google'] as const).map((provider) => {
-                const isActive = provider === loginProvider;
-
-                return (
-                  <Pressable
-                    key={provider}
-                    style={[styles.previewChip, isActive && styles.previewChipActive]}
-                    onPress={() => onChangeLoginProvider(provider)}
-                  >
-                    <Text
-                      style={[
-                        styles.previewChipLabel,
-                        isActive && styles.previewChipLabelActive,
-                      ]}
-                    >
-                      {provider === 'kakao'
-                        ? '카카오'
-                        : provider === 'naver'
-                          ? '네이버'
-                          : '구글'}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : null}
-
           <InfoRow label="전화번호" value="010-1234-5678" />
-          <InfoRow label="성별" value="남성" />
-          <InfoRow label="생일" value="2002년 6월 1일" />
+          <InfoRow label="성별" value={genderLabel ?? '여성'} />
+          <InfoRow label="생일" value={birthDateLabel ?? '2002년 6월 1일'} />
         </View>
       </View>
 
@@ -447,36 +423,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontWeight: '600',
     color: '#000000',
-  },
-  previewChipsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: -4,
-    marginBottom: 6,
-  },
-  previewChip: {
-    minWidth: 72,
-    height: 34,
-    paddingHorizontal: 12,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: '#D9D9D9',
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewChipActive: {
-    borderColor: '#FF0000',
-    backgroundColor: '#FFF2F2',
-  },
-  previewChipLabel: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '600',
-    color: '#7D7D7D',
-  },
-  previewChipLabelActive: {
-    color: '#FF0000',
   },
   modalRoot: {
     flex: 1,

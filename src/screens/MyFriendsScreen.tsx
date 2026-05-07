@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
+import { MOCK_DATA_ENABLED } from '../config/mockData';
 import {
   FollowTogglePayload,
   FriendTabKey,
@@ -133,18 +134,20 @@ export function MyFriendsScreen({
   const scrollX = useRef(new Animated.Value(0)).current;
   const [activeTab, setActiveTab] = useState<FriendTabKey>(initialTab);
   const [followingUsers, setFollowingUsers] = useState(
-    followingUsersData ?? MY_FOLLOWING_USERS,
+    followingUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWING_USERS : []),
   );
   const [followerUsers, setFollowerUsers] = useState(() =>
-    sortFollowersForInitialView(followerUsersData ?? MY_FOLLOWER_USERS),
+    sortFollowersForInitialView(followerUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : [])),
   );
 
   useEffect(() => {
-    setFollowingUsers(followingUsersData ?? MY_FOLLOWING_USERS);
+    setFollowingUsers(followingUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWING_USERS : []));
   }, [followingUsersData]);
 
   useEffect(() => {
-    setFollowerUsers(sortFollowersForInitialView(followerUsersData ?? MY_FOLLOWER_USERS));
+    setFollowerUsers(
+      sortFollowersForInitialView(followerUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : [])),
+    );
   }, [followerUsersData]);
 
   const tabs = useMemo(

@@ -25,6 +25,16 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
+/after-login.png
+/fresh-login.png
+/emulator-screen.png
+/emulator-screen-2.png
+/emulator-screen-4.png
+/post-continue.png
+/post-continue-2.png
+/post-enter.png
+/tmp-map-screen.png
 
 # macOS
 .DS_Store

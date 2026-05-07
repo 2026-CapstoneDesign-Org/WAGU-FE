@@ -13,17 +13,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import SearchIcon from '../../assets/icons/search.svg';
+import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { localRankingEntries, nationalRankingEntries } from '../data/rankings';
 
 type RankingDetailVariant = 'local' | 'national';
 
 type RankingDetailScreenProps = {
+  items?: typeof localRankingEntries;
   onBack: () => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   variant: RankingDetailVariant;
 };
 
 export function RankingDetailScreen({
+  items,
   onBack,
   onOpenRestaurantDetail,
   variant,
@@ -35,17 +38,23 @@ export function RankingDetailScreen({
   const isDraggingRef = useRef(false);
   const searchVisibleRef = useRef(true);
 
-  const items = variant === 'local' ? localRankingEntries.slice(0, 40) : nationalRankingEntries.slice(0, 40);
+  const rankingItems =
+    items ??
+    (MOCK_DATA_ENABLED
+      ? variant === 'local'
+        ? localRankingEntries.slice(0, 40)
+        : nationalRankingEntries.slice(0, 40)
+      : []);
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim();
 
     if (!normalizedQuery) {
-      return items;
+      return rankingItems;
     }
 
-    return items.filter((item) => item.name.includes(normalizedQuery));
-  }, [items, query]);
+    return rankingItems.filter((item) => item.name.includes(normalizedQuery));
+  }, [rankingItems, query]);
 
   const setSearchVisible = (visible: boolean) => {
     if (searchVisibleRef.current === visible) {

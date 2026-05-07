@@ -16,6 +16,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import HeartIcon from '../../assets/icons/heart.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar';
+import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { localRankingEntries, nationalRankingEntries, RankingEntry } from '../data/rankings';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -85,6 +86,8 @@ type HorizontalProfileSectionProps = {
 
 type MainHomeScreenProps = {
   initialScrollState?: HomeScrollState;
+  localRankingItems?: RankingEntry[];
+  nationalRankingItems?: RankingEntry[];
   onOpenUserProfile?: (userId: string) => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onPressAi?: () => void;
@@ -225,6 +228,8 @@ function HorizontalProfileSection({
 
 export function MainHomeScreen({
   initialScrollState,
+  localRankingItems,
+  nationalRankingItems,
   onOpenUserProfile,
   onOpenRestaurantDetail,
   onPressAi,
@@ -245,8 +250,8 @@ export function MainHomeScreen({
   const autoSlideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const indicatorPosition = useRef(new Animated.Value(1)).current;
 
-  const localRanking = localRankingEntries.slice(0, 20);
-  const nationalRanking = nationalRankingEntries.slice(0, 20);
+  const localRanking = (localRankingItems ?? localRankingEntries).slice(0, 20);
+  const nationalRanking = (nationalRankingItems ?? nationalRankingEntries).slice(0, 20);
 
   const clearAutoSlideTimer = () => {
     if (!autoSlideTimerRef.current) {
@@ -432,7 +437,7 @@ export function MainHomeScreen({
             <HorizontalProfileSection
               title="WAGU 인플루언서"
               initialScrollX={initialScrollState?.influencersX ?? 0}
-              items={influencers}
+              items={MOCK_DATA_ENABLED ? influencers : []}
               onPressItem={onOpenUserProfile}
               onScrollPositionChange={(x) => onScrollStateChange?.({ influencersX: x })}
               restoreScrollKey={restoreScrollKey}
@@ -440,7 +445,7 @@ export function MainHomeScreen({
             <HorizontalProfileSection
               title="나랑 비슷한 밥친구"
               initialScrollX={initialScrollState?.mealFriendsX ?? 0}
-              items={mealFriends}
+              items={MOCK_DATA_ENABLED ? mealFriends : []}
               onPressItem={onOpenUserProfile}
               onScrollPositionChange={(x) => onScrollStateChange?.({ mealFriendsX: x })}
               restoreScrollKey={restoreScrollKey}

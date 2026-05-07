@@ -1,13 +1,32 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import {
+  createList,
+  formatBirthDate,
+  formatGenderLabel,
+  getFollowCount,
+  getListDetail,
+  getMyInfo,
+  getMyLists,
+  getRestaurantRankings,
+  mapListDetailToMyList,
+  mapListSummaryToMyList,
+  mapRankingItems,
+  searchRestaurants,
+  setRepresentativeList,
+  signupProfile,
+  updateMyUser,
+} from '../api/wagu';
 import { AppTab } from '../components/BottomTabBar';
+import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { FriendTabKey } from '../data/myFriends';
 import { MY_FOLLOWER_USERS } from '../data/myFriends';
 import { userFriendConnectionsByUserId } from '../data/userFriendConnections';
 import { initialMyLists, MyList } from '../data/myLists';
 import { myReviews } from '../data/myReviews';
+import { localRankingEntries, nationalRankingEntries, RankingEntry } from '../data/rankings';
 import { Restaurant, restaurants as initialRestaurantPool } from '../data/restaurants';
 import { userReviewsByUserId } from '../data/userReviews';
 import { AddRestaurantToListRatingScreen } from '../screens/AddRestaurantToListRatingScreen';
@@ -35,6 +54,8 @@ import { RestaurantDetailScreen } from '../screens/RestaurantDetailScreen';
 import { SearchResultScreen } from '../screens/SearchResultScreen';
 import { SearchScreen } from '../screens/SearchScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { SignupNicknameScreen } from '../screens/SignupNicknameScreen';
+import { SignupProfileScreen } from '../screens/SignupProfileScreen';
 import { TasteRatingScreen } from '../screens/TasteRatingScreen';
 import { TasteListNameScreen } from '../screens/TasteListNameScreen';
 import { TasteSelectionScreen } from '../screens/TasteSelectionScreen';
@@ -46,6 +67,8 @@ type SearchResultTabKey = 'restaurant' | 'user' | 'region' | 'photo';
 
 type FlowScreen =
   | 'login'
+  | 'signup-nickname'
+  | 'signup-profile'
   | 'intro'
   | 'taste'
   | 'taste-list-name'
@@ -102,6 +125,22 @@ type UserProfileHistoryEntry = {
 };
 
 export function AppRoot() {
+  const fallbackMyLists = MOCK_DATA_ENABLED ? initialMyLists : [];
+  const fallbackFollowerCount = MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS.length : 0;
+  const visibleUserProfiles = MOCK_DATA_ENABLED ? userProfiles : [];
+  const visibleUserReviewsByUserId = MOCK_DATA_ENABLED ? userReviewsByUserId : {};
+  const visibleUserFriendConnectionsByUserId = MOCK_DATA_ENABLED
+    ? userFriendConnectionsByUserId
+    : {};
+  const fallbackRankingEntries = MOCK_DATA_ENABLED
+    ? {
+        local: localRankingEntries,
+        national: nationalRankingEntries,
+      }
+    : {
+        local: [] as RankingEntry[],
+        national: [] as RankingEntry[],
+      };
   const initialHomeScrollState: HomeScrollState = {
     bannerLoopIndex: 1,
     influencersX: 0,
@@ -145,14 +184,28 @@ export function AppRoot() {
   const [myPageRestoreAnimated, setMyPageRestoreAnimated] = useState(false);
   const [myFriendsInitialTab, setMyFriendsInitialTab] =
     useState<FriendTabKey>('following');
-  const [myLists, setMyLists] = useState<MyList[]>(initialMyLists);
+  const [myLists, setMyLists] = useState<MyList[]>(fallbackMyLists);
+  const [followerCount, setFollowerCount] = useState(fallbackFollowerCount);
+  const [rankingEntries, setRankingEntries] = useState<{
+    local: RankingEntry[];
+    national: RankingEntry[];
+  }>(fallbackRankingEntries);
   const [selectedMyListId, setSelectedMyListId] = useState<string | null>(null);
   const [selectedUserProfileId, setSelectedUserProfileId] = useState<string | null>(null);
   const [userProfileSource, setUserProfileSource] = useState<UserProfileSource>(null);
   const [userProfileHistory, setUserProfileHistory] = useState<UserProfileHistoryEntry[]>([]);
   const [loginProvider, setLoginProvider] = useState<LoginProvider>('kakao');
+  const [session, setSession] = useState<{
+    accessToken: string;
+    refreshToken: string | null;
+  } | null>(null);
+  const [requiresProfileSetup, setRequiresProfileSetup] = useState(false);
+  const [pendingNickname, setPendingNickname] = useState<string | null>(null);
   const [nickname, setNickname] = useState('먹부림');
   const [selectedRestaurantName, setSelectedRestaurantName] = useState('와이앤웍');
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+  const [birthDateLabel, setBirthDateLabel] = useState<string | null>(null);
+  const [genderLabel, setGenderLabel] = useState<string | null>(null);
   const [restaurantDetailSource, setRestaurantDetailSource] =
     useState<RestaurantDetailSource>(null);
   const [addToListSource, setAddToListSource] = useState<'restaurant-detail' | 'map' | null>(
@@ -160,6 +213,84 @@ export function AppRoot() {
   );
   const [addToListRestaurantId, setAddToListRestaurantId] = useState<string | null>(null);
   const [addToListTargetListIds, setAddToListTargetListIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!session?.accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateSession = async () => {
+      try {
+        const me = await getMyInfo(session.accessToken);
+
+        if (cancelled) {
+          return;
+        }
+
+        setNickname(me.nickname);
+        setProfileImageUrl(me.profileImageUrl ?? null);
+        setBirthDateLabel(formatBirthDate(me));
+        setGenderLabel(formatGenderLabel(me.gender));
+
+        const [followCountResult, listsResult, localRankingResult, nationalRankingResult] =
+          await Promise.allSettled([
+            getFollowCount(session.accessToken, me.id),
+            getMyLists(session.accessToken),
+            getRestaurantRankings(session.accessToken, { regionName: '용인', limit: 40 }),
+            getRestaurantRankings(session.accessToken, { limit: 40 }),
+          ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (followCountResult.status === 'fulfilled') {
+          setFollowerCount(followCountResult.value.followerCount);
+        }
+
+        if (localRankingResult.status === 'fulfilled' && nationalRankingResult.status === 'fulfilled') {
+          setRankingEntries({
+            local: mapRankingItems(localRankingResult.value.items),
+            national: mapRankingItems(nationalRankingResult.value.items),
+          });
+        }
+
+        if (listsResult.status === 'fulfilled') {
+          const listDetails = await Promise.all(
+            listsResult.value.map(async (summary, index) => {
+              try {
+                const detail = await getListDetail(session.accessToken, summary.id);
+                return mapListDetailToMyList(detail, index);
+              } catch {
+                return mapListSummaryToMyList(summary, index);
+              }
+            }),
+          );
+
+          if (!cancelled) {
+            setMyLists(listDetails);
+          }
+        }
+      } catch {
+        if (!cancelled && !MOCK_DATA_ENABLED) {
+          setFollowerCount(0);
+          setRankingEntries({
+            local: [],
+            national: [],
+          });
+          setMyLists([]);
+        }
+      }
+    };
+
+    void hydrateSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   const appendNewList = (title: string, selected: Restaurant[]) => {
     const accentPalette = ['#F46A67', '#56CDB5', '#8361C8', '#F6B033', '#5D8DF4', '#E96DC0'];
@@ -178,6 +309,82 @@ export function AppRoot() {
     };
 
     setMyLists((current) => [...current, nextList]);
+  };
+
+  const refreshMyLists = async (accessToken: string) => {
+    const summaries = await getMyLists(accessToken);
+    const listDetails = await Promise.all(
+      summaries.map(async (summary, index) => {
+        try {
+          const detail = await getListDetail(accessToken, summary.id);
+          return mapListDetailToMyList(detail, index);
+        } catch {
+          return mapListSummaryToMyList(summary, index);
+        }
+      }),
+    );
+
+    setMyLists(listDetails);
+    return listDetails;
+  };
+
+  const convertFiveStarToTenPoint = (value: number) => value * 2;
+
+  const createTasteList = async (
+    title: string,
+    selected: Restaurant[],
+    ratings: Record<string, Record<'맛' | '서비스' | '가성비', number>>,
+  ) => {
+    if (!session?.accessToken) {
+      if (tasteFlowSource === 'my-lists' && title.trim()) {
+        appendNewList(title.trim(), selected);
+      }
+      return;
+    }
+
+    const resolvedRestaurants = await Promise.all(
+      selected.map(async (restaurant) => {
+        const candidates = await searchRestaurants(session.accessToken, restaurant.name);
+        const matched =
+          candidates.find((item) => item.name === restaurant.name) ??
+          candidates.find((item) => item.name === restaurant.shortName) ??
+          candidates[0];
+
+        if (!matched) {
+          throw new Error(`${restaurant.name} 식당을 서버에서 찾지 못했어요.`);
+        }
+
+        return matched;
+      }),
+    );
+
+    const regionName =
+      resolvedRestaurants[0]?.regionName ??
+      selected[0]?.address?.split(' ')[0] ??
+      '용인';
+
+    const existingListCount = myLists.length;
+    const createdList = await createList(session.accessToken, {
+      title: title.trim(),
+      regionName,
+      restaurants: selected.map((restaurant, index) => {
+        const rating = ratings[restaurant.id];
+        const resolvedRestaurant = resolvedRestaurants[index];
+
+        return {
+          restaurantId: resolvedRestaurant.id,
+          tasteScore: convertFiveStarToTenPoint(rating['맛']),
+          valueScore: convertFiveStarToTenPoint(rating['가성비']),
+          moodScore: convertFiveStarToTenPoint(rating['서비스']),
+        };
+      }),
+    });
+
+    if (existingListCount === 0) {
+      await setRepresentativeList(session.accessToken, createdList.id);
+    }
+
+    await refreshMyLists(session.accessToken);
   };
 
   const getFavoriteColor = (restaurantName: string) => {
@@ -332,7 +539,7 @@ export function AppRoot() {
   };
 
   const openUserProfileFromRestaurantDetail = (authorName: string) => {
-    const matchedProfile = userProfiles.find((item) => item.nickname === authorName);
+    const matchedProfile = visibleUserProfiles.find((item) => item.nickname === authorName);
 
     if (!matchedProfile) {
       return;
@@ -414,20 +621,114 @@ export function AppRoot() {
     setScreen('tabs');
   };
 
+  const handleLoginSuccess = async (
+    provider: LoginProvider,
+    nextSession: {
+      accessToken: string;
+      refreshToken: string | null;
+    },
+  ) => {
+    setLoginProvider(provider);
+    setSession(nextSession);
+    setActiveTab('home');
+
+    try {
+      const me = await getMyInfo(nextSession.accessToken);
+      const lists = await getMyLists(nextSession.accessToken);
+
+      setNickname(me.nickname);
+      setProfileImageUrl(me.profileImageUrl ?? null);
+      setBirthDateLabel(formatBirthDate(me));
+      setGenderLabel(formatGenderLabel(me.gender));
+
+      const needsSignupProfile =
+        !me.birthYear || !me.birthMonth || !me.birthDay || !me.gender;
+
+      setRequiresProfileSetup(needsSignupProfile);
+
+      if (lists.length === 0) {
+        setTasteFlowSource('onboarding');
+        setScreen('signup-nickname');
+        return;
+      }
+
+      if (needsSignupProfile) {
+        setScreen('signup-profile');
+        return;
+      }
+
+      setScreen('tabs');
+    } catch {
+      setRequiresProfileSetup(true);
+      setTasteFlowSource('onboarding');
+      setScreen('signup-nickname');
+    }
+  };
+
+  const handleSignupNicknameSubmit = async (nextNickname: string) => {
+    setNickname(nextNickname);
+    setPendingNickname(nextNickname);
+
+    if (!requiresProfileSetup && session?.accessToken) {
+      try {
+        await updateMyUser(session.accessToken, { nickname: nextNickname });
+        setPendingNickname(null);
+      } catch {
+        // Keep the local nickname and try again during later onboarding steps.
+      }
+    }
+
+    setScreen(requiresProfileSetup ? 'signup-profile' : 'intro');
+  };
+
+  const handleSignupProfileSubmit = async (profile: {
+    birthDay: number;
+    birthMonth: number;
+    birthYear: number;
+    gender: 'FEMALE' | 'MALE';
+  }) => {
+    if (!session?.accessToken) {
+      throw new Error('로그인 정보가 없어서 프로필을 저장할 수 없어요.');
+    }
+
+    if (pendingNickname) {
+      try {
+        await updateMyUser(session.accessToken, { nickname: pendingNickname });
+        setPendingNickname(null);
+      } catch {
+        // Proceed with profile save even if nickname sync needs to be retried later.
+      }
+    }
+
+    await signupProfile(session.accessToken, profile);
+    setBirthDateLabel(`${profile.birthYear}년 ${profile.birthMonth}월 ${profile.birthDay}일`);
+    setGenderLabel(profile.gender === 'MALE' ? '남성' : '여성');
+    setRequiresProfileSetup(false);
+    const lists = await getMyLists(session.accessToken);
+    setTasteFlowSource('onboarding');
+    setScreen(lists.length === 0 ? 'intro' : 'tabs');
+  };
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" backgroundColor="#FFFFFF" />
       {screen === 'login' ? (
         <OnboardingLoginScreen
-          onSelectLogin={(provider) => {
-            if (provider === 'naver') {
-              setScreen('tabs');
-              setActiveTab('home');
-              return;
-            }
-
-            setScreen('intro');
-          }}
+          onLoginSuccess={(provider, nextSession) =>
+            void handleLoginSuccess(provider as LoginProvider, nextSession)
+          }
+        />
+      ) : screen === 'signup-nickname' ? (
+        <SignupNicknameScreen
+          initialNickname=""
+          onBack={() => setScreen('login')}
+          onSubmit={handleSignupNicknameSubmit}
+        />
+      ) : screen === 'signup-profile' ? (
+        <SignupProfileScreen
+          nickname={nickname}
+          onBack={() => setScreen('signup-nickname')}
+          onSubmit={handleSignupProfileSubmit}
         />
       ) : screen === 'intro' ? (
         <OnboardingIntroScreen
@@ -439,6 +740,7 @@ export function AppRoot() {
         />
       ) : screen === 'taste' ? (
         <TasteSelectionScreen
+          accessToken={session?.accessToken}
           onBack={() => setScreen(tasteFlowSource === 'my-lists' ? 'my-lists' : 'intro')}
           onConfirm={(restaurants) => {
             setSelectedRestaurants(restaurants);
@@ -460,11 +762,10 @@ export function AppRoot() {
           listName={tasteListName}
           restaurants={selectedRestaurants}
           onBack={() => setScreen('taste-list-name')}
-          onSubmit={() => {
-            if (tasteFlowSource === 'my-lists' && tasteListName.trim()) {
-              appendNewList(tasteListName.trim(), selectedRestaurants);
+          onSubmit={async (ratings) => {
+            if (tasteListName.trim()) {
+              await createTasteList(tasteListName.trim(), selectedRestaurants, ratings);
             }
-
             setCompletionSource('taste-flow');
             setScreen('complete');
           }}
@@ -548,6 +849,7 @@ export function AppRoot() {
         />
       ) : screen === 'search-result' ? (
         <SearchResultScreen
+          accessToken={session?.accessToken}
           query={searchQuery}
           initialTab={searchResultTab}
           onBack={() => setScreen('search')}
@@ -577,6 +879,7 @@ export function AppRoot() {
         />
       ) : screen === 'restaurant-detail' ? (
         <RestaurantDetailScreen
+          accessToken={session?.accessToken}
           restaurantName={selectedRestaurantName}
           onBack={handleBackFromRestaurantDetail}
           favoriteColor={getFavoriteColor(selectedRestaurantName)}
@@ -595,8 +898,10 @@ export function AppRoot() {
         <MyInfoScreen
           onBack={() => setScreen('settings')}
           onOpenEditNickname={() => setScreen('edit-nickname')}
-          onChangeLoginProvider={setLoginProvider}
           loginProvider={loginProvider}
+          profileImageUrl={profileImageUrl}
+          genderLabel={genderLabel}
+          birthDateLabel={birthDateLabel}
           nickname={nickname}
         />
       ) : screen === 'my-friends' ? (
@@ -614,13 +919,13 @@ export function AppRoot() {
         <MyFriendsScreen
           initialTab={myFriendsInitialTab}
           title={`${
-            userProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ?? ''
+            visibleUserProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ?? ''
           }님의 밥친구`}
           followingUsersData={
-            userFriendConnectionsByUserId[selectedUserProfileId]?.following ?? []
+            visibleUserFriendConnectionsByUserId[selectedUserProfileId]?.following ?? []
           }
           followerUsersData={
-            userFriendConnectionsByUserId[selectedUserProfileId]?.followers ?? []
+            visibleUserFriendConnectionsByUserId[selectedUserProfileId]?.followers ?? []
           }
             onBack={() => setScreen('user-profile')}
             onChangeTab={setMyFriendsInitialTab}
@@ -679,9 +984,9 @@ export function AppRoot() {
       ) : screen === 'user-reviews' && selectedUserProfileId ? (
         <UserReviewsScreen
           title={`${
-            userProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ?? ''
+            visibleUserProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ?? ''
           }님의 리뷰`}
-          reviews={userReviewsByUserId[selectedUserProfileId] ?? []}
+          reviews={visibleUserReviewsByUserId[selectedUserProfileId] ?? []}
           onBack={() => setScreen('user-profile')}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, {
@@ -703,7 +1008,10 @@ export function AppRoot() {
         <DeleteAccountScreen onBack={() => setScreen('settings')} />
       ) : screen === 'user-profile' && selectedUserProfileId ? (
         <UserProfileScreen
-          profile={userProfiles.find((item) => item.id === selectedUserProfileId) ?? userProfiles[0]}
+          profile={
+            visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ??
+            visibleUserProfiles[0]
+          }
           onBack={() => {
             if (userProfileSource?.type === 'search-result') {
               setScreen('search-result');
@@ -756,6 +1064,11 @@ export function AppRoot() {
       ) : rankingDetail ? (
         <RankingDetailScreen
           onBack={handleBackFromRankingDetail}
+          items={
+            rankingDetail.variant === 'local'
+              ? rankingEntries.local.slice(0, 40)
+              : rankingEntries.national.slice(0, 40)
+          }
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, {
               type: 'ranking-detail',
@@ -767,6 +1080,8 @@ export function AppRoot() {
       ) : activeTab === 'home' ? (
         <MainHomeScreen
           initialScrollState={homeScrollState}
+          localRankingItems={rankingEntries.local}
+          nationalRankingItems={rankingEntries.national}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'home' })
           }
@@ -790,6 +1105,8 @@ export function AppRoot() {
       ) : activeTab === 'ranking' ? (
         <RankingTabScreen
           initialScrollState={rankingScrollState}
+          localRankingItems={rankingEntries.local}
+          nationalRankingItems={rankingEntries.national}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'ranking' })
           }
@@ -818,7 +1135,7 @@ export function AppRoot() {
         />
       ) : (
         <MyPageScreen
-          followerCount={MY_FOLLOWER_USERS.length}
+          followerCount={followerCount}
           initialScrollState={myPageScrollState}
           nickname={nickname}
           myLists={myLists}
@@ -844,7 +1161,7 @@ export function AppRoot() {
           }
           onOpenSettings={() => setScreen('settings')}
           onSelectTab={handleSelectTab}
-          reviewCount={myReviews.length}
+          reviewCount={MOCK_DATA_ENABLED ? myReviews.length : 0}
           restoreAnimated={myPageRestoreAnimated}
           restoreScrollKey={myPageRestoreKey}
         />

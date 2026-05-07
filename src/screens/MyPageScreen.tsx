@@ -210,9 +210,11 @@ export function MyPageScreen({
                   style={styles.card}
                   onPress={() => onOpenRestaurantDetail?.(item.name)}
                 >
-                  {restaurantMetaMap.get(item.id)?.imageUri ? (
+                  {item.imageUri || restaurantMetaMap.get(item.id)?.imageUri ? (
                     <Image
-                      source={{ uri: restaurantMetaMap.get(item.id)?.imageUri ?? undefined }}
+                      source={{
+                        uri: item.imageUri || restaurantMetaMap.get(item.id)?.imageUri || undefined,
+                      }}
                       style={styles.cardImage}
                       resizeMode="cover"
                     />

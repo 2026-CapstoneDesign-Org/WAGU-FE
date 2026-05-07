@@ -19,11 +19,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import SearchIcon from '../../assets/icons/search.svg';
+import { mapRestaurantSearchResults, searchRestaurants } from '../api/wagu';
+import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { userProfiles } from '../data/userProfiles';
 
 type SearchResultTab = 'restaurant' | 'user' | 'region' | 'photo';
 
 type SearchResultScreenProps = {
+  accessToken?: string | null;
   onBack: () => void;
   initialTab?: SearchResultTab;
   onChangeTab?: (tab: SearchResultTab) => void;
@@ -50,13 +53,13 @@ type UserResult = {
 const { width: screenWidth } = Dimensions.get('window');
 const HORIZONTAL_PADDING = 16;
 const CONTENT_WIDTH = screenWidth - HORIZONTAL_PADDING * 2;
-const TAB_WIDTH = 44;
+const TAB_WIDTH = 56;
 const TAB_SIDE_PADDING = 7;
-const TAB_INDICATOR_WIDTH = 30;
+const TAB_INDICATOR_WIDTH = 40;
 const TAB_ROW_WIDTH = CONTENT_WIDTH - TAB_SIDE_PADDING * 2;
 const TAB_GAP = (TAB_ROW_WIDTH - TAB_WIDTH * 4) / 3;
 
-const RESTAURANT_RESULTS: RestaurantResult[] = [
+const RESTAURANT_RESULTS: RestaurantResult[] = MOCK_DATA_ENABLED ? [
   {
     id: 'restaurant-1',
     name: '와이앤웍',
@@ -93,9 +96,9 @@ const RESTAURANT_RESULTS: RestaurantResult[] = [
   { id: 'restaurant-14', name: '라마르', category: '베트남식' },
   { id: 'restaurant-15', name: '마라천국', category: '중식' },
   { id: 'restaurant-16', name: '정성식당', category: '한식' },
-];
+]: [];
 
-const USER_RESULTS: UserResult[] = [
+const USER_RESULTS: UserResult[] = MOCK_DATA_ENABLED ? [
   'following-1',
   'follower-4',
   'following-2',
@@ -119,7 +122,7 @@ const USER_RESULTS: UserResult[] = [
       'https://www.figma.com/api/mcp/asset/bc373354-5752-4f1f-85a8-5d980b97a795',
       'https://www.figma.com/api/mcp/asset/acbbdd90-dfd7-4079-a0ce-49c497d8773c',
     ][index % 4],
-  }));
+  })) : [];
 
 const tabs: { id: SearchResultTab; label: string }[] = [
   { id: 'restaurant', label: '맛집' },
@@ -167,6 +170,7 @@ function EmptyTabState() {
 }
 
 export function SearchResultScreen({
+  accessToken,
   onBack,
   initialTab = 'restaurant',
   onChangeTab,
@@ -180,6 +184,7 @@ export function SearchResultScreen({
   const scrollX = useRef(new Animated.Value(0)).current;
   const [value, setValue] = useState(query);
   const [activeTab, setActiveTab] = useState<SearchResultTab>(initialTab);
+  const [restaurantResults, setRestaurantResults] = useState<RestaurantResult[]>(RESTAURANT_RESULTS);
 
   useEffect(() => {
     setValue(query);
@@ -193,6 +198,41 @@ export function SearchResultScreen({
       pagerRef.current?.scrollTo({ x: nextIndex * CONTENT_WIDTH, animated: false });
     });
   }, [initialTab, scrollX]);
+
+  useEffect(() => {
+    if (!accessToken || !query.trim()) {
+      setRestaurantResults(RESTAURANT_RESULTS);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadResults = async () => {
+      try {
+        const restaurants = await searchRestaurants(accessToken, query.trim());
+        const mappedResults = mapRestaurantSearchResults(restaurants).map((restaurant) => ({
+          id: restaurant.id,
+          category: restaurant.category,
+          imageUri: restaurant.imageUri,
+          name: restaurant.name,
+        }));
+
+        if (!cancelled) {
+          setRestaurantResults(mappedResults);
+        }
+      } catch {
+        if (!cancelled) {
+          setRestaurantResults(RESTAURANT_RESULTS);
+        }
+      }
+    };
+
+    void loadResults();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, query]);
 
   const trimmedValue = value.trim();
 
@@ -261,7 +301,10 @@ export function SearchResultScreen({
             <View style={styles.tabRow}>
               {tabs.map((tab) => (
                 <Pressable key={tab.id} style={styles.tabButton} onPress={() => handlePressTab(tab.id)}>
-                  <Text style={[styles.tabLabel, activeTab === tab.id && styles.activeTabLabel]}>
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.tabLabel, activeTab === tab.id && styles.activeTabLabel]}
+                  >
                     {tab.label}
                   </Text>
                 </Pressable>
@@ -293,7 +336,7 @@ export function SearchResultScreen({
             >
               <View style={styles.page}>
                 <ResultList
-                  items={RESTAURANT_RESULTS.map((item) => ({
+                  items={restaurantResults.map((item) => ({
                     id: item.id,
                     imageUri: item.imageUri,
                     name: item.name,
@@ -387,13 +430,14 @@ const styles = StyleSheet.create({
     width: TAB_WIDTH,
     alignItems: 'center',
     paddingBottom: 7,
-    paddingHorizontal: 8,
+    justifyContent: 'center',
   },
   tabLabel: {
     fontSize: 15,
     lineHeight: 18,
     fontWeight: '500',
     color: '#838383',
+    textAlign: 'center',
   },
   activeTabLabel: {
     color: '#000000',
