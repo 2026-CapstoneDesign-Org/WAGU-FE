@@ -142,6 +142,26 @@ export function MyListDetailScreen({
     }
   };
 
+  const handleConfirmDeleteCard = () => {
+    if (!selectedCard) {
+      return;
+    }
+
+    Alert.alert('가게 삭제', `정말 ${selectedCard.name} 을 삭제하시겠습니까?`, [
+      {
+        text: '취소',
+        style: 'cancel',
+      },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => {
+          void handleDeleteCard();
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.screen}>
@@ -212,7 +232,7 @@ export function MyListDetailScreen({
                 {selectedCardId === item.id ? (
                   <View style={styles.cardDropdown}>
                     <Pressable
-                      onPress={() => void handleDeleteCard()}
+                      onPress={handleConfirmDeleteCard}
                       style={({ pressed }) => [
                         styles.cardDropdownItem,
                         pressed ? styles.cardDropdownItemPressed : null,

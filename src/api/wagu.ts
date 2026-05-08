@@ -240,6 +240,23 @@ export async function removeRestaurantFromList(
   });
 }
 
+export async function addRestaurantToList(
+  token: string,
+  listId: number,
+  body: {
+    moodScore: number;
+    restaurantId: number;
+    tasteScore: number;
+    valueScore: number;
+  },
+) {
+  return apiRequest<void>(`/lists/${listId}/restaurants`, {
+    method: 'POST',
+    token,
+    body,
+  });
+}
+
 export async function getFollowCount(token: string, userId: number) {
   return apiRequest<ApiFollowCount>(`/users/${userId}/follow/count`, {
     token,

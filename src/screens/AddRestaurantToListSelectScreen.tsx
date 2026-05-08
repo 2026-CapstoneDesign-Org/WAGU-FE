@@ -13,6 +13,10 @@ type AddRestaurantToListSelectScreenProps = {
   onSelectLists: (listIds: string[]) => void;
 };
 
+function normalizeRestaurantValue(value?: string) {
+  return value?.replace(/\s+/g, '').trim().toLowerCase() ?? '';
+}
+
 export function AddRestaurantToListSelectScreen({
   restaurant,
   lists,
@@ -22,9 +26,26 @@ export function AddRestaurantToListSelectScreen({
   const insets = useSafeAreaInsets();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+  const isRestaurantAlreadyInList = (list: MyList) => {
+    const restaurantKeys = [
+      normalizeRestaurantValue(restaurant.id),
+      normalizeRestaurantValue(restaurant.name),
+      normalizeRestaurantValue(restaurant.shortName),
+    ].filter(Boolean);
+
+    return list.restaurants.some((item) => {
+      const itemKeys = [
+        normalizeRestaurantValue(item.id),
+        normalizeRestaurantValue(item.name),
+      ].filter(Boolean);
+
+      return restaurantKeys.some((restaurantKey) => itemKeys.includes(restaurantKey));
+    });
+  };
+
   const availableLists = useMemo(
-    () => lists.filter((list) => !list.restaurants.some((item) => item.id === restaurant.id)),
-    [lists, restaurant.id],
+    () => lists.filter((list) => !isRestaurantAlreadyInList(list)),
+    [lists, restaurant.id, restaurant.name, restaurant.shortName],
   );
 
   const toggleSelection = (listId: string) => {
@@ -55,7 +76,7 @@ export function AddRestaurantToListSelectScreen({
           contentContainerStyle={[styles.listContent, { paddingBottom: 110 + insets.bottom }]}
         >
           {lists.map((list) => {
-            const alreadyAdded = list.restaurants.some((item) => item.id === restaurant.id);
+            const alreadyAdded = isRestaurantAlreadyInList(list);
             const isSelected = selectedIds.includes(list.id);
 
             return (

@@ -88,6 +88,35 @@ export function MyListPlaceEditScreen({
     }
   };
 
+  const handleConfirmDeleteSelected = () => {
+    if (selectedIds.length === 0) {
+      return;
+    }
+
+    const selectedRestaurants = orderedRestaurants.filter((restaurant) =>
+      selectedIds.includes(restaurant.id),
+    );
+
+    const deleteTargetLabel =
+      selectedRestaurants.length === 1
+        ? selectedRestaurants[0]?.name ?? '선택한 가게'
+        : `${selectedRestaurants[0]?.name ?? '선택한 가게'} 외 ${selectedRestaurants.length - 1}곳`;
+
+    Alert.alert('가게 삭제', `정말 ${deleteTargetLabel} 을 삭제하시겠습니까?`, [
+      {
+        text: '취소',
+        style: 'cancel',
+      },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => {
+          void handleDeleteSelected();
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.screen}>
@@ -147,7 +176,7 @@ export function MyListPlaceEditScreen({
 
         <View style={[styles.bottomBar, { paddingBottom: Math.max(8, insets.bottom + 4) }]}>
           <Pressable
-            onPress={() => void handleDeleteSelected()}
+            onPress={handleConfirmDeleteSelected}
             disabled={selectedIds.length === 0}
             style={[
               styles.deleteButton,
@@ -215,6 +244,8 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     borderRadius: 5,
+    borderWidth: 2,
+    borderColor: 'transparent',
     backgroundColor: '#D9D9D9',
     overflow: 'hidden',
     justifyContent: 'flex-end',
@@ -222,7 +253,6 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   cardSelected: {
-    borderWidth: 2,
     borderColor: '#FF0000',
   },
   cardImage: {

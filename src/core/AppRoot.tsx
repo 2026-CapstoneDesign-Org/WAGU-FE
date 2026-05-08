@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import {
+  addRestaurantToList,
   createList,
   deleteList,
   formatBirthDate,
@@ -15,6 +17,7 @@ import {
   mapListDetailToMyList,
   mapListSummaryToMyList,
   mapRankingItems,
+  removeRestaurantFromList,
   searchRestaurants,
   setRepresentativeList,
   signupProfile,
@@ -215,6 +218,7 @@ export function AppRoot() {
     null,
   );
   const [addToListRestaurantId, setAddToListRestaurantId] = useState<string | null>(null);
+  const [addToListRestaurantName, setAddToListRestaurantName] = useState<string | null>(null);
   const [addToListTargetListIds, setAddToListTargetListIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -461,6 +465,86 @@ export function AppRoot() {
     applyLocalDelete();
   };
 
+  const handleRemoveRestaurantsFromMyList = async (
+    listId: string,
+    restaurantIds: string[],
+  ) => {
+    if (restaurantIds.length === 0) {
+      return;
+    }
+
+    const applyLocalRemove = () => {
+      setMyLists((current) =>
+        current.map((list) =>
+          list.id === listId
+            ? {
+                ...list,
+                restaurants: list.restaurants.filter(
+                  (restaurant) => !restaurantIds.includes(restaurant.id),
+                ),
+                restaurantCount: list.restaurants.filter(
+                  (restaurant) => !restaurantIds.includes(restaurant.id),
+                ).length,
+              }
+            : list,
+        ),
+      );
+    };
+
+    if (!session?.accessToken) {
+      applyLocalRemove();
+      return;
+    }
+
+    const parsedListId = Number(listId);
+
+    if (Number.isNaN(parsedListId)) {
+      applyLocalRemove();
+      return;
+    }
+
+    const currentList = myLists.find((list) => list.id === listId);
+
+    try {
+      const resolvedRestaurantIds = await Promise.all(
+        restaurantIds.map(async (restaurantId) => {
+          const parsedRestaurantId = Number(restaurantId);
+
+          if (!Number.isNaN(parsedRestaurantId)) {
+            return parsedRestaurantId;
+          }
+
+          const targetRestaurant = currentList?.restaurants.find(
+            (restaurant) => restaurant.id === restaurantId,
+          );
+
+          if (!targetRestaurant) {
+            throw new Error('restaurant_not_found');
+          }
+
+          const candidates = await searchRestaurants(session.accessToken!, targetRestaurant.name);
+          const matchedRestaurant =
+            candidates.find((item) => item.name === targetRestaurant.name) ?? candidates[0];
+
+          if (!matchedRestaurant) {
+            throw new Error('restaurant_not_found');
+          }
+
+          return matchedRestaurant.id;
+        }),
+      );
+
+      await Promise.all(
+        resolvedRestaurantIds.map((restaurantId) =>
+          removeRestaurantFromList(session.accessToken!, parsedListId, restaurantId),
+        ),
+      );
+      applyLocalRemove();
+    } catch {
+      Alert.alert('안내', '가게를 삭제하지 못했습니다.');
+    }
+  };
+
   const convertFiveStarToTenPoint = (value: number) => value * 2;
 
   const createTasteList = async (
@@ -555,58 +639,133 @@ export function AppRoot() {
         restaurant.shortName === restaurantName,
     ) ?? null;
 
+  const getAddToListRestaurant = (): Restaurant | null => {
+    const fallbackName = addToListRestaurantName ?? addToListRestaurantId;
+
+    const matchedRestaurant =
+      initialRestaurantPool.find(
+        (restaurant) =>
+          restaurant.id === addToListRestaurantId ||
+          restaurant.name === addToListRestaurantId ||
+          restaurant.shortName === addToListRestaurantId,
+      ) ??
+      initialRestaurantPool.find(
+        (restaurant) =>
+          restaurant.name === addToListRestaurantName ||
+          restaurant.shortName === addToListRestaurantName,
+      );
+
+    if (matchedRestaurant) {
+      return matchedRestaurant;
+    }
+
+    if (!fallbackName) {
+      return null;
+    }
+
+    return {
+      id: addToListRestaurantId ?? fallbackName,
+      name: fallbackName,
+      shortName: fallbackName,
+      category: '맛집',
+    };
+  };
+
   const openAddRestaurantToListFlow = (
     restaurantName: string,
     source: 'restaurant-detail' | 'map',
   ) => {
     const restaurant = resolveRestaurant(restaurantName);
 
-    if (!restaurant) {
-      return;
-    }
-
     setAddToListSource(source);
-    setAddToListRestaurantId(restaurant.id);
+    setAddToListRestaurantId(restaurant?.id ?? restaurantName);
+    setAddToListRestaurantName(restaurant?.name ?? restaurantName);
     setAddToListTargetListIds([]);
     setScreen('add-to-list-select');
   };
 
-  const handleAddRestaurantToListComplete = (ratings: {
+  const handleAddRestaurantToListComplete = async (ratings: {
     taste: number;
     service: number;
     value: number;
   }) => {
-    const restaurant = initialRestaurantPool.find((item) => item.id === addToListRestaurantId);
+    const restaurant = getAddToListRestaurant();
 
     if (!restaurant || addToListTargetListIds.length === 0) {
       return;
     }
 
-    setMyLists((current) =>
-      current.map((list) => {
-        if (!addToListTargetListIds.includes(list.id)) {
-          return list;
+    let nextRestaurantId = restaurant.id;
+    let nextRestaurantName = restaurant.shortName || restaurant.name;
+    let nextRestaurantAddress = restaurant.address ?? '';
+
+    const applyLocalAdd = () => {
+      setMyLists((current) =>
+        current.map((list) => {
+          if (!addToListTargetListIds.includes(list.id)) {
+            return list;
+          }
+
+          if (list.restaurants.some((item) => item.id === restaurant.id)) {
+            return list;
+          }
+
+          return {
+            ...list,
+            restaurantCount: list.restaurantCount + 1,
+            restaurants: [
+              ...list.restaurants,
+              {
+                id: nextRestaurantId,
+                name: nextRestaurantName,
+                address: nextRestaurantAddress,
+                ratings,
+              },
+            ],
+          };
+        }),
+      );
+    };
+
+    if (session?.accessToken) {
+      try {
+        const candidates = await searchRestaurants(session.accessToken, restaurant.name);
+        const matchedRestaurant =
+          candidates.find((item) => item.name === restaurant.name) ??
+          candidates.find((item) => item.name === restaurant.shortName) ??
+          candidates[0];
+
+        if (!matchedRestaurant) {
+          throw new Error('restaurant_not_found');
         }
 
-        if (list.restaurants.some((item) => item.id === restaurant.id)) {
-          return list;
+        nextRestaurantId = String(matchedRestaurant.id);
+        nextRestaurantName = matchedRestaurant.name;
+        nextRestaurantAddress = matchedRestaurant.address ?? restaurant.address ?? '';
+
+        const parsedListIds = addToListTargetListIds.map((listId) => Number(listId));
+
+        if (parsedListIds.some((listId) => Number.isNaN(listId))) {
+          throw new Error('invalid_list_id');
         }
 
-        return {
-          ...list,
-          restaurantCount: list.restaurantCount + 1,
-          restaurants: [
-            ...list.restaurants,
-            {
-              id: restaurant.id,
-              name: restaurant.shortName || restaurant.name,
-              address: restaurant.address ?? '',
-              ratings,
-            },
-          ],
-        };
-      }),
-    );
+        await Promise.all(
+          parsedListIds.map((listId) =>
+            addRestaurantToList(session.accessToken!, listId, {
+              restaurantId: matchedRestaurant.id,
+              tasteScore: convertFiveStarToTenPoint(ratings.taste),
+              valueScore: convertFiveStarToTenPoint(ratings.value),
+              moodScore: convertFiveStarToTenPoint(ratings.service),
+            }),
+          ),
+        );
+      } catch {
+        Alert.alert('안내', '리스트에 식당을 추가하지 못했습니다.');
+        return;
+      }
+    }
+
+    applyLocalAdd();
 
     setCompletionSource('add-to-list');
     setScreen('complete');
@@ -905,10 +1064,7 @@ export function AppRoot() {
         />
       ) : screen === 'add-to-list-select' ? (
         <AddRestaurantToListSelectScreen
-          restaurant={
-            initialRestaurantPool.find((item) => item.id === addToListRestaurantId) ??
-            initialRestaurantPool[0]
-          }
+          restaurant={getAddToListRestaurant() ?? initialRestaurantPool[0]}
           lists={myLists}
           onBack={() => {
             if (addToListSource === 'restaurant-detail') {
@@ -926,10 +1082,7 @@ export function AppRoot() {
           />
         ) : screen === 'add-to-list-rating' ? (
           <AddRestaurantToListRatingScreen
-            restaurant={
-              initialRestaurantPool.find((item) => item.id === addToListRestaurantId) ??
-              initialRestaurantPool[0]
-            }
+            restaurant={getAddToListRestaurant() ?? initialRestaurantPool[0]}
             lists={myLists.filter((item) => addToListTargetListIds.includes(item.id))}
             onBack={() => setScreen('add-to-list-select')}
             onSubmit={handleAddRestaurantToListComplete}
@@ -1104,6 +1257,7 @@ export function AppRoot() {
             })
           }
           onRenameList={handleRenameMyList}
+          onRemoveRestaurants={handleRemoveRestaurantsFromMyList}
         />
       ) : screen === 'my-list-place-edit' && selectedMyListId ? (
         <MyListPlaceEditScreen
@@ -1111,6 +1265,7 @@ export function AppRoot() {
           lists={myLists}
           onBack={() => setScreen('my-list-detail')}
           onChangeLists={setMyLists}
+          onDeleteRestaurants={handleRemoveRestaurantsFromMyList}
         />
       ) : screen === 'my-reviews' ? (
         <MyReviewsScreen
