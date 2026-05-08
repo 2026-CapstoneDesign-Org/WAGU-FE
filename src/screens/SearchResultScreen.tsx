@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Image,
@@ -20,10 +21,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import { mapRestaurantSearchResults, searchRestaurants } from '../api/wagu';
-import { MOCK_DATA_ENABLED } from '../config/mockData';
-import { userProfiles } from '../data/userProfiles';
 
-type SearchResultTab = 'restaurant' | 'user' | 'region' | 'photo';
+type SearchResultTab = 'restaurant' | 'user' | 'region';
 
 type SearchResultScreenProps = {
   accessToken?: string | null;
@@ -33,6 +32,7 @@ type SearchResultScreenProps = {
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onOpenUserProfile?: (userId: string) => void;
   onSearch?: (query: string) => void;
+  onPressSearchBar?: () => void;
   query: string;
 };
 
@@ -43,13 +43,6 @@ type RestaurantResult = {
   name: string;
 };
 
-type UserResult = {
-  id: string;
-  imageUri?: string;
-  meta: string;
-  name: string;
-};
-
 const { width: screenWidth } = Dimensions.get('window');
 const HORIZONTAL_PADDING = 16;
 const CONTENT_WIDTH = screenWidth - HORIZONTAL_PADDING * 2;
@@ -57,78 +50,12 @@ const TAB_WIDTH = 56;
 const TAB_SIDE_PADDING = 7;
 const TAB_INDICATOR_WIDTH = 40;
 const TAB_ROW_WIDTH = CONTENT_WIDTH - TAB_SIDE_PADDING * 2;
-const TAB_GAP = (TAB_ROW_WIDTH - TAB_WIDTH * 4) / 3;
-
-const RESTAURANT_RESULTS: RestaurantResult[] = MOCK_DATA_ENABLED ? [
-  {
-    id: 'restaurant-1',
-    name: '와이앤웍',
-    category: '중식',
-    imageUri: 'https://www.figma.com/api/mcp/asset/1a840367-09b2-49be-a810-431227e3f3ea',
-  },
-  {
-    id: 'restaurant-2',
-    name: '미식회관',
-    category: '양식',
-    imageUri: 'https://www.figma.com/api/mcp/asset/ce6e1e19-5b29-4d38-b345-02deac7fe55c',
-  },
-  {
-    id: 'restaurant-3',
-    name: '짬뽕관',
-    category: '중식',
-    imageUri: 'https://www.figma.com/api/mcp/asset/b62383c8-bf7d-4eed-8037-fb3766e20848',
-  },
-  {
-    id: 'restaurant-4',
-    name: '제주둘레국수',
-    category: '한식',
-    imageUri: 'https://www.figma.com/api/mcp/asset/9e567790-321f-46ed-b189-58f91d3c32f9',
-  },
-  { id: 'restaurant-5', name: '다시봄', category: '일식' },
-  { id: 'restaurant-6', name: '카레마스터', category: '인도식' },
-  { id: 'restaurant-7', name: '어반스테이크', category: '양식' },
-  { id: 'restaurant-8', name: '바브브라운', category: '중식' },
-  { id: 'restaurant-9', name: '타코하우스', category: '멕시코식' },
-  { id: 'restaurant-10', name: '오브테이블', category: '브런치' },
-  { id: 'restaurant-11', name: '연말공감', category: '일식' },
-  { id: 'restaurant-12', name: '하남돼지', category: '한식' },
-  { id: 'restaurant-13', name: '버거스튜디오', category: '양식' },
-  { id: 'restaurant-14', name: '라마르', category: '베트남식' },
-  { id: 'restaurant-15', name: '마라천국', category: '중식' },
-  { id: 'restaurant-16', name: '정성식당', category: '한식' },
-]: [];
-
-const USER_RESULTS: UserResult[] = MOCK_DATA_ENABLED ? [
-  'following-1',
-  'follower-4',
-  'following-2',
-  'follower-5',
-  'following-3',
-  'follower-2',
-  'follower-1',
-  'following-5',
-  'follower-6',
-  'following-4',
-]
-  .map((id) => userProfiles.find((profile) => profile.id === id))
-  .filter((profile): profile is NonNullable<(typeof userProfiles)[number]> => Boolean(profile))
-  .map((profile, index) => ({
-    id: profile.id,
-    name: profile.nickname,
-    meta: `리뷰 · ${profile.reviewCount}`,
-    imageUri: [
-      'https://www.figma.com/api/mcp/asset/8da6a8b8-526c-45c9-aac5-c222ae166f41',
-      'https://www.figma.com/api/mcp/asset/73c13bc3-435f-4d23-a011-2247291949e1',
-      'https://www.figma.com/api/mcp/asset/bc373354-5752-4f1f-85a8-5d980b97a795',
-      'https://www.figma.com/api/mcp/asset/acbbdd90-dfd7-4079-a0ce-49c497d8773c',
-    ][index % 4],
-  })) : [];
+const TAB_GAP = (TAB_ROW_WIDTH - TAB_WIDTH * 3) / 2;
 
 const tabs: { id: SearchResultTab; label: string }[] = [
   { id: 'restaurant', label: '맛집' },
   { id: 'user', label: '유저' },
   { id: 'region', label: '지역' },
-  { id: 'photo', label: '사진' },
 ];
 
 function ResultList({
@@ -142,6 +69,7 @@ function ResultList({
     <ScrollView
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      onScrollBeginDrag={Keyboard.dismiss}
       contentContainerStyle={styles.listContent}
     >
       {items.map((item) => (
@@ -165,8 +93,19 @@ function ResultList({
   );
 }
 
-function EmptyTabState() {
-  return <View style={styles.emptyTabState} />;
+function EmptyTabState({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <View style={styles.emptyTabState}>
+      <Text style={styles.emptyTabTitle}>{title}</Text>
+      <Text style={styles.emptyTabDescription}>{description}</Text>
+    </View>
+  );
 }
 
 export function SearchResultScreen({
@@ -177,6 +116,7 @@ export function SearchResultScreen({
   onOpenRestaurantDetail,
   onOpenUserProfile,
   onSearch,
+  onPressSearchBar,
   query,
 }: SearchResultScreenProps) {
   const inputRef = useRef<TextInput | null>(null);
@@ -184,7 +124,8 @@ export function SearchResultScreen({
   const scrollX = useRef(new Animated.Value(0)).current;
   const [value, setValue] = useState(query);
   const [activeTab, setActiveTab] = useState<SearchResultTab>(initialTab);
-  const [restaurantResults, setRestaurantResults] = useState<RestaurantResult[]>(RESTAURANT_RESULTS);
+  const [restaurantResults, setRestaurantResults] = useState<RestaurantResult[]>([]);
+  const [isRestaurantLoading, setIsRestaurantLoading] = useState(false);
 
   useEffect(() => {
     setValue(query);
@@ -201,13 +142,16 @@ export function SearchResultScreen({
 
   useEffect(() => {
     if (!accessToken || !query.trim()) {
-      setRestaurantResults(RESTAURANT_RESULTS);
+      setRestaurantResults([]);
+      setIsRestaurantLoading(false);
       return;
     }
 
     let cancelled = false;
 
     const loadResults = async () => {
+      setIsRestaurantLoading(true);
+
       try {
         const restaurants = await searchRestaurants(accessToken, query.trim());
         const mappedResults = mapRestaurantSearchResults(restaurants).map((restaurant) => ({
@@ -222,7 +166,11 @@ export function SearchResultScreen({
         }
       } catch {
         if (!cancelled) {
-          setRestaurantResults(RESTAURANT_RESULTS);
+          setRestaurantResults([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsRestaurantLoading(false);
         }
       }
     };
@@ -273,13 +221,23 @@ export function SearchResultScreen({
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Pressable style={styles.screen} onPress={Keyboard.dismiss}>
+        <View style={styles.screen}>
           <View style={styles.topRow}>
             <Pressable style={styles.backButton} onPress={onBack}>
               <ArrowLeftIcon width={24} height={24} />
             </Pressable>
 
-            <Pressable style={styles.searchBar} onPress={() => inputRef.current?.focus()}>
+            <Pressable
+              style={styles.searchBar}
+              onPress={() => {
+                if (onPressSearchBar) {
+                  onPressSearchBar();
+                  return;
+                }
+
+                inputRef.current?.focus();
+              }}
+            >
               <SearchIcon width={24} height={24} color="#FF0000" />
               <View style={styles.inputWrap}>
                 <TextInput
@@ -287,6 +245,7 @@ export function SearchResultScreen({
                   style={styles.input}
                   value={value}
                   onChangeText={setValue}
+                  editable={!onPressSearchBar}
                   placeholder="맛집 / 유저 / 지역을 검색해보세요"
                   placeholderTextColor="#D9D9D9"
                   selectionColor="#FF0000"
@@ -326,37 +285,56 @@ export function SearchResultScreen({
               horizontal
               pagingEnabled
               bounces={false}
+              directionalLockEnabled
+              disableIntervalMomentum
+              decelerationRate="fast"
               overScrollMode="never"
               showsHorizontalScrollIndicator={false}
               scrollEventThrottle={16}
+              onScrollBeginDrag={Keyboard.dismiss}
               onMomentumScrollEnd={handlePagerMomentumEnd}
               onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
                 useNativeDriver: true,
               })}
             >
               <View style={styles.page}>
-                <ResultList
-                  items={restaurantResults.map((item) => ({
-                    id: item.id,
-                    imageUri: item.imageUri,
-                    name: item.name,
-                    meta: item.category,
-                  }))}
-                  onPressItem={(_, name) => onOpenRestaurantDetail?.(name)}
+                {isRestaurantLoading ? (
+                  <View style={styles.loadingState}>
+                    <ActivityIndicator size="small" color="#FF0000" />
+                    <Text style={styles.loadingText}>검색 결과를 불러오는 중이에요.</Text>
+                  </View>
+                ) : restaurantResults.length > 0 ? (
+                  <ResultList
+                    items={restaurantResults.map((item) => ({
+                      id: item.id,
+                      imageUri: item.imageUri,
+                      name: item.name,
+                      meta: item.category,
+                    }))}
+                    onPressItem={(_, name) => onOpenRestaurantDetail?.(name)}
+                  />
+                ) : (
+                  <EmptyTabState
+                    title="맛집 검색 결과가 없어요"
+                    description="다른 검색어로 다시 찾아보세요."
+                  />
+                )}
+              </View>
+              <View style={styles.page}>
+                <EmptyTabState
+                  title="유저 검색은 아직 준비 중이에요"
+                  description="지금은 맛집 검색 결과만 확인할 수 있어요."
                 />
               </View>
               <View style={styles.page}>
-                <ResultList items={USER_RESULTS} onPressItem={(id) => onOpenUserProfile?.(id)} />
-              </View>
-              <View style={styles.page}>
-                <EmptyTabState />
-              </View>
-              <View style={styles.page}>
-                <EmptyTabState />
+                <EmptyTabState
+                  title="지역 검색은 아직 준비 중이에요"
+                  description="조금 더 다듬은 뒤 연결할게요."
+                />
               </View>
             </Animated.ScrollView>
           </View>
-        </Pressable>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -503,5 +481,35 @@ const styles = StyleSheet.create({
   emptyTabState: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 8,
+  },
+  emptyTabTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600',
+    color: '#000000',
+    textAlign: 'center',
+  },
+  emptyTabDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    color: '#838383',
+    textAlign: 'center',
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    color: '#838383',
   },
 });

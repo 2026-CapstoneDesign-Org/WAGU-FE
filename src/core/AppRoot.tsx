@@ -70,7 +70,7 @@ import { UserReviewsScreen } from '../screens/UserReviewsScreen';
 import { UserProfileScreen } from '../screens/UserProfileScreen';
 import { userProfiles } from '../data/userProfiles';
 
-type SearchResultTabKey = 'restaurant' | 'user' | 'region' | 'photo';
+type SearchResultTabKey = 'restaurant' | 'user' | 'region';
 
 type FlowScreen =
   | 'login'
@@ -176,6 +176,7 @@ export function AppRoot() {
   const [selectedRestaurants, setSelectedRestaurants] = useState<Restaurant[]>([]);
   const [tasteListName, setTasteListName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchScreenInitialQuery, setSearchScreenInitialQuery] = useState('');
   const [searchResultTab, setSearchResultTab] = useState<SearchResultTabKey>('restaurant');
   const [mapSearchQuery, setMapSearchQuery] = useState('');
   const [homeScrollState, setHomeScrollState] = useState<HomeScrollState>(initialHomeScrollState);
@@ -1227,26 +1228,37 @@ export function AppRoot() {
         <AiChatScreen onBack={() => setScreen('tabs')} />
       ) : screen === 'news' ? (
         <NewsScreen onBack={() => setScreen('tabs')} />
-      ) : screen === 'search' ? (
-        <SearchScreen
-          initialQuery={searchQuery}
-          onClose={() => setScreen('tabs')}
-          onSearch={(query) => {
-            setSearchQuery(query);
-            setSearchResultTab('restaurant');
-            setScreen('search-result');
-          }}
-        />
-      ) : screen === 'search-result' ? (
-        <SearchResultScreen
-          accessToken={session?.accessToken}
-          query={searchQuery}
-          initialTab={searchResultTab}
-          onBack={() => setScreen('search')}
-          onChangeTab={setSearchResultTab}
-          onOpenRestaurantDetail={(restaurantName) =>
-            openRestaurantDetail(restaurantName, { type: 'search-result' })
-          }
+        ) : screen === 'search' ? (
+          <SearchScreen
+            initialQuery={searchScreenInitialQuery}
+            onClose={() => {
+              setSearchScreenInitialQuery('');
+              setScreen('tabs');
+            }}
+            onSearch={(query) => {
+              setSearchScreenInitialQuery(query);
+              setSearchQuery(query);
+              setSearchResultTab('restaurant');
+              setScreen('search-result');
+            }}
+          />
+        ) : screen === 'search-result' ? (
+          <SearchResultScreen
+            accessToken={session?.accessToken}
+            query={searchQuery}
+            initialTab={searchResultTab}
+            onBack={() => {
+              setSearchScreenInitialQuery(searchQuery);
+              setScreen('search');
+            }}
+            onPressSearchBar={() => {
+              setSearchScreenInitialQuery(searchQuery);
+              setScreen('search');
+            }}
+            onChangeTab={setSearchResultTab}
+            onOpenRestaurantDetail={(restaurantName) =>
+              openRestaurantDetail(restaurantName, { type: 'search-result' })
+            }
           onOpenUserProfile={(userId) => {
             setUserProfileSource({ type: 'search-result' });
             setSelectedUserProfileId(userId);
@@ -1492,7 +1504,10 @@ export function AppRoot() {
           onPressNews={() => setScreen('news')}
           onPressLocalRanking={() => openRankingDetail('local')}
           onPressNationalRanking={() => openRankingDetail('national')}
-          onPressSearch={() => setScreen('search')}
+            onPressSearch={() => {
+              setSearchScreenInitialQuery('');
+              setScreen('search');
+            }}
           onScrollStateChange={(nextState) =>
             setHomeScrollState((current) => ({ ...current, ...nextState }))
           }
