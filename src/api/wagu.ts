@@ -257,6 +257,23 @@ export async function addRestaurantToList(
   });
 }
 
+export async function updateRestaurantInList(
+  token: string,
+  listId: number,
+  restaurantId: number,
+  body: {
+    moodScore: number;
+    tasteScore: number;
+    valueScore: number;
+  },
+) {
+  return apiRequest<void>(`/lists/${listId}/restaurants/${restaurantId}`, {
+    method: 'PATCH',
+    token,
+    body,
+  });
+}
+
 export async function getFollowCount(token: string, userId: number) {
   return apiRequest<ApiFollowCount>(`/users/${userId}/follow/count`, {
     token,
@@ -278,6 +295,10 @@ export function getRestaurantPrimaryImageUri(
   restaurant: Pick<ApiRestaurant, 'imageUrl' | 'imageUrls' | 'photoUrls' | 'photos'>,
 ) {
   return getRestaurantPhotoUris(restaurant)[0];
+}
+
+function convertTenPointToFiveStar(value: number) {
+  return value / 2;
 }
 
 export function mapRankingItems(items: ApiRestaurantRankingItem[]): RankingEntry[] {
@@ -310,6 +331,7 @@ export function mapListDetailToMyList(detail: ApiUserListDetail, index: number):
     accentColor: LIST_ACCENT_COLORS[index % LIST_ACCENT_COLORS.length],
     restaurants: detail.restaurants.map((item) => ({
       id: String(item.restaurant.id),
+      listItemId: String(item.id),
       name: item.restaurant.name,
       address: item.restaurant.address,
       imageUri: getRestaurantPrimaryImageUri(item.restaurant),
@@ -318,9 +340,9 @@ export function mapListDetailToMyList(detail: ApiUserListDetail, index: number):
         item.valueScore !== undefined &&
         item.moodScore !== undefined
           ? {
-              taste: item.tasteScore,
-              service: item.moodScore,
-              value: item.valueScore,
+              taste: convertTenPointToFiveStar(item.tasteScore),
+              service: convertTenPointToFiveStar(item.moodScore),
+              value: convertTenPointToFiveStar(item.valueScore),
             }
           : undefined,
     })),

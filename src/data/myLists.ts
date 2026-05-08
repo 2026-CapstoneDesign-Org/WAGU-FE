@@ -1,5 +1,6 @@
 export type MyListRestaurant = {
   id: string;
+  listItemId?: string;
   name: string;
   address: string;
   imageUri?: string;

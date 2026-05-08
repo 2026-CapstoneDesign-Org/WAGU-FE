@@ -3,6 +3,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useEffect, useMemo, useState } from 'react';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
+import { RatingStars } from '../components/RatingStars';
 import { MyList, MyListRestaurant } from '../data/myLists';
 import { restaurants as allRestaurants } from '../data/restaurants';
 
@@ -15,6 +16,15 @@ type MyListDetailScreenProps = {
   onOpenRestaurantDetail: (restaurantName: string) => void;
   onRemoveRestaurants?: (listId: string, restaurantIds: string[]) => Promise<void> | void;
   onRenameList?: (listId: string, title: string) => Promise<void> | void;
+  onUpdateRestaurantRatings?: (
+    listId: string,
+    restaurantId: string,
+    ratings: {
+      taste: number;
+      service: number;
+      value: number;
+    },
+  ) => Promise<void> | void;
 };
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -46,12 +56,20 @@ export function MyListDetailScreen({
   onOpenRestaurantDetail,
   onRemoveRestaurants,
   onRenameList,
+  onUpdateRestaurantRatings,
 }: MyListDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const [isEditMenuVisible, setIsEditMenuVisible] = useState(false);
   const [isRenameVisible, setIsRenameVisible] = useState(false);
+  const [isRatingEditVisible, setIsRatingEditVisible] = useState(false);
   const [renameValue, setRenameValue] = useState(list.title);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [ratingEditRestaurantId, setRatingEditRestaurantId] = useState<string | null>(null);
+  const [editingRatings, setEditingRatings] = useState({
+    taste: 0,
+    service: 0,
+    value: 0,
+  });
 
   useEffect(() => {
     setRenameValue(list.title);
@@ -62,6 +80,15 @@ export function MyListDetailScreen({
   const selectedCard = useMemo(
     () => orderedRestaurants.find((item) => item.id === selectedCardId) ?? null,
     [orderedRestaurants, selectedCardId],
+  );
+  const ratingEditRestaurant = useMemo(
+    () => orderedRestaurants.find((item) => item.id === ratingEditRestaurantId) ?? null,
+    [orderedRestaurants, ratingEditRestaurantId],
+  );
+
+  const isRatingEditReady = useMemo(
+    () => editingRatings.taste > 0 && editingRatings.service > 0 && editingRatings.value > 0,
+    [editingRatings],
   );
 
   const restaurantImageMap = useMemo(() => {
@@ -162,6 +189,48 @@ export function MyListDetailScreen({
     ]);
   };
 
+  const handleOpenRatingEdit = () => {
+    if (!selectedCard) {
+      return;
+    }
+
+    setEditingRatings({
+      taste: selectedCard.ratings?.taste ?? 0,
+      service: selectedCard.ratings?.service ?? 0,
+      value: selectedCard.ratings?.value ?? 0,
+    });
+    setRatingEditRestaurantId(selectedCard.id);
+    setSelectedCardId(null);
+    setIsRatingEditVisible(true);
+  };
+
+  const handleSubmitRatingEdit = async () => {
+    if (!ratingEditRestaurant || !isRatingEditReady) {
+      return;
+    }
+
+    try {
+      if (onUpdateRestaurantRatings) {
+        await onUpdateRestaurantRatings(list.id, ratingEditRestaurant.id, editingRatings);
+      } else {
+        updateListRestaurants(
+          orderedRestaurants.map((restaurant) =>
+            restaurant.id === ratingEditRestaurant.id
+              ? {
+                  ...restaurant,
+                  ratings: editingRatings,
+                }
+              : restaurant,
+          ),
+        );
+      }
+      setRatingEditRestaurantId(null);
+      setIsRatingEditVisible(false);
+    } catch {
+      Alert.alert('안내', '가게 점수를 수정하지 못했습니다.');
+    }
+  };
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.screen}>
@@ -231,6 +300,15 @@ export function MyListDetailScreen({
 
                 {selectedCardId === item.id ? (
                   <View style={styles.cardDropdown}>
+                    <Pressable
+                      onPress={handleOpenRatingEdit}
+                      style={({ pressed }) => [
+                        styles.cardDropdownItem,
+                        pressed ? styles.cardDropdownItemPressed : null,
+                      ]}
+                    >
+                      <Text style={styles.cardDropdownLabel}>수정하기</Text>
+                    </Pressable>
                     <Pressable
                       onPress={handleConfirmDeleteCard}
                       style={({ pressed }) => [
@@ -347,6 +425,97 @@ export function MyListDetailScreen({
                     ]}
                   >
                     완료
+                  </Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        <Modal
+          transparent
+          animationType="fade"
+          visible={isRatingEditVisible}
+          onRequestClose={() => {
+            setIsRatingEditVisible(false);
+            setRatingEditRestaurantId(null);
+          }}
+        >
+          <Pressable
+            style={styles.overlay}
+            onPress={() => {
+              setIsRatingEditVisible(false);
+              setRatingEditRestaurantId(null);
+            }}
+          >
+            <Pressable style={styles.ratingModal} onPress={() => {}}>
+              <Text style={styles.ratingModalTitle}>가게 점수 수정</Text>
+              <Text style={styles.ratingModalSubtitle}>{ratingEditRestaurant?.name ?? ''}</Text>
+
+              <View style={styles.ratingModalGroup}>
+                <View style={styles.ratingModalSection}>
+                  <Text style={styles.ratingModalLabel}>맛</Text>
+                  <RatingStars
+                    value={editingRatings.taste}
+                    onChange={(value) =>
+                      setEditingRatings((current) => ({ ...current, taste: value }))
+                    }
+                  />
+                </View>
+
+                <View style={styles.ratingModalSection}>
+                  <Text style={styles.ratingModalLabel}>서비스</Text>
+                  <RatingStars
+                    value={editingRatings.service}
+                    onChange={(value) =>
+                      setEditingRatings((current) => ({ ...current, service: value }))
+                    }
+                  />
+                </View>
+
+                <View style={styles.ratingModalSection}>
+                  <Text style={styles.ratingModalLabel}>가성비</Text>
+                  <RatingStars
+                    value={editingRatings.value}
+                    onChange={(value) =>
+                      setEditingRatings((current) => ({ ...current, value: value }))
+                    }
+                  />
+                </View>
+              </View>
+
+              <View style={styles.ratingModalActions}>
+                <Pressable
+                  onPress={() => {
+                    setIsRatingEditVisible(false);
+                    setRatingEditRestaurantId(null);
+                  }}
+                  style={({ pressed }) => [
+                    styles.renameButton,
+                    styles.renameCancelButton,
+                    pressed ? styles.menuItemPressed : null,
+                  ]}
+                >
+                  <Text style={styles.renameCancelLabel}>취소</Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={!isRatingEditReady}
+                  onPress={() => void handleSubmitRatingEdit()}
+                  style={({ pressed }) => [
+                    styles.renameButton,
+                    styles.renameConfirmButton,
+                    !isRatingEditReady ? styles.renameConfirmButtonDisabled : null,
+                    pressed && isRatingEditReady ? styles.renameConfirmButtonPressed : null,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.renameConfirmLabel,
+                      !isRatingEditReady ? styles.renameConfirmLabelDisabled : null,
+                    ]}
+                  >
+                    저장
                   </Text>
                 </Pressable>
               </View>
@@ -514,6 +683,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F1F1',
   },
   cardDropdownItemPressed: {
     backgroundColor: '#F5F5F5',
@@ -614,6 +785,46 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   renameActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  ratingModal: {
+    width: '100%',
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 20,
+    gap: 18,
+  },
+  ratingModalTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
+    color: '#000000',
+    textAlign: 'center',
+  },
+  ratingModalSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    color: '#666666',
+    textAlign: 'center',
+  },
+  ratingModalGroup: {
+    gap: 16,
+  },
+  ratingModalSection: {
+    gap: 10,
+    alignItems: 'center',
+  },
+  ratingModalLabel: {
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  ratingModalActions: {
     flexDirection: 'row',
     gap: 10,
   },

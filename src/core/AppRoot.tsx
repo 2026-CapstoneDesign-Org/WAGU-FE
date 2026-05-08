@@ -22,6 +22,7 @@ import {
   setRepresentativeList,
   signupProfile,
   toggleListVisibility,
+  updateRestaurantInList,
   updateList,
   updateMyUser,
 } from '../api/wagu';
@@ -542,6 +543,109 @@ export function AppRoot() {
       applyLocalRemove();
     } catch {
       Alert.alert('안내', '가게를 삭제하지 못했습니다.');
+    }
+  };
+
+  const handleUpdateRestaurantRatingsInMyList = async (
+    listId: string,
+    restaurantId: string,
+    ratings: {
+      taste: number;
+      service: number;
+      value: number;
+    },
+  ) => {
+    const applyLocalUpdate = () => {
+      setMyLists((current) =>
+        current.map((list) =>
+          list.id === listId
+            ? {
+                ...list,
+                restaurants: list.restaurants.map((restaurant) =>
+                  restaurant.id === restaurantId
+                    ? {
+                        ...restaurant,
+                        ratings,
+                      }
+                    : restaurant,
+                ),
+              }
+            : list,
+        ),
+      );
+    };
+
+    if (!session?.accessToken) {
+      applyLocalUpdate();
+      return;
+    }
+
+    const parsedListId = Number(listId);
+
+    if (Number.isNaN(parsedListId)) {
+      applyLocalUpdate();
+      return;
+    }
+
+    const currentList = myLists.find((list) => list.id === listId);
+    const targetRestaurant = currentList?.restaurants.find(
+      (restaurant) => restaurant.id === restaurantId,
+    );
+
+    if (!targetRestaurant) {
+      return;
+    }
+
+    try {
+      const candidateRestaurantIds: number[] = [];
+      const parsedRestaurantId = Number(restaurantId);
+
+      if (!Number.isNaN(parsedRestaurantId)) {
+        candidateRestaurantIds.push(parsedRestaurantId);
+      }
+
+      const parsedListItemId = Number(targetRestaurant.listItemId);
+
+      if (!Number.isNaN(parsedListItemId) && !candidateRestaurantIds.includes(parsedListItemId)) {
+        candidateRestaurantIds.push(parsedListItemId);
+      }
+
+      if (candidateRestaurantIds.length === 0) {
+        const candidates = await searchRestaurants(session.accessToken, targetRestaurant.name);
+        const matchedRestaurant =
+          candidates.find((item) => item.name === targetRestaurant.name) ?? candidates[0];
+
+        if (!matchedRestaurant) {
+          throw new Error('restaurant_not_found');
+        }
+
+        candidateRestaurantIds.push(matchedRestaurant.id);
+      }
+
+      let updated = false;
+      let lastError: unknown = null;
+
+      for (const candidateRestaurantId of candidateRestaurantIds) {
+        try {
+          await updateRestaurantInList(session.accessToken, parsedListId, candidateRestaurantId, {
+            tasteScore: convertFiveStarToTenPoint(ratings.taste),
+            moodScore: convertFiveStarToTenPoint(ratings.service),
+            valueScore: convertFiveStarToTenPoint(ratings.value),
+          });
+          updated = true;
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (!updated) {
+        throw lastError ?? new Error('update_failed');
+      }
+
+      applyLocalUpdate();
+    } catch {
+      Alert.alert('안내', '가게 점수를 수정하지 못했습니다.');
     }
   };
 
@@ -1258,6 +1362,7 @@ export function AppRoot() {
           }
           onRenameList={handleRenameMyList}
           onRemoveRestaurants={handleRemoveRestaurantsFromMyList}
+          onUpdateRestaurantRatings={handleUpdateRestaurantRatingsInMyList}
         />
       ) : screen === 'my-list-place-edit' && selectedMyListId ? (
         <MyListPlaceEditScreen
