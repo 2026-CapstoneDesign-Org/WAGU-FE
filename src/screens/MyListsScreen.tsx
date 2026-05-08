@@ -20,6 +20,7 @@ type MyListsScreenProps = {
   onChangeLists: (lists: MyList[]) => void;
   onOpenList: (listId: string) => void;
   onCreateList: () => void;
+  onRenameList?: (listId: string, title: string) => Promise<void> | void;
 };
 
 const MENU_ITEMS = ['set-representative', 'toggle-privacy', 'rename', 'delete'] as const;
@@ -46,6 +47,7 @@ export function MyListsScreen({
   onChangeLists,
   onOpenList,
   onCreateList,
+  onRenameList,
 }: MyListsScreenProps) {
   const insets = useSafeAreaInsets();
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
@@ -145,24 +147,32 @@ export function MyListsScreen({
     closeMenu();
   };
 
-  const handleRenameSubmit = () => {
+  const handleRenameSubmit = async () => {
     const trimmed = renameValue.trim();
 
     if (!renameTarget || trimmed.length === 0) {
       return;
     }
 
-    onChangeLists(
-      lists.map((list) =>
-        list.id === renameTarget.id
-          ? {
-              ...list,
-              title: trimmed,
-            }
-          : list,
-      ),
-    );
-    closeRenameModal();
+    try {
+      if (onRenameList) {
+        await onRenameList(renameTarget.id, trimmed);
+      } else {
+        onChangeLists(
+          lists.map((list) =>
+            list.id === renameTarget.id
+              ? {
+                  ...list,
+                  title: trimmed,
+                }
+              : list,
+          ),
+        );
+      }
+      closeRenameModal();
+    } catch {
+      Alert.alert('알림', '리스트 이름을 변경하지 못했습니다.');
+    }
   };
 
   const renderMenuItem = (action: MenuAction) => {
@@ -349,7 +359,7 @@ export function MyListsScreen({
 
                 <Pressable
                   disabled={renameValue.trim().length === 0}
-                  onPress={handleRenameSubmit}
+                  onPress={() => void handleRenameSubmit()}
                   style={({ pressed }) => [
                     styles.renameButton,
                     styles.renameConfirmButton,

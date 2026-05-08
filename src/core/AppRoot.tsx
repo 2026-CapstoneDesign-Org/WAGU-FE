@@ -17,6 +17,7 @@ import {
   searchRestaurants,
   setRepresentativeList,
   signupProfile,
+  updateList,
   updateMyUser,
 } from '../api/wagu';
 import { AppTab } from '../components/BottomTabBar';
@@ -326,6 +327,44 @@ export function AppRoot() {
 
     setMyLists(listDetails);
     return listDetails;
+  };
+
+  const handleRenameMyList = async (listId: string, title: string) => {
+    const trimmedTitle = title.trim();
+
+    if (!trimmedTitle) {
+      return;
+    }
+
+    const applyLocalRename = () => {
+      setMyLists((current) =>
+        current.map((list) =>
+          list.id === listId
+            ? {
+                ...list,
+                title: trimmedTitle,
+              }
+            : list,
+        ),
+      );
+    };
+
+    if (!session?.accessToken) {
+      applyLocalRename();
+      return;
+    }
+
+    const parsedListId = Number(listId);
+
+    if (Number.isNaN(parsedListId)) {
+      applyLocalRename();
+      return;
+    }
+
+    await updateList(session.accessToken, parsedListId, {
+      title: trimmedTitle,
+    });
+    applyLocalRename();
   };
 
   const convertFiveStarToTenPoint = (value: number) => value * 2;
@@ -952,6 +991,7 @@ export function AppRoot() {
             setSelectedMyListId(listId);
             setScreen('my-list-detail');
           }}
+          onRenameList={handleRenameMyList}
         />
       ) : screen === 'my-list-detail' && selectedMyListId ? (
         <MyListDetailScreen
@@ -966,6 +1006,7 @@ export function AppRoot() {
               listId: selectedMyListId,
             })
           }
+          onRenameList={handleRenameMyList}
         />
       ) : screen === 'my-list-place-edit' && selectedMyListId ? (
         <MyListPlaceEditScreen

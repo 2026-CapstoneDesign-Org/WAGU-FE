@@ -1,3 +1,5 @@
+import { ReviewMediaItem } from '../types/reviews';
+
 export type MyReview = {
   id: string;
   restaurantName: string;
@@ -6,6 +8,7 @@ export type MyReview = {
   content: string;
   likes: number;
   dislikes: number;
+  media?: ReviewMediaItem[];
   imageUris?: string[];
 };
 

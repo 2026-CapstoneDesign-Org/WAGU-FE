@@ -200,6 +200,46 @@ export async function getListDetail(token: string, listId: number) {
   });
 }
 
+export async function updateList(
+  token: string,
+  listId: number,
+  body: {
+    title: string;
+    description?: string;
+  },
+) {
+  return apiRequest<ApiUserListSummary>(`/lists/${listId}`, {
+    method: 'PATCH',
+    token,
+    body,
+  });
+}
+
+export async function deleteList(token: string, listId: number) {
+  return apiRequest<void>(`/lists/${listId}`, {
+    method: 'DELETE',
+    token,
+  });
+}
+
+export async function toggleListVisibility(token: string, listId: number) {
+  return apiRequest<void>(`/lists/${listId}/visibility`, {
+    method: 'PATCH',
+    token,
+  });
+}
+
+export async function removeRestaurantFromList(
+  token: string,
+  listId: number,
+  restaurantId: number,
+) {
+  return apiRequest<void>(`/lists/${listId}/restaurants/${restaurantId}`, {
+    method: 'DELETE',
+    token,
+  });
+}
+
 export async function getFollowCount(token: string, userId: number) {
   return apiRequest<ApiFollowCount>(`/users/${userId}/follow/count`, {
     token,

@@ -21,7 +21,6 @@ import {
   getRestaurantRankings,
   searchRestaurants,
 } from '../api/wagu';
-import { MOCK_DATA_ENABLED } from '../config/mockData';
 import SearchIcon from '../../assets/icons/search.svg';
 import { Restaurant, restaurants } from '../data/restaurants';
 
@@ -44,9 +43,10 @@ const pickRandomItems = <T,>(items: T[], count: number) => {
   return shuffled.slice(0, count);
 };
 
-const FALLBACK_RESTAURANTS = MOCK_DATA_ENABLED
-  ? pickRandomItems(restaurants, Math.min(DEFAULT_VISIBLE_COUNT, restaurants.length))
-  : [];
+const FALLBACK_RESTAURANTS = pickRandomItems(
+  restaurants,
+  Math.min(DEFAULT_VISIBLE_COUNT, restaurants.length),
+);
 
 type TasteSelectionScreenProps = {
   accessToken?: string | null;

@@ -20,6 +20,7 @@ import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
 import TrashIcon from '../../assets/icons/trash.svg';
 import { MyReview, myReviews } from '../data/myReviews';
+import { ReviewMediaItem } from '../types/reviews';
 
 const REVIEW_IMAGE_SIZE = 172;
 
@@ -74,6 +75,18 @@ function ReactionButton({
       <Text style={styles.reactionCount}>{count}</Text>
     </Pressable>
   );
+}
+
+function getReviewMediaItems(review: Pick<MyReview, 'media' | 'imageUris'>): ReviewMediaItem[] {
+  if (review.media?.length) {
+    return review.media;
+  }
+
+  return (review.imageUris ?? []).map((uri, index) => ({
+    id: `legacy-media-${index}-${uri}`,
+    type: 'image',
+    uri,
+  }));
 }
 
 export function MyReviewsScreen({
@@ -263,6 +276,14 @@ export function MyReviewsScreen({
         >
           {sortedReviews.map((review, index) => (
             <View key={review.id} style={styles.reviewSection}>
+              {(() => {
+                const reviewMedia = getReviewMediaItems(review);
+                const imageUris = reviewMedia
+                  .filter((item) => item.type === 'image')
+                  .map((item) => item.uri);
+
+                return (
+                  <>
               <View style={styles.reviewBody}>
                 <View style={styles.reviewHeader}>
                   <View style={styles.reviewMeta}>
@@ -293,7 +314,7 @@ export function MyReviewsScreen({
                 <Text style={styles.reviewContent}>{review.content}</Text>
               </View>
 
-              {review.imageUris?.length ? (
+              {reviewMedia.length ? (
                 <View
                   style={[
                     styles.reviewImagesCarousel,
@@ -305,18 +326,36 @@ export function MyReviewsScreen({
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.reviewImagesRow}
                   >
-                    {review.imageUris.slice(0, 5).map((imageUri, imageIndex, images) => (
-                      <Pressable
-                        key={`${review.id}-${imageIndex}`}
-                        style={[
-                          styles.reviewImage,
-                          imageIndex < images.length - 1 ? styles.reviewImageSpacing : null,
-                        ]}
-                        onPress={() => openImagePreview(images, imageIndex)}
-                      >
-                        <Image source={{ uri: imageUri }} style={styles.reviewImageFill} />
-                      </Pressable>
-                    ))}
+                    {reviewMedia.slice(0, 5).map((item, mediaIndex, items) =>
+                      item.type === 'image' ? (
+                        <Pressable
+                          key={item.id}
+                          style={[
+                            styles.reviewImage,
+                            mediaIndex < items.length - 1 ? styles.reviewImageSpacing : null,
+                          ]}
+                          onPress={() =>
+                            openImagePreview(
+                              imageUris,
+                              imageUris.findIndex((uri) => uri === item.uri),
+                            )
+                          }
+                        >
+                          <Image source={{ uri: item.uri }} style={styles.reviewImageFill} />
+                        </Pressable>
+                      ) : (
+                        <View
+                          key={item.id}
+                          style={[
+                            styles.reviewImage,
+                            styles.videoReviewCard,
+                            mediaIndex < items.length - 1 ? styles.reviewImageSpacing : null,
+                          ]}
+                        >
+                          <Text style={styles.videoReviewBadge}>VIDEO</Text>
+                        </View>
+                      ),
+                    )}
                   </ScrollView>
                 </View>
               ) : null}
@@ -335,6 +374,9 @@ export function MyReviewsScreen({
               </View>
 
               {index < sortedReviews.length - 1 ? <View style={styles.divider} /> : null}
+                  </>
+                );
+              })()}
             </View>
           ))}
         </ScrollView>
@@ -571,6 +613,18 @@ const styles = StyleSheet.create({
   reviewImageFill: {
     width: '100%',
     height: '100%',
+  },
+  videoReviewCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1F1F1F',
+  },
+  videoReviewBadge: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.8,
   },
   reviewImageSpacing: {
     marginRight: 4,

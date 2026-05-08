@@ -11,6 +11,7 @@ type MyListPlaceEditScreenProps = {
   lists: MyList[];
   onBack: () => void;
   onChangeLists: (lists: MyList[]) => void;
+  onDeleteRestaurants?: (listId: string, restaurantIds: string[]) => Promise<void> | void;
 };
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -24,6 +25,7 @@ export function MyListPlaceEditScreen({
   lists,
   onBack,
   onChangeLists,
+  onDeleteRestaurants,
 }: MyListPlaceEditScreenProps) {
   const insets = useSafeAreaInsets();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -62,7 +64,7 @@ export function MyListPlaceEditScreen({
     );
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) {
       return;
     }
@@ -72,10 +74,18 @@ export function MyListPlaceEditScreen({
       return;
     }
 
-    updateListRestaurants(
-      orderedRestaurants.filter((restaurant) => !selectedIds.includes(restaurant.id)),
-    );
-    onBack();
+    try {
+      if (onDeleteRestaurants) {
+        await onDeleteRestaurants(list.id, selectedIds);
+      } else {
+        updateListRestaurants(
+          orderedRestaurants.filter((restaurant) => !selectedIds.includes(restaurant.id)),
+        );
+      }
+      onBack();
+    } catch {
+      Alert.alert('안내', '선택한 가게를 삭제하지 못했습니다.');
+    }
   };
 
   return (
@@ -137,7 +147,7 @@ export function MyListPlaceEditScreen({
 
         <View style={[styles.bottomBar, { paddingBottom: Math.max(8, insets.bottom + 4) }]}>
           <Pressable
-            onPress={handleDeleteSelected}
+            onPress={() => void handleDeleteSelected()}
             disabled={selectedIds.length === 0}
             style={[
               styles.deleteButton,

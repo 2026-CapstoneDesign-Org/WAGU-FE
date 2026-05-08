@@ -42,21 +42,25 @@ type OnboardingLoginScreenProps = {
 
 export function OnboardingLoginScreen({ onLoginSuccess }: OnboardingLoginScreenProps) {
   const [activeProvider, setActiveProvider] = useState<LoginProvider | null>(null);
+  const [isLoadingWebView, setIsLoadingWebView] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [webViewKey, setWebViewKey] = useState(0);
 
   const closeLoginModal = () => {
     setActiveProvider(null);
+    setIsLoadingWebView(false);
     setLoginError(null);
   };
 
   const openLoginModal = (provider: LoginProvider) => {
+    setIsLoadingWebView(true);
     setLoginError(null);
     setWebViewKey((current) => current + 1);
     setActiveProvider(provider);
   };
 
   const retryLogin = () => {
+    setIsLoadingWebView(true);
     setLoginError(null);
     setWebViewKey((current) => current + 1);
   };
@@ -101,39 +105,45 @@ export function OnboardingLoginScreen({ onLoginSuccess }: OnboardingLoginScreenP
                 </Pressable>
               </View>
             ) : (
-              <WebView
-                key={webViewKey}
-                source={{ uri: getOAuthAuthorizationUrl(activeProvider) }}
-                startInLoadingState
-                renderLoading={() => (
-                  <View style={styles.loadingState}>
+              <View style={styles.webViewContainer}>
+                <WebView
+                  key={webViewKey}
+                  source={{ uri: getOAuthAuthorizationUrl(activeProvider) }}
+                  onLoadStart={() => setIsLoadingWebView(true)}
+                  onLoadEnd={() => setIsLoadingWebView(false)}
+                  onError={(event) => {
+                    setIsLoadingWebView(false);
+                    setLoginError(
+                      event.nativeEvent.description ||
+                        '외부 로그인 페이지에 연결하지 못했어요. 네트워크 상태를 확인해 주세요.',
+                    );
+                  }}
+                  onHttpError={(event) => {
+                    setIsLoadingWebView(false);
+                    setLoginError(`로그인 서버 응답 오류 (${event.nativeEvent.statusCode})`);
+                  }}
+                  onNavigationStateChange={(event) => {
+                    const tokens = extractAuthTokens(event.url);
+
+                    if (!tokens) {
+                      return;
+                    }
+
+                    closeLoginModal();
+                    onLoginSuccess(activeProvider, {
+                      accessToken: tokens.accessToken,
+                      refreshToken: tokens.refreshToken ?? null,
+                    });
+                  }}
+                />
+
+                {isLoadingWebView ? (
+                  <View style={styles.loadingOverlay}>
                     <ActivityIndicator size="large" color="#FF3B30" />
                     <Text style={styles.loadingLabel}>로그인 페이지를 불러오는 중이에요.</Text>
                   </View>
-                )}
-                onError={(event) => {
-                  setLoginError(
-                    event.nativeEvent.description ||
-                      '외부 로그인 페이지에 연결하지 못했어요. 네트워크 상태를 확인해 주세요.',
-                  );
-                }}
-                onHttpError={(event) => {
-                  setLoginError(`로그인 서버 응답 오류 (${event.nativeEvent.statusCode})`);
-                }}
-                onNavigationStateChange={(event) => {
-                  const tokens = extractAuthTokens(event.url);
-
-                  if (!tokens) {
-                    return;
-                  }
-
-                  closeLoginModal();
-                  onLoginSuccess(activeProvider, {
-                    accessToken: tokens.accessToken,
-                    refreshToken: tokens.refreshToken ?? null,
-                  });
-                }}
-              />
+                ) : null}
+              </View>
             )
           ) : null}
         </SafeAreaView>
@@ -186,6 +196,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000000',
   },
+  webViewContainer: {
+    flex: 1,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    gap: 14,
+  },
   loadingState: {
     flex: 1,
     alignItems: 'center',
@@ -193,7 +213,6 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingHorizontal: 28,
     backgroundColor: '#FFFFFF',
-    transform: [{ translateY: -56 }],
   },
   loadingLabel: {
     fontSize: 18,

@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
@@ -14,8 +7,9 @@ import ArrowRightIcon from '../../assets/icons/arrow-right.svg';
 
 type SettingsScreenProps = {
   onBack: () => void;
-  onOpenMyInfo?: () => void;
+  onLogout?: () => void;
   onOpenDeleteAccount?: () => void;
+  onOpenMyInfo?: () => void;
 };
 
 type SettingRowProps = {
@@ -79,8 +73,9 @@ function NotificationToggle({
 
 export function SettingsScreen({
   onBack,
-  onOpenMyInfo,
+  onLogout,
   onOpenDeleteAccount,
+  onOpenMyInfo,
 }: SettingsScreenProps) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
@@ -94,10 +89,7 @@ export function SettingsScreen({
           <Text style={styles.headerTitle}>설정</Text>
         </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.content}
-        >
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>일반</Text>
             <View style={styles.sectionRows}>
@@ -130,7 +122,7 @@ export function SettingsScreen({
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>계정</Text>
             <View style={styles.sectionRows}>
-              <SettingRow label="로그아웃" />
+              <SettingRow label="로그아웃" onPress={onLogout} />
               <SettingRow label="회원탈퇴" onPress={onOpenDeleteAccount} />
             </View>
           </View>

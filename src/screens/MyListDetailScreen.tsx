@@ -13,6 +13,8 @@ type MyListDetailScreenProps = {
   onChangeLists: (lists: MyList[]) => void;
   onOpenPlaceEdit: () => void;
   onOpenRestaurantDetail: (restaurantName: string) => void;
+  onRemoveRestaurants?: (listId: string, restaurantIds: string[]) => Promise<void> | void;
+  onRenameList?: (listId: string, title: string) => Promise<void> | void;
 };
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -42,6 +44,8 @@ export function MyListDetailScreen({
   onChangeLists,
   onOpenPlaceEdit,
   onOpenRestaurantDetail,
+  onRemoveRestaurants,
+  onRenameList,
 }: MyListDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const [isEditMenuVisible, setIsEditMenuVisible] = useState(false);
@@ -83,31 +87,39 @@ export function MyListDetailScreen({
     );
   };
 
-  const handleRenameSubmit = () => {
+  const handleRenameSubmit = async () => {
     const trimmed = renameValue.trim();
 
     if (!trimmed) {
       return;
     }
 
-    onChangeLists(
-      lists.map((item) =>
-        item.id === list.id
-          ? {
-              ...item,
-              title: trimmed,
-            }
-          : item,
-      ),
-    );
-    setIsRenameVisible(false);
+    try {
+      if (onRenameList) {
+        await onRenameList(list.id, trimmed);
+      } else {
+        onChangeLists(
+          lists.map((item) =>
+            item.id === list.id
+              ? {
+                  ...item,
+                  title: trimmed,
+                }
+              : item,
+          ),
+        );
+      }
+      setIsRenameVisible(false);
+    } catch {
+      Alert.alert('안내', '리스트 이름을 변경하지 못했습니다.');
+    }
   };
 
   const handleOpenCardMenu = (cardId: string) => {
     setSelectedCardId((current) => (current === cardId ? null : cardId));
   };
 
-  const handleDeleteCard = () => {
+  const handleDeleteCard = async () => {
     if (!selectedCard) {
       return;
     }
@@ -118,8 +130,16 @@ export function MyListDetailScreen({
       return;
     }
 
-    updateListRestaurants(orderedRestaurants.filter((item) => item.id !== selectedCard.id));
-    setSelectedCardId(null);
+    try {
+      if (onRemoveRestaurants) {
+        await onRemoveRestaurants(list.id, [selectedCard.id]);
+      } else {
+        updateListRestaurants(orderedRestaurants.filter((item) => item.id !== selectedCard.id));
+      }
+      setSelectedCardId(null);
+    } catch {
+      Alert.alert('안내', '가게를 삭제하지 못했습니다.');
+    }
   };
 
   return (
@@ -192,7 +212,7 @@ export function MyListDetailScreen({
                 {selectedCardId === item.id ? (
                   <View style={styles.cardDropdown}>
                     <Pressable
-                      onPress={handleDeleteCard}
+                      onPress={() => void handleDeleteCard()}
                       style={({ pressed }) => [
                         styles.cardDropdownItem,
                         pressed ? styles.cardDropdownItemPressed : null,
@@ -292,7 +312,7 @@ export function MyListDetailScreen({
 
                 <Pressable
                   disabled={renameValue.trim().length === 0}
-                  onPress={handleRenameSubmit}
+                  onPress={() => void handleRenameSubmit()}
                   style={({ pressed }) => [
                     styles.renameButton,
                     styles.renameConfirmButton,

@@ -1,12 +1,16 @@
+import { ReviewMediaItem } from '../types/reviews';
+
 export type RestaurantReview = {
   id: string;
   restaurantName: string;
   authorName: string;
   isFollowing?: boolean;
+  isOwner?: boolean;
   date: string;
   content: string;
   likes: number;
   dislikes: number;
+  media?: ReviewMediaItem[];
   imageUris?: string[];
 };
 

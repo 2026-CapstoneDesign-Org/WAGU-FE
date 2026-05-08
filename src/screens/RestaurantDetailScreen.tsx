@@ -32,6 +32,7 @@ import ShopIcon from '../../assets/icons/shop.svg';
 import StarIcon from '../../assets/icons/star.svg';
 import { RestaurantMenuItem, restaurants } from '../data/restaurants';
 import { RestaurantReview, restaurantReviews } from '../data/restaurantReviews';
+import { ReviewMediaItem } from '../types/reviews';
 
 type RestaurantDetailTab = 'home' | 'menu' | 'review' | 'photo';
 type ReviewSort = 'latest' | 'popular';
@@ -39,11 +40,14 @@ type ReviewReaction = 'like' | 'dislike' | null;
 
 type RestaurantDetailScreenProps = {
   accessToken?: string | null;
+  initialTab?: RestaurantDetailTab;
   onBack: () => void;
   restaurantName?: string;
   onAddToList?: (restaurantName: string) => void;
   onOpenUserProfile?: (authorName: string) => void;
+  onOpenWriteReview?: (restaurantName: string) => void;
   favoriteColor?: string;
+  reviewsData?: RestaurantReview[];
 };
 
 type RestaurantMeta = {
@@ -355,26 +359,51 @@ function ReviewReactionButton({
   count,
   icon,
   active = false,
+  disabled = false,
   onPress,
 }: {
   count: number;
   icon: React.ReactNode;
   active?: boolean;
+  disabled?: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable
+      disabled={disabled}
       onPress={onPress}
-      style={[styles.reviewReactionButton, active ? styles.reviewReactionButtonActive : null]}
+      style={[
+        styles.reviewReactionButton,
+        active ? styles.reviewReactionButtonActive : null,
+        disabled ? styles.reviewReactionButtonDisabled : null,
+      ]}
     >
       {icon}
       <Text
-        style={[styles.reviewReactionCount, active ? styles.reviewReactionCountActive : null]}
+        style={[
+          styles.reviewReactionCount,
+          active ? styles.reviewReactionCountActive : null,
+          disabled ? styles.reviewReactionCountDisabled : null,
+        ]}
       >
         {count}
       </Text>
     </Pressable>
   );
+}
+
+function getReviewMediaItems(
+  review: Pick<RestaurantReview, 'media' | 'imageUris'>,
+): ReviewMediaItem[] {
+  if (review.media?.length) {
+    return review.media;
+  }
+
+  return (review.imageUris ?? []).map((uri, index) => ({
+    id: `legacy-media-${index}-${uri}`,
+    type: 'image',
+    uri,
+  }));
 }
 
 function ReviewCard({
@@ -390,13 +419,16 @@ function ReviewCard({
   onOpenImagePreview: (images: string[], index: number) => void;
   onOpenUserProfile?: (authorName: string) => void;
 }) {
+  const reviewMedia = getReviewMediaItems(review);
+  const imageUris = reviewMedia.filter((item) => item.type === 'image').map((item) => item.uri);
+
   return (
     <View style={styles.reviewCard}>
       <View style={styles.reviewCardHeader}>
         <Pressable
           style={styles.reviewAuthorRow}
           onPress={() => onOpenUserProfile?.(review.authorName)}
-          disabled={!onOpenUserProfile}
+          disabled={!onOpenUserProfile || review.isOwner}
         >
           <View style={styles.reviewAvatar} />
           <View style={styles.reviewAuthorCopy}>
@@ -405,22 +437,28 @@ function ReviewCard({
           </View>
         </Pressable>
 
-        <Pressable
-          onPress={() => onToggleFollow(review.id)}
-          style={[
-            styles.reviewFollowButton,
-            review.isFollowing ? styles.reviewFollowingButton : null,
-          ]}
-        >
-          <Text
+        {review.isOwner ? (
+          <View style={styles.reviewOwnerBadge}>
+            <Text style={styles.reviewOwnerBadgeLabel}>내 리뷰</Text>
+          </View>
+        ) : (
+          <Pressable
+            onPress={() => onToggleFollow(review.id)}
             style={[
-              styles.reviewFollowButtonLabel,
-              review.isFollowing ? styles.reviewFollowingButtonLabel : null,
+              styles.reviewFollowButton,
+              review.isFollowing ? styles.reviewFollowingButton : null,
             ]}
           >
-            {review.isFollowing ? '팔로잉' : '팔로우'}
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                styles.reviewFollowButtonLabel,
+                review.isFollowing ? styles.reviewFollowingButtonLabel : null,
+              ]}
+            >
+              {review.isFollowing ? '팔로잉' : '팔로우'}
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       <Text style={styles.reviewText}>{review.content}</Text>
@@ -435,25 +473,43 @@ function ReviewCard({
         </View>
       ) : null}
 
-      {review.imageUris?.length ? (
+      {reviewMedia.length ? (
         <View style={[styles.reviewImagesCarousel, { width: screenWidth }]}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.reviewImagesRow}
           >
-            {review.imageUris?.slice(0, 5).map((imageUri, index, images) => (
-              <Pressable
-                key={`${review.id}-carousel-${index}`}
-                style={[
-                  styles.reviewImage,
-                  index < images.length - 1 ? styles.reviewImageSpacing : null,
-                ]}
-                onPress={() => onOpenImagePreview(images, index)}
-              >
-                <Image source={{ uri: imageUri }} style={styles.reviewImageFill} />
-              </Pressable>
-            ))}
+            {reviewMedia.slice(0, 5).map((item, index, items) =>
+              item.type === 'image' ? (
+                <Pressable
+                  key={item.id}
+                  style={[
+                    styles.reviewImage,
+                    index < items.length - 1 ? styles.reviewImageSpacing : null,
+                  ]}
+                  onPress={() =>
+                    onOpenImagePreview(
+                      imageUris,
+                      imageUris.findIndex((uri) => uri === item.uri),
+                    )
+                  }
+                >
+                  <Image source={{ uri: item.uri }} style={styles.reviewImageFill} />
+                </Pressable>
+              ) : (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.reviewImage,
+                    styles.videoReviewCard,
+                    index < items.length - 1 ? styles.reviewImageSpacing : null,
+                  ]}
+                >
+                  <Text style={styles.videoReviewBadge}>VIDEO</Text>
+                </View>
+              ),
+            )}
           </ScrollView>
         </View>
       ) : null}
@@ -462,6 +518,7 @@ function ReviewCard({
         <ReviewReactionButton
           count={review.likes}
           active={review.currentReaction === 'like'}
+          disabled={review.isOwner}
           onPress={() => onToggleReaction(review.id, 'like')}
           icon={
             <ThumbUpIcon color={review.currentReaction === 'like' ? '#F92A1D' : '#666666'} />
@@ -470,6 +527,7 @@ function ReviewCard({
         <ReviewReactionButton
           count={review.dislikes}
           active={review.currentReaction === 'dislike'}
+          disabled={review.isOwner}
           onPress={() => onToggleReaction(review.id, 'dislike')}
           icon={
             <ThumbDownIcon
@@ -787,13 +845,22 @@ function normalizeRestaurantName(value: string) {
   return value.replace(/\s+/g, '').trim().toLowerCase();
 }
 
+function getTabIndicatorOffset(tab: RestaurantDetailTab) {
+  const nextIndex = tabs.findIndex((item) => item.id === tab);
+
+  return nextIndex * (TAB_WIDTH + TAB_GAP) + (TAB_WIDTH - TAB_INDICATOR_WIDTH) / 2;
+}
+
 export function RestaurantDetailScreen({
   accessToken,
+  initialTab = 'home',
   onBack,
   restaurantName = '와이앤웍',
   onAddToList,
   onOpenUserProfile,
+  onOpenWriteReview,
   favoriteColor = '#D9D9D9',
+  reviewsData,
 }: RestaurantDetailScreenProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const indicatorX = useRef(new Animated.Value(0)).current;
@@ -802,7 +869,7 @@ export function RestaurantDetailScreen({
   const isHeroTransitioningRef = useRef(false);
   const previewScrollRef = useRef<ScrollView>(null);
 
-  const [activeTab, setActiveTab] = useState<RestaurantDetailTab>('home');
+  const [activeTab, setActiveTab] = useState<RestaurantDetailTab>(initialTab);
   const [reviewSort, setReviewSort] = useState<ReviewSort>('latest');
   const [isHeroCollapsed, setIsHeroCollapsed] = useState(false);
   const [isTabScrollEnabled, setIsTabScrollEnabled] = useState(true);
@@ -822,8 +889,21 @@ export function RestaurantDetailScreen({
   >({});
 
   const handlePressWriteReview = () => {
+    if (onOpenWriteReview) {
+      onOpenWriteReview(remoteRestaurant?.name ?? restaurantName);
+      return;
+    }
+
     Alert.alert('리뷰 쓰기', '리뷰 작성 기능은 곧 추가됩니다.');
   };
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+    setIsHeroCollapsed(initialTab !== 'home');
+    setIsTabScrollEnabled(true);
+    heroProgress.setValue(initialTab === 'home' ? 0 : 1);
+    indicatorX.setValue(getTabIndicatorOffset(initialTab));
+  }, [initialTab, restaurantName]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -985,16 +1065,15 @@ export function RestaurantDetailScreen({
     const matchedRestaurant = MOCK_DATA_ENABLED
       ? restaurants.find((item) => item.name === restaurantName || item.shortName === restaurantName)
       : undefined;
+    const reviewSource = reviewsData ?? (MOCK_DATA_ENABLED ? restaurantReviews : []);
 
-    const filteredReviews = MOCK_DATA_ENABLED
-      ? restaurantReviews.filter(
+    const filteredReviews = reviewSource.filter(
           (review) =>
             review.restaurantName === resolvedRestaurantName ||
             review.restaurantName === restaurantName ||
             review.restaurantName === matchedRestaurant?.name ||
             review.restaurantName === matchedRestaurant?.shortName,
-        )
-      : [];
+        );
 
     const reviewsWithFollowState = filteredReviews.map((review) => ({
       ...review,
@@ -1013,7 +1092,14 @@ export function RestaurantDetailScreen({
       const rightDate = Number(right.date.replaceAll('.', ''));
       return rightDate - leftDate;
     });
-  }, [remoteRestaurant?.name, restaurantName, reviewSort, reviewFollowStates, reviewReactionStates]);
+  }, [
+    remoteRestaurant?.name,
+    restaurantName,
+    reviewSort,
+    reviewFollowStates,
+    reviewReactionStates,
+    reviewsData,
+  ]);
 
   const displayReviewCount = restaurantReviewList.length
     ? String(restaurantReviewList.length)
@@ -1027,7 +1113,13 @@ export function RestaurantDetailScreen({
 
   const handleToggleReviewFollow = (reviewId: string) => {
     setReviewFollowStates((current) => {
-      const targetReview = restaurantReviews.find((review) => review.id === reviewId);
+      const reviewSource = reviewsData ?? (MOCK_DATA_ENABLED ? restaurantReviews : []);
+      const targetReview = reviewSource.find((review) => review.id === reviewId);
+
+      if (targetReview?.isOwner) {
+        return current;
+      }
+
       const currentValue = current[reviewId] ?? targetReview?.isFollowing ?? false;
 
       return {
@@ -1042,6 +1134,13 @@ export function RestaurantDetailScreen({
     reaction: Exclude<ReviewReaction, null>,
   ) => {
     setReviewReactionStates((current) => {
+      const reviewSource = reviewsData ?? (MOCK_DATA_ENABLED ? restaurantReviews : []);
+      const targetReview = reviewSource.find((review) => review.id === reviewId);
+
+      if (targetReview?.isOwner) {
+        return current;
+      }
+
       const currentValue = current[reviewId] ?? null;
 
       return {
@@ -1103,11 +1202,8 @@ export function RestaurantDetailScreen({
   };
 
   const animateIndicatorToTab = (tab: RestaurantDetailTab) => {
-    const nextIndex = tabs.findIndex((item) => item.id === tab);
-
     Animated.spring(indicatorX, {
-      toValue:
-        nextIndex * (TAB_WIDTH + TAB_GAP) + (TAB_WIDTH - TAB_INDICATOR_WIDTH) / 2,
+      toValue: getTabIndicatorOffset(tab),
       useNativeDriver: true,
       speed: 24,
       bounciness: 0,
@@ -1933,6 +2029,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+  reviewOwnerBadge: {
+    minWidth: 62,
+    height: 31,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: '#FFF0EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewOwnerBadgeLabel: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#F92A1D',
+  },
   reviewFollowingButtonLabel: {
     color: '#666666',
   },
@@ -1953,6 +2064,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF0EE',
     borderColor: '#FFC4BC',
   },
+  reviewReactionButtonDisabled: {
+    opacity: 0.45,
+  },
   reactionIcon: {
     fontSize: 12,
     lineHeight: 14,
@@ -1966,6 +2080,9 @@ const styles = StyleSheet.create({
   reviewReactionCountActive: {
     color: '#F92A1D',
     fontWeight: '600',
+  },
+  reviewReactionCountDisabled: {
+    color: '#888888',
   },
   reviewText: {
     fontSize: 15,
@@ -2010,6 +2127,18 @@ const styles = StyleSheet.create({
   reviewImageFill: {
     width: '100%',
     height: '100%',
+  },
+  videoReviewCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1F1F1F',
+  },
+  videoReviewBadge: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.8,
   },
   reviewImageSpacing: {
     marginRight: 4,
