@@ -9,7 +9,10 @@ import {
   deleteList,
   formatBirthDate,
   formatGenderLabel,
+  followUser,
+  getFollowers,
   getFollowCount,
+  getFollowings,
   getListDetail,
   getMyInfo,
   getMyLists,
@@ -22,14 +25,14 @@ import {
   setRepresentativeList,
   signupProfile,
   toggleListVisibility,
+  unfollowUser,
   updateRestaurantInList,
   updateList,
   updateMyUser,
 } from '../api/wagu';
 import { AppTab } from '../components/BottomTabBar';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
-import { FriendTabKey } from '../data/myFriends';
-import { MY_FOLLOWER_USERS } from '../data/myFriends';
+import { FriendTabKey, FriendUser, FollowTogglePayload, MY_FOLLOWER_USERS, MY_FOLLOWING_USERS } from '../data/myFriends';
 import { userFriendConnectionsByUserId } from '../data/userFriendConnections';
 import { initialMyLists, MyList } from '../data/myLists';
 import { myReviews } from '../data/myReviews';
@@ -131,9 +134,34 @@ type UserProfileHistoryEntry = {
   source: UserProfileSource;
 };
 
+function sortFollowersForInitialView(users: FriendUser[]) {
+  return [...users].sort((left, right) => {
+    if (left.isFollowing === right.isFollowing) {
+      return 0;
+    }
+
+    return left.isFollowing ? 1 : -1;
+  });
+}
+
+function mapFollowUsersToFriendUsers(
+  users: Array<{ nickname: string; userId: number }>,
+  followingUserIds: Set<number>,
+) {
+  return users.map((user) => ({
+    id: String(user.userId),
+    isFollowing: followingUserIds.has(user.userId),
+    name: user.nickname,
+    reviewCount: 0,
+    showFollowAction: true,
+  }));
+}
+
 export function AppRoot() {
   const fallbackMyLists = MOCK_DATA_ENABLED ? initialMyLists : [];
   const fallbackFollowerCount = MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS.length : 0;
+  const fallbackFollowingUsers = MOCK_DATA_ENABLED ? MY_FOLLOWING_USERS : [];
+  const fallbackFollowerUsers = MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : [];
   const visibleUserProfiles = MOCK_DATA_ENABLED ? userProfiles : [];
   const visibleUserReviewsByUserId = MOCK_DATA_ENABLED ? userReviewsByUserId : {};
   const visibleUserFriendConnectionsByUserId = MOCK_DATA_ENABLED
@@ -194,6 +222,10 @@ export function AppRoot() {
     useState<FriendTabKey>('following');
   const [myLists, setMyLists] = useState<MyList[]>(fallbackMyLists);
   const [followerCount, setFollowerCount] = useState(fallbackFollowerCount);
+  const [myFollowingUsers, setMyFollowingUsers] = useState<FriendUser[]>(fallbackFollowingUsers);
+  const [myFollowerUsers, setMyFollowerUsers] =
+    useState<FriendUser[]>(sortFollowersForInitialView(fallbackFollowerUsers));
+  const [myUserId, setMyUserId] = useState<number | null>(null);
   const [rankingEntries, setRankingEntries] = useState<{
     local: RankingEntry[];
     national: RankingEntry[];
@@ -242,13 +274,23 @@ export function AppRoot() {
         setProfileImageUrl(me.profileImageUrl ?? null);
         setBirthDateLabel(formatBirthDate(me));
         setGenderLabel(formatGenderLabel(me.gender));
+        setMyUserId(me.id);
 
-        const [followCountResult, listsResult, localRankingResult, nationalRankingResult] =
+        const [
+          followCountResult,
+          listsResult,
+          localRankingResult,
+          nationalRankingResult,
+          followingsResult,
+          followersResult,
+        ] =
           await Promise.allSettled([
             getFollowCount(session.accessToken, me.id),
             getMyLists(session.accessToken),
             getRestaurantRankings(session.accessToken, { regionName: '용인', limit: 40 }),
             getRestaurantRankings(session.accessToken, { limit: 40 }),
+            getFollowings(session.accessToken, me.id),
+            getFollowers(session.accessToken, me.id),
           ]);
 
         if (cancelled) {
@@ -257,6 +299,21 @@ export function AppRoot() {
 
         if (followCountResult.status === 'fulfilled') {
           setFollowerCount(followCountResult.value.followerCount);
+        }
+
+        if (followingsResult.status === 'fulfilled' && followersResult.status === 'fulfilled') {
+          const followingUserIds = new Set(
+            followingsResult.value.map((user) => user.userId),
+          );
+
+          setMyFollowingUsers(
+            mapFollowUsersToFriendUsers(followingsResult.value, followingUserIds),
+          );
+          setMyFollowerUsers(
+            sortFollowersForInitialView(
+              mapFollowUsersToFriendUsers(followersResult.value, followingUserIds),
+            ),
+          );
         }
 
         if (localRankingResult.status === 'fulfilled' && nationalRankingResult.status === 'fulfilled') {
@@ -285,6 +342,9 @@ export function AppRoot() {
       } catch {
         if (!cancelled && !MOCK_DATA_ENABLED) {
           setFollowerCount(0);
+          setMyUserId(null);
+          setMyFollowingUsers([]);
+          setMyFollowerUsers([]);
           setRankingEntries({
             local: [],
             national: [],
@@ -465,6 +525,79 @@ export function AppRoot() {
 
     await deleteList(session.accessToken, parsedListId);
     applyLocalDelete();
+  };
+
+  const handleToggleMyFriendFollow = async ({
+    nextIsFollowing,
+    sourceTab,
+    userId,
+  }: FollowTogglePayload) => {
+    if (!session?.accessToken) {
+      return false;
+    }
+
+    const parsedUserId = Number(userId);
+
+    if (Number.isNaN(parsedUserId)) {
+      Alert.alert('팔로우를 변경하지 못했습니다.');
+      return false;
+    }
+
+    try {
+      if (nextIsFollowing) {
+        await followUser(session.accessToken, parsedUserId);
+      } else {
+        await unfollowUser(session.accessToken, parsedUserId);
+      }
+    } catch {
+      Alert.alert('팔로우를 변경하지 못했습니다.');
+      return false;
+    }
+
+    if (sourceTab === 'following') {
+      setMyFollowingUsers((current) =>
+        nextIsFollowing
+          ? current
+          : current.filter((user) => user.id !== userId),
+      );
+      setMyFollowerUsers((current) =>
+        sortFollowersForInitialView(
+          current.map((user) =>
+            user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
+          ),
+        ),
+      );
+      return true;
+    }
+
+    let targetFollower: FriendUser | null = null;
+
+    setMyFollowerUsers((current) =>
+      sortFollowersForInitialView(
+        current.map((user) => {
+          if (user.id !== userId) {
+            return user;
+          }
+
+          targetFollower = { ...user, isFollowing: nextIsFollowing };
+          return targetFollower;
+        }),
+      ),
+    );
+
+    setMyFollowingUsers((current) => {
+      if (nextIsFollowing) {
+        if (!targetFollower || current.some((user) => user.id === userId)) {
+          return current;
+        }
+
+        return [...current, targetFollower];
+      }
+
+      return current.filter((user) => user.id !== userId);
+    });
+
+    return true;
   };
 
   const handleRemoveRestaurantsFromMyList = async (
@@ -1308,9 +1441,12 @@ export function AppRoot() {
         />
       ) : screen === 'my-friends' ? (
           <MyFriendsScreen
+            followerUsersData={myFollowerUsers}
+            followingUsersData={myFollowingUsers}
             initialTab={myFriendsInitialTab}
           onBack={() => setScreen('tabs')}
           onChangeTab={setMyFriendsInitialTab}
+          onToggleFollow={handleToggleMyFriendFollow}
           onOpenUserProfile={(userId) => {
             setUserProfileSource({ type: 'my-friends', tab: myFriendsInitialTab });
             setSelectedUserProfileId(userId);

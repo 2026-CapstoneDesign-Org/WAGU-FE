@@ -51,6 +51,12 @@ type ApiFollowCount = {
   followingCount: number;
 };
 
+export type ApiFollowUser = {
+  nickname: string;
+  profileImageUrl?: string;
+  userId: number;
+};
+
 type ApiUserListSummary = {
   createdAt?: string;
   description?: string;
@@ -276,6 +282,32 @@ export async function updateRestaurantInList(
 
 export async function getFollowCount(token: string, userId: number) {
   return apiRequest<ApiFollowCount>(`/users/${userId}/follow/count`, {
+    token,
+  });
+}
+
+export async function getFollowings(token: string, userId: number) {
+  return apiRequest<ApiFollowUser[]>(`/users/${userId}/followings`, {
+    token,
+  });
+}
+
+export async function getFollowers(token: string, userId: number) {
+  return apiRequest<ApiFollowUser[]>(`/users/${userId}/followers`, {
+    token,
+  });
+}
+
+export async function followUser(token: string, userId: number) {
+  return apiRequest<void>(`/users/${userId}/follow`, {
+    method: 'POST',
+    token,
+  });
+}
+
+export async function unfollowUser(token: string, userId: number) {
+  return apiRequest<void>(`/users/${userId}/follow`, {
+    method: 'DELETE',
     token,
   });
 }

@@ -29,6 +29,7 @@ type MyFriendsScreenProps = {
   onBack: () => void;
   onChangeTab?: (tab: FriendTabKey) => void;
   onOpenUserProfile?: (userId: string) => void;
+  onToggleFollow?: (payload: FollowTogglePayload) => Promise<boolean> | boolean;
   title?: string;
 };
 
@@ -46,11 +47,13 @@ function sortFollowersForInitialView(users: FriendUser[]) {
 }
 
 function FriendRow({
+  isPending = false,
   onToggleFollow,
   onOpenUserProfile,
   sourceTab,
   user,
 }: {
+  isPending?: boolean;
   onToggleFollow: (payload: FollowTogglePayload) => void;
   onOpenUserProfile?: (userId: string) => void;
   sourceTab: FriendTabKey;
@@ -68,7 +71,9 @@ function FriendRow({
           style={[
             styles.followButton,
             user.isFollowing && styles.followingButton,
+            isPending && styles.pendingFollowButton,
           ]}
+          disabled={isPending}
           onPress={(event) => {
             event.stopPropagation();
             onToggleFollow({
@@ -93,11 +98,13 @@ function FriendRow({
 }
 
 function FriendList({
+  pendingUserIds,
   onToggleFollow,
   onOpenUserProfile,
   sourceTab,
   users,
 }: {
+  pendingUserIds?: string[];
   onToggleFollow: (payload: FollowTogglePayload) => void;
   onOpenUserProfile?: (userId: string) => void;
   sourceTab: FriendTabKey;
@@ -110,6 +117,7 @@ function FriendList({
     >
       {users.map((user) => (
         <FriendRow
+          isPending={pendingUserIds?.includes(user.id)}
           key={user.id}
           onToggleFollow={onToggleFollow}
           onOpenUserProfile={onOpenUserProfile}
@@ -128,6 +136,7 @@ export function MyFriendsScreen({
   onBack,
   onChangeTab,
   onOpenUserProfile,
+  onToggleFollow,
   title = '\uBC25\uCE5C\uAD6C',
 }: MyFriendsScreenProps) {
   const pagerRef = useRef<ScrollView | null>(null);
@@ -139,6 +148,7 @@ export function MyFriendsScreen({
   const [followerUsers, setFollowerUsers] = useState(() =>
     sortFollowersForInitialView(followerUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : [])),
   );
+  const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
 
   useEffect(() => {
     setFollowingUsers(followingUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWING_USERS : []));
@@ -204,7 +214,7 @@ export function MyFriendsScreen({
     onChangeTab?.(nextTab);
   };
 
-  const handleToggleFollow = ({
+  const applyFollowChange = ({
     nextIsFollowing,
     sourceTab,
     userId,
@@ -247,6 +257,28 @@ export function MyFriendsScreen({
 
       return current.filter((user) => user.id !== userId);
     });
+  };
+
+  const handleToggleFollow = async (payload: FollowTogglePayload) => {
+    if (pendingUserIds.includes(payload.userId)) {
+      return;
+    }
+
+    if (onToggleFollow) {
+      setPendingUserIds((current) => [...current, payload.userId]);
+
+      try {
+        const didSucceed = await onToggleFollow(payload);
+
+        if (!didSucceed) {
+          return;
+        }
+      } finally {
+        setPendingUserIds((current) => current.filter((id) => id !== payload.userId));
+      }
+    }
+
+    applyFollowChange(payload);
   };
 
   return (
@@ -306,6 +338,7 @@ export function MyFriendsScreen({
         >
           <View style={styles.page}>
             <FriendList
+              pendingUserIds={pendingUserIds}
               onToggleFollow={handleToggleFollow}
               onOpenUserProfile={onOpenUserProfile}
               sourceTab="following"
@@ -314,6 +347,7 @@ export function MyFriendsScreen({
           </View>
           <View style={styles.page}>
             <FriendList
+              pendingUserIds={pendingUserIds}
               onToggleFollow={handleToggleFollow}
               onOpenUserProfile={onOpenUserProfile}
               sourceTab="followers"
@@ -450,5 +484,8 @@ const styles = StyleSheet.create({
   },
   followingButtonLabel: {
     color: '#000000',
+  },
+  pendingFollowButton: {
+    opacity: 0.55,
   },
 });
