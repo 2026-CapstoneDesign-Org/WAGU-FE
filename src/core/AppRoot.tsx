@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import {
   createList,
+  deleteList,
   formatBirthDate,
   formatGenderLabel,
   getFollowCount,
@@ -330,6 +331,20 @@ export function AppRoot() {
     return listDetails;
   };
 
+  const buildNextListsAfterDelete = (lists: MyList[], targetId: string) => {
+    const nextLists = lists.filter((list) => list.id !== targetId);
+
+    if (!nextLists.some((list) => list.isRepresentative) && nextLists.length > 0) {
+      return nextLists.map((list, index) => ({
+        ...list,
+        isRepresentative: index === 0,
+        isPrivate: index === 0 ? false : list.isPrivate,
+      }));
+    }
+
+    return nextLists;
+  };
+
   const handleRenameMyList = async (listId: string, title: string) => {
     const trimmedTitle = title.trim();
 
@@ -423,6 +438,27 @@ export function AppRoot() {
 
     await setRepresentativeList(session.accessToken, parsedListId);
     applyLocalRepresentative();
+  };
+
+  const handleDeleteMyList = async (listId: string) => {
+    const applyLocalDelete = () => {
+      setMyLists((current) => buildNextListsAfterDelete(current, listId));
+    };
+
+    if (!session?.accessToken) {
+      applyLocalDelete();
+      return;
+    }
+
+    const parsedListId = Number(listId);
+
+    if (Number.isNaN(parsedListId)) {
+      applyLocalDelete();
+      return;
+    }
+
+    await deleteList(session.accessToken, parsedListId);
+    applyLocalDelete();
   };
 
   const convertFiveStarToTenPoint = (value: number) => value * 2;
@@ -1049,6 +1085,7 @@ export function AppRoot() {
             setSelectedMyListId(listId);
             setScreen('my-list-detail');
           }}
+          onDeleteList={handleDeleteMyList}
           onSetRepresentativeList={handleSetRepresentativeMyList}
           onRenameList={handleRenameMyList}
           onToggleListPrivacy={handleToggleMyListPrivacy}

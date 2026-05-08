@@ -20,6 +20,7 @@ type MyListsScreenProps = {
   onChangeLists: (lists: MyList[]) => void;
   onOpenList: (listId: string) => void;
   onCreateList: () => void;
+  onDeleteList?: (listId: string) => Promise<void> | void;
   onSetRepresentativeList?: (listId: string) => Promise<void> | void;
   onRenameList?: (listId: string, title: string) => Promise<void> | void;
   onToggleListPrivacy?: (listId: string) => Promise<void> | void;
@@ -49,6 +50,7 @@ export function MyListsScreen({
   onChangeLists,
   onOpenList,
   onCreateList,
+  onDeleteList,
   onSetRepresentativeList,
   onRenameList,
   onToggleListPrivacy,
@@ -89,6 +91,33 @@ export function MyListsScreen({
   const closeRenameModal = () => {
     setRenameTargetId(null);
     setRenameValue('');
+  };
+
+  const confirmDeleteList = (listId: string) => {
+    Alert.alert('리스트 삭제', '정말 이 리스트를 삭제할까요?', [
+      {
+        text: '취소',
+        style: 'cancel',
+      },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              if (onDeleteList) {
+                await onDeleteList(listId);
+              } else {
+                onChangeLists(buildNextListsAfterDelete(lists, listId));
+              }
+              closeMenu();
+            } catch {
+              Alert.alert('알림', '리스트를 삭제하지 못했습니다.');
+            }
+          })();
+        },
+      },
+    ]);
   };
 
   const applyAction = async (action: MenuAction) => {
@@ -163,8 +192,7 @@ export function MyListsScreen({
       return;
     }
 
-    onChangeLists(buildNextListsAfterDelete(lists, selectedList.id));
-    closeMenu();
+    confirmDeleteList(selectedList.id);
   };
 
   const handleRenameSubmit = async () => {
