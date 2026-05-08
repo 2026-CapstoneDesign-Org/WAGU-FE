@@ -1519,6 +1519,7 @@ export function AppRoot() {
         />
       ) : activeTab === 'map' ? (
         <MapScreen
+          accessToken={session?.accessToken}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'map' })
           }

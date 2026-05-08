@@ -22,6 +22,7 @@ import FilterIcon from '../../assets/icons/filter.svg';
 import MyLocationIcon from '../../assets/icons/mylocation.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import StarIcon from '../../assets/icons/star.svg';
+import { searchRestaurants } from '../api/wagu';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
 
@@ -30,10 +31,11 @@ const { height: screenHeight } = Dimensions.get('window');
 const FILTER_OPTIONS = ['영업 중', '영업 전', '한식', '양식', '중식'] as const;
 const REVIEW_CARD_WIDTH = 292;
 const DEFAULT_CAMERA = {
-  latitude: 37.3227,
-  longitude: 127.1018,
-  zoom: 14.1,
+  latitude: 37.2369,
+  longitude: 127.1902,
+  zoom: 15.2,
 };
+const DEFAULT_MAP_SEARCH_KEYWORDS = ['용인', '처인구', '기흥구', '수지구'] as const;
 
 type SheetStage = 'collapsed' | 'medium' | 'expanded';
 
@@ -136,7 +138,10 @@ const mapRestaurants: MapRestaurant[] = MOCK_DATA_ENABLED ? [
   },
 ]: [];
 
+const fallbackMapRestaurants: MapRestaurant[] = [];
+
 type MapScreenProps = {
+  accessToken?: string;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onAddToList?: (restaurantName: string) => void;
   getFavoriteColor?: (restaurantName: string) => string;
@@ -147,6 +152,7 @@ type MapScreenProps = {
 };
 
 export function MapScreen({
+  accessToken,
   onOpenRestaurantDetail,
   onAddToList,
   getFavoriteColor,
@@ -157,6 +163,7 @@ export function MapScreen({
 }: MapScreenProps) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<NaverMapViewRef>(null);
+  const currentZoomRef = useRef(DEFAULT_CAMERA.zoom);
   const hasNativeNaverMap = Boolean(UIManager.getViewManagerConfig('RNCNaverMapView'));
   const sheetContentBottomPadding = TAB_BAR_HEIGHT + insets.bottom + 24;
   const snapTops = useMemo(
@@ -177,6 +184,7 @@ export function MapScreen({
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [focusedRestaurantId, setFocusedRestaurantId] = useState<string | null>(null);
   const [selectedMarkerRestaurantId, setSelectedMarkerRestaurantId] = useState<string | null>(null);
+  const [mapDataRestaurants, setMapDataRestaurants] = useState<MapRestaurant[]>([]);
   const contentScrollOffsetRef = useRef(0);
   const panStartTopRef = useRef(snapTops.medium);
   const contentPanStartStageRef = useRef<SheetStage>('medium');
@@ -203,14 +211,117 @@ export function MapScreen({
     mapRef.current?.animateCameraTo({
       latitude: restaurant?.latitude ?? DEFAULT_CAMERA.latitude,
       longitude: restaurant?.longitude ?? DEFAULT_CAMERA.longitude,
-      zoom: restaurant ? 15.3 : DEFAULT_CAMERA.zoom,
+      zoom: restaurant ? currentZoomRef.current : DEFAULT_CAMERA.zoom,
       duration: 360,
       easing: 'EaseOut',
     });
   };
 
+  useEffect(() => {
+    if (!accessToken) {
+      setMapDataRestaurants([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadMapRestaurants = async () => {
+      try {
+        const keywords = trimmedSearchQuery
+          ? [trimmedSearchQuery]
+          : ['용인', '처인구', '기흥구', '수지구'];
+
+        const results = await Promise.all(
+          keywords.map((keyword) => searchRestaurants(accessToken, keyword)),
+        );
+
+        const dedupedRestaurants = new Map<number, (typeof results)[number][number]>();
+
+        results.flat().forEach((restaurant) => {
+          if (
+            !dedupedRestaurants.has(restaurant.id) &&
+            typeof restaurant.lat === 'number' &&
+            typeof restaurant.lng === 'number'
+          ) {
+            dedupedRestaurants.set(restaurant.id, restaurant);
+          }
+        });
+
+        const nextRestaurants = Array.from(dedupedRestaurants.values()).map(
+          (restaurant, index) => ({
+            id: String(restaurant.id),
+            name: restaurant.name,
+            category: restaurant.categories?.[0] ?? restaurant.regionName ?? '맛집',
+            status: restaurant.regionName ?? '용인',
+            reviews: [],
+            fallbackX: 0.18 + (index % 4) * 0.18,
+            fallbackY: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
+            latitude: restaurant.lat ?? DEFAULT_CAMERA.latitude,
+            longitude: restaurant.lng ?? DEFAULT_CAMERA.longitude,
+          }),
+        );
+
+        if (!cancelled) {
+          setMapDataRestaurants(nextRestaurants);
+        }
+        return;
+/*
+        const ranking = await getRestaurantRankings(accessToken, {
+          regionName: '용인',
+          limit: 30,
+        });
+
+        const details = await Promise.all(
+          ranking.items.map((item) => getRestaurant(accessToken, item.restaurantId)),
+        );
+
+        const nextRestaurants = details
+          .filter(
+            (restaurant) =>
+              typeof restaurant.lat === 'number' && typeof restaurant.lng === 'number',
+          )
+          .map((restaurant, index) => ({
+            id: String(restaurant.id),
+            name: restaurant.name,
+            category: restaurant.categories?.[0] ?? restaurant.regionName ?? '맛집',
+            status: restaurant.regionName ?? '용인',
+            reviews: [],
+            fallbackX: 0.18 + (index % 4) * 0.18,
+            fallbackY: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
+            latitude: restaurant.lat ?? DEFAULT_CAMERA.latitude,
+            longitude: restaurant.lng ?? DEFAULT_CAMERA.longitude,
+          }));
+
+        if (!cancelled) {
+          setMapDataRestaurants(nextRestaurants);
+        }
+*/
+      } catch {
+        if (!cancelled) {
+          setMapDataRestaurants([]);
+        }
+      }
+    };
+
+    void loadMapRestaurants();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, trimmedSearchQuery]);
+
+  const filterOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          mapDataRestaurants.map((restaurant) => restaurant.category).filter(Boolean),
+        ),
+      ).slice(0, 5),
+    [mapDataRestaurants],
+  );
+
   const baseFilteredRestaurants = useMemo(() => {
-    let results = mapRestaurants;
+    let results = mapDataRestaurants;
 
     if (trimmedSearchQuery) {
       const query = trimmedSearchQuery.toLowerCase();
@@ -225,11 +336,8 @@ export function MapScreen({
       return results;
     }
 
-    return results.filter(
-      (restaurant) =>
-        activeFilters.includes(restaurant.status) || activeFilters.includes(restaurant.category),
-    );
-  }, [activeFilters, trimmedSearchQuery]);
+    return results.filter((restaurant) => activeFilters.includes(restaurant.category));
+  }, [activeFilters, mapDataRestaurants, trimmedSearchQuery]);
 
   const visibleRestaurants = useMemo(() => {
     if (!selectedMarkerRestaurantId) {
@@ -297,7 +405,6 @@ export function MapScreen({
     setFocusedRestaurantId(restaurant.id);
     setSelectedMarkerRestaurantId(restaurant.id);
     animateSheetTo('medium');
-    animateMapToRestaurant(restaurant);
   };
 
   const handlePressRestaurant = (restaurant: MapRestaurant) => {
@@ -305,11 +412,7 @@ export function MapScreen({
     setFocusedRestaurantId(restaurant.id);
     setSelectedMarkerRestaurantId(restaurant.id);
     animateMapToRestaurant(restaurant);
-
-    autoOpenTimeoutRef.current = setTimeout(() => {
-      onOpenRestaurantDetail?.(restaurant.name);
-      autoOpenTimeoutRef.current = null;
-    }, 180);
+    onOpenRestaurantDetail?.(restaurant.name);
   };
 
   const handlePressClear = () => {
@@ -470,6 +573,11 @@ export function MapScreen({
                 isZoomGesturesEnabled
                 isTiltGesturesEnabled={false}
                 isRotateGesturesEnabled={false}
+                onCameraChanged={({ zoom }) => {
+                  if (typeof zoom === 'number') {
+                    currentZoomRef.current = zoom;
+                  }
+                }}
                 onTapMap={handlePressMapBackground}
               >
                 {baseFilteredRestaurants.map((restaurant) => {
@@ -617,7 +725,7 @@ export function MapScreen({
                     color={hasActiveFilters ? '#FF5A52' : '#9B9B9B'}
                   />
                 </Pressable>
-                {FILTER_OPTIONS.map((filter) => {
+                {filterOptions.map((filter) => {
                   const active = activeFilters.includes(filter);
                   return (
                     <Pressable
@@ -673,13 +781,21 @@ export function MapScreen({
                           showsHorizontalScrollIndicator={false}
                           contentContainerStyle={styles.reviewScrollContent}
                         >
-                          {restaurant.reviews.map((review, index) => (
-                            <View key={`${restaurant.id}-review-${index}`} style={styles.reviewBox}>
+                          {restaurant.reviews.length > 0 ? (
+                            restaurant.reviews.map((review, index) => (
+                              <View key={`${restaurant.id}-review-${index}`} style={styles.reviewBox}>
+                                <Text numberOfLines={2} style={styles.reviewText}>
+                                  {review}
+                                </Text>
+                              </View>
+                            ))
+                          ) : (
+                            <View style={styles.reviewBox}>
                               <Text numberOfLines={2} style={styles.reviewText}>
-                                {review}
+                                아직 등록된 리뷰가 없어요.
                               </Text>
                             </View>
-                          ))}
+                          )}
                         </ScrollView>
                       </View>
 

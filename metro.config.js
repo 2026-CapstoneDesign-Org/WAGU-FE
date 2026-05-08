@@ -6,6 +6,7 @@ const { transformer, resolver } = config;
 config.transformer = {
   ...transformer,
   babelTransformerPath: require.resolve('react-native-svg-transformer/expo'),
+  unstable_workerThreads: true,
 };
 
 config.resolver = {
@@ -13,5 +14,7 @@ config.resolver = {
   assetExts: resolver.assetExts.filter((ext) => ext !== 'svg'),
   sourceExts: [...resolver.sourceExts, 'svg'],
 };
+
+config.maxWorkers = 1;
 
 module.exports = config;
