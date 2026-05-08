@@ -20,7 +20,9 @@ type MyListsScreenProps = {
   onChangeLists: (lists: MyList[]) => void;
   onOpenList: (listId: string) => void;
   onCreateList: () => void;
+  onSetRepresentativeList?: (listId: string) => Promise<void> | void;
   onRenameList?: (listId: string, title: string) => Promise<void> | void;
+  onToggleListPrivacy?: (listId: string) => Promise<void> | void;
 };
 
 const MENU_ITEMS = ['set-representative', 'toggle-privacy', 'rename', 'delete'] as const;
@@ -47,7 +49,9 @@ export function MyListsScreen({
   onChangeLists,
   onOpenList,
   onCreateList,
+  onSetRepresentativeList,
   onRenameList,
+  onToggleListPrivacy,
 }: MyListsScreenProps) {
   const insets = useSafeAreaInsets();
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
@@ -87,7 +91,7 @@ export function MyListsScreen({
     setRenameValue('');
   };
 
-  const applyAction = (action: MenuAction) => {
+  const applyAction = async (action: MenuAction) => {
     if (!selectedList) {
       return;
     }
@@ -97,14 +101,22 @@ export function MyListsScreen({
         return;
       }
 
-      onChangeLists(
-        lists.map((list) => ({
-          ...list,
-          isRepresentative: list.id === selectedList.id,
-          isPrivate: list.id === selectedList.id ? false : list.isPrivate,
-        })),
-      );
-      closeMenu();
+      try {
+        if (onSetRepresentativeList) {
+          await onSetRepresentativeList(selectedList.id);
+        } else {
+          onChangeLists(
+            lists.map((list) => ({
+              ...list,
+              isRepresentative: list.id === selectedList.id,
+              isPrivate: list.id === selectedList.id ? false : list.isPrivate,
+            })),
+          );
+        }
+        closeMenu();
+      } catch {
+        Alert.alert('알림', '대표 리스트를 설정하지 못했습니다.');
+      }
       return;
     }
 
@@ -113,17 +125,25 @@ export function MyListsScreen({
         return;
       }
 
-      onChangeLists(
-        lists.map((list) =>
-          list.id === selectedList.id
-            ? {
-                ...list,
-                isPrivate: !list.isPrivate,
-              }
-            : list,
-        ),
-      );
-      closeMenu();
+      try {
+        if (onToggleListPrivacy) {
+          await onToggleListPrivacy(selectedList.id);
+        } else {
+          onChangeLists(
+            lists.map((list) =>
+              list.id === selectedList.id
+                ? {
+                    ...list,
+                    isPrivate: !list.isPrivate,
+                  }
+                : list,
+            ),
+          );
+        }
+        closeMenu();
+      } catch {
+        Alert.alert('알림', '공개 설정을 변경하지 못했습니다.');
+      }
       return;
     }
 
@@ -206,7 +226,7 @@ export function MyListsScreen({
     return (
       <Pressable
         key={action}
-        onPress={() => applyAction(action)}
+        onPress={() => void applyAction(action)}
         style={({ pressed }) => [
           styles.menuItem,
           pressed ? styles.menuItemPressed : null,

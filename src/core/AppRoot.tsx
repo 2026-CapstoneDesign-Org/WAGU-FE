@@ -17,6 +17,7 @@ import {
   searchRestaurants,
   setRepresentativeList,
   signupProfile,
+  toggleListVisibility,
   updateList,
   updateMyUser,
 } from '../api/wagu';
@@ -365,6 +366,63 @@ export function AppRoot() {
       title: trimmedTitle,
     });
     applyLocalRename();
+  };
+
+  const handleToggleMyListPrivacy = async (listId: string) => {
+    const applyLocalToggle = () => {
+      setMyLists((current) =>
+        current.map((list) =>
+          list.id === listId
+            ? {
+                ...list,
+                isPrivate: !list.isPrivate,
+              }
+            : list,
+        ),
+      );
+    };
+
+    if (!session?.accessToken) {
+      applyLocalToggle();
+      return;
+    }
+
+    const parsedListId = Number(listId);
+
+    if (Number.isNaN(parsedListId)) {
+      applyLocalToggle();
+      return;
+    }
+
+    await toggleListVisibility(session.accessToken, parsedListId);
+    applyLocalToggle();
+  };
+
+  const handleSetRepresentativeMyList = async (listId: string) => {
+    const applyLocalRepresentative = () => {
+      setMyLists((current) =>
+        current.map((list) => ({
+          ...list,
+          isRepresentative: list.id === listId,
+          isPrivate: list.id === listId ? false : list.isPrivate,
+        })),
+      );
+    };
+
+    if (!session?.accessToken) {
+      applyLocalRepresentative();
+      return;
+    }
+
+    const parsedListId = Number(listId);
+
+    if (Number.isNaN(parsedListId)) {
+      applyLocalRepresentative();
+      return;
+    }
+
+    await setRepresentativeList(session.accessToken, parsedListId);
+    applyLocalRepresentative();
   };
 
   const convertFiveStarToTenPoint = (value: number) => value * 2;
@@ -991,7 +1049,9 @@ export function AppRoot() {
             setSelectedMyListId(listId);
             setScreen('my-list-detail');
           }}
+          onSetRepresentativeList={handleSetRepresentativeMyList}
           onRenameList={handleRenameMyList}
+          onToggleListPrivacy={handleToggleMyListPrivacy}
         />
       ) : screen === 'my-list-detail' && selectedMyListId ? (
         <MyListDetailScreen
