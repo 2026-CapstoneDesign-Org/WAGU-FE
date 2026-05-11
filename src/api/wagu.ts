@@ -176,6 +176,46 @@ export type ApiReviewSummary = {
   summary?: string;
 };
 
+export type ApiSearchRestaurantItem = {
+  address?: string;
+  categories?: string[];
+  externalPlaceId?: string;
+  imageUrl?: string;
+  lat?: number;
+  lng?: number;
+  matchedBy?: string;
+  primaryCategoryName?: string;
+  regionName?: string;
+  restaurantId: number;
+  restaurantName: string;
+  source?: string;
+};
+
+export type ApiSearchUserItem = {
+  nickname: string;
+  profileImageUrl?: string;
+  userId: number;
+};
+
+export type ApiSearchRegionItem = {
+  displayName?: string;
+  rankingPath?: string;
+  regionKeyword?: string;
+  regionName?: string;
+};
+
+export type ApiSearchResponse = {
+  interpretation?: string;
+  primaryType?: string;
+  query: string;
+  regionCount?: number;
+  regions?: ApiSearchRegionItem[];
+  restaurantCount?: number;
+  restaurants?: ApiSearchRestaurantItem[];
+  userCount?: number;
+  users?: ApiSearchUserItem[];
+};
+
 type ApiReviewVoteRequest = {
   voteType: 'DISLIKE' | 'LIKE';
 };
@@ -261,6 +301,13 @@ export async function searchRestaurants(token: string, keyword: string) {
   return apiRequest<ApiRestaurant[]>('/restaurants', {
     token,
     query: { keyword },
+  });
+}
+
+export async function searchAll(token: string, query: string) {
+  return apiRequest<ApiSearchResponse>('/search', {
+    token,
+    query: { query },
   });
 }
 

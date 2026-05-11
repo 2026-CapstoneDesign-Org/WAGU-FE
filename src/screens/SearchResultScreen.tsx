@@ -20,26 +20,51 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import SearchIcon from '../../assets/icons/search.svg';
-import { mapRestaurantSearchResults, searchRestaurants } from '../api/wagu';
+import { searchAll } from '../api/wagu';
 
 type SearchResultTab = 'restaurant' | 'user' | 'region';
 
 type SearchResultScreenProps = {
   accessToken?: string | null;
-  onBack: () => void;
   initialTab?: SearchResultTab;
+  myUserId?: number | null;
+  onBack: () => void;
   onChangeTab?: (tab: SearchResultTab) => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
-  onOpenUserProfile?: (userId: string) => void;
-  onSearch?: (query: string) => void;
+  onOpenUserProfile?: (user: {
+    id: string;
+    nickname: string;
+    profileImageUrl?: string;
+  }) => void;
   onPressSearchBar?: () => void;
+  onSearch?: (query: string) => void;
   query: string;
 };
 
 type RestaurantResult = {
-  id: string;
   category: string;
+  id: string;
   imageUri?: string;
+  name: string;
+};
+
+type UserResult = {
+  id: string;
+  imageUri?: string;
+  name: string;
+  profileImageUrl?: string;
+};
+
+type RegionResult = {
+  id: string;
+  meta: string;
+  name: string;
+};
+
+type ResultListItem = {
+  id: string;
+  imageUri?: string;
+  meta: string;
   name: string;
 };
 
@@ -62,7 +87,7 @@ function ResultList({
   items,
   onPressItem,
 }: {
-  items: { id: string; imageUri?: string; name: string; meta: string }[];
+  items: ResultListItem[];
   onPressItem?: (id: string, name: string) => void;
 }) {
   return (
@@ -77,6 +102,7 @@ function ResultList({
           key={item.id}
           style={styles.resultRow}
           onPress={() => onPressItem?.(item.id, item.name)}
+          disabled={!onPressItem}
         >
           <View style={styles.thumbnail}>
             {item.imageUri ? (
@@ -108,15 +134,25 @@ function EmptyTabState({
   );
 }
 
+function LoadingState() {
+  return (
+    <View style={styles.loadingState}>
+      <ActivityIndicator size="small" color="#FF0000" />
+      <Text style={styles.loadingText}>검색 결과를 불러오는 중이에요.</Text>
+    </View>
+  );
+}
+
 export function SearchResultScreen({
   accessToken,
-  onBack,
   initialTab = 'restaurant',
+  myUserId,
+  onBack,
   onChangeTab,
   onOpenRestaurantDetail,
   onOpenUserProfile,
-  onSearch,
   onPressSearchBar,
+  onSearch,
   query,
 }: SearchResultScreenProps) {
   const inputRef = useRef<TextInput | null>(null);
@@ -125,7 +161,9 @@ export function SearchResultScreen({
   const [value, setValue] = useState(query);
   const [activeTab, setActiveTab] = useState<SearchResultTab>(initialTab);
   const [restaurantResults, setRestaurantResults] = useState<RestaurantResult[]>([]);
-  const [isRestaurantLoading, setIsRestaurantLoading] = useState(false);
+  const [userResults, setUserResults] = useState<UserResult[]>([]);
+  const [regionResults, setRegionResults] = useState<RegionResult[]>([]);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
 
   useEffect(() => {
     setValue(query);
@@ -143,34 +181,62 @@ export function SearchResultScreen({
   useEffect(() => {
     if (!accessToken || !query.trim()) {
       setRestaurantResults([]);
-      setIsRestaurantLoading(false);
+      setUserResults([]);
+      setRegionResults([]);
+      setIsSearchLoading(false);
       return;
     }
 
     let cancelled = false;
 
     const loadResults = async () => {
-      setIsRestaurantLoading(true);
+      setIsSearchLoading(true);
 
       try {
-        const restaurants = await searchRestaurants(accessToken, query.trim());
-        const mappedResults = mapRestaurantSearchResults(restaurants).map((restaurant) => ({
-          id: restaurant.id,
-          category: restaurant.category,
-          imageUri: restaurant.imageUri,
-          name: restaurant.name,
-        }));
+        const result = await searchAll(accessToken, query.trim());
 
-        if (!cancelled) {
-          setRestaurantResults(mappedResults);
+        if (cancelled) {
+          return;
         }
+
+        setRestaurantResults(
+          (result.restaurants ?? []).map((restaurant) => ({
+            category:
+              restaurant.primaryCategoryName ??
+              restaurant.categories?.[0] ??
+              restaurant.regionName ??
+              '맛집',
+            id: String(restaurant.restaurantId),
+            imageUri: restaurant.imageUrl,
+            name: restaurant.restaurantName,
+          })),
+        );
+        setUserResults(
+          (result.users ?? [])
+            .filter((user) => user.userId !== myUserId)
+            .map((user) => ({
+              id: String(user.userId),
+              imageUri: user.profileImageUrl,
+              name: user.nickname,
+              profileImageUrl: user.profileImageUrl,
+            })),
+        );
+        setRegionResults(
+          (result.regions ?? []).map((region) => ({
+            id: region.regionName ?? region.displayName ?? region.rankingPath ?? 'region',
+            meta: region.regionKeyword ?? region.regionName ?? '지역',
+            name: region.displayName ?? region.regionName ?? '지역',
+          })),
+        );
       } catch {
         if (!cancelled) {
           setRestaurantResults([]);
+          setUserResults([]);
+          setRegionResults([]);
         }
       } finally {
         if (!cancelled) {
-          setIsRestaurantLoading(false);
+          setIsSearchLoading(false);
         }
       }
     };
@@ -180,7 +246,7 @@ export function SearchResultScreen({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, query]);
+  }, [accessToken, myUserId, query]);
 
   const trimmedValue = value.trim();
 
@@ -215,6 +281,15 @@ export function SearchResultScreen({
     onChangeTab?.(nextTab);
   };
 
+  const handlePressSearchBar = () => {
+    if (onPressSearchBar) {
+      onPressSearchBar();
+      return;
+    }
+
+    inputRef.current?.focus();
+  };
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -227,17 +302,7 @@ export function SearchResultScreen({
               <ArrowLeftIcon width={24} height={24} />
             </Pressable>
 
-            <Pressable
-              style={styles.searchBar}
-              onPress={() => {
-                if (onPressSearchBar) {
-                  onPressSearchBar();
-                  return;
-                }
-
-                inputRef.current?.focus();
-              }}
-            >
+            <Pressable style={styles.searchBar} onPress={handlePressSearchBar}>
               <SearchIcon width={24} height={24} color="#FF0000" />
               <View style={styles.inputWrap}>
                 <TextInput
@@ -298,39 +363,72 @@ export function SearchResultScreen({
               })}
             >
               <View style={styles.page}>
-                {isRestaurantLoading ? (
-                  <View style={styles.loadingState}>
-                    <ActivityIndicator size="small" color="#FF0000" />
-                    <Text style={styles.loadingText}>검색 결과를 불러오는 중이에요.</Text>
-                  </View>
+                {isSearchLoading ? (
+                  <LoadingState />
                 ) : restaurantResults.length > 0 ? (
                   <ResultList
                     items={restaurantResults.map((item) => ({
                       id: item.id,
                       imageUri: item.imageUri,
-                      name: item.name,
                       meta: item.category,
+                      name: item.name,
                     }))}
                     onPressItem={(_, name) => onOpenRestaurantDetail?.(name)}
                   />
                 ) : (
                   <EmptyTabState
                     title="맛집 검색 결과가 없어요"
-                    description="다른 검색어로 다시 찾아보세요."
+                    description="다른 검색어로 다시 찾아보세요"
                   />
                 )}
               </View>
+
               <View style={styles.page}>
-                <EmptyTabState
-                  title="유저 검색은 아직 준비 중이에요"
-                  description="지금은 맛집 검색 결과만 확인할 수 있어요."
-                />
+                {isSearchLoading ? (
+                  <LoadingState />
+                ) : userResults.length > 0 ? (
+                  <ResultList
+                    items={userResults.map((item) => ({
+                      id: item.id,
+                      imageUri: item.imageUri,
+                      meta: '유저',
+                      name: item.name,
+                    }))}
+                    onPressItem={(id, name) => {
+                      const selectedUser = userResults.find((item) => item.id === id);
+
+                      onOpenUserProfile?.({
+                        id,
+                        nickname: name,
+                        profileImageUrl: selectedUser?.profileImageUrl,
+                      });
+                    }}
+                  />
+                ) : (
+                  <EmptyTabState
+                    title="유저 검색 결과가 없어요"
+                    description="다른 검색어로 다시 찾아보세요"
+                  />
+                )}
               </View>
+
               <View style={styles.page}>
-                <EmptyTabState
-                  title="지역 검색은 아직 준비 중이에요"
-                  description="조금 더 다듬은 뒤 연결할게요."
-                />
+                {isSearchLoading ? (
+                  <LoadingState />
+                ) : regionResults.length > 0 ? (
+                  <ResultList
+                    items={regionResults.map((item) => ({
+                      id: item.id,
+                      meta: item.meta,
+                      name: item.name,
+                    }))}
+                  />
+                ) : (
+                  <EmptyTabState
+                    title="지역 검색 결과가 없어요"
+                    description="다른 검색어로 다시 찾아보세요"
+                  />
+                )}
               </View>
             </Animated.ScrollView>
           </View>

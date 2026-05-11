@@ -190,6 +190,29 @@ function mergeUserProfiles(
   return mergedProfiles;
 }
 
+function createSearchResultUserProfile(user: {
+  id: string;
+  nickname: string;
+  profileImageUrl?: string;
+}): UserProfile {
+  const numericId = Number(user.id);
+  const accentColor =
+    HOME_PROFILE_ACCENT_COLORS[
+      Number.isFinite(numericId)
+        ? Math.abs(numericId) % HOME_PROFILE_ACCENT_COLORS.length
+        : 0
+    ];
+
+  return {
+    id: user.id,
+    nickname: user.nickname,
+    profileImageUrl: user.profileImageUrl,
+    representativeAccentColor: accentColor,
+    representativeListTitle: '대표 리스트',
+    representativeRestaurants: [],
+  };
+}
+
 export function AppRoot() {
   const fallbackMyLists = MOCK_DATA_ENABLED ? initialMyLists : [];
   const fallbackFollowerCount = MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS.length : 0;
@@ -267,6 +290,7 @@ export function AppRoot() {
     HomeProfileCardItem[]
   >([]);
   const [recommendedUserProfiles, setRecommendedUserProfiles] = useState<UserProfile[]>([]);
+  const [searchResultUserProfiles, setSearchResultUserProfiles] = useState<UserProfile[]>([]);
   const [selectedMyListId, setSelectedMyListId] = useState<string | null>(null);
   const [selectedUserProfileId, setSelectedUserProfileId] = useState<string | null>(null);
   const [userProfileSource, setUserProfileSource] = useState<UserProfileSource>(null);
@@ -301,7 +325,10 @@ export function AppRoot() {
   const [writeReviewInitialContent, setWriteReviewInitialContent] = useState('');
   const [writeReviewMode, setWriteReviewMode] = useState<'create' | 'edit'>('create');
   const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
-  const visibleUserProfiles = mergeUserProfiles(recommendedUserProfiles, fallbackUserProfiles);
+  const visibleUserProfiles = mergeUserProfiles(
+    mergeUserProfiles(searchResultUserProfiles, recommendedUserProfiles),
+    fallbackUserProfiles,
+  );
 
   useEffect(() => {
     if (!session?.accessToken) {
@@ -1606,6 +1633,7 @@ export function AppRoot() {
         ) : screen === 'search-result' ? (
           <SearchResultScreen
             accessToken={session?.accessToken}
+            myUserId={myUserId}
             query={searchQuery}
             initialTab={searchResultTab}
             onBack={() => {
@@ -1620,9 +1648,16 @@ export function AppRoot() {
             onOpenRestaurantDetail={(restaurantName) =>
               openRestaurantDetail(restaurantName, { type: 'search-result' })
             }
-          onOpenUserProfile={(userId) => {
+          onOpenUserProfile={(user) => {
+            setSearchResultUserProfiles((current) => {
+              if (current.some((item) => item.id === user.id)) {
+                return current;
+              }
+
+              return [...current, createSearchResultUserProfile(user)];
+            });
             setUserProfileSource({ type: 'search-result' });
-            setSelectedUserProfileId(userId);
+            setSelectedUserProfileId(user.id);
             setScreen('user-profile');
           }}
           onSearch={(query) => setSearchQuery(query)}

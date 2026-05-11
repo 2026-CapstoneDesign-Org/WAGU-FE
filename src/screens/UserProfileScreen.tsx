@@ -41,6 +41,7 @@ export function UserProfileScreen({
   );
 
   const hasMetrics = Boolean(profile.temperature || profile.reviewCount || profile.followerCount);
+  const hasRepresentativeRestaurants = profile.representativeRestaurants.length > 0;
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
@@ -82,41 +83,43 @@ export function UserProfileScreen({
             ) : null}
           </View>
 
-          <View style={styles.mainListSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{profile.representativeListTitle}</Text>
-              <View style={styles.representativeBadge}>
-                <Text style={styles.representativeBadgeLabel}>대표</Text>
+          {hasRepresentativeRestaurants ? (
+            <View style={styles.mainListSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{profile.representativeListTitle}</Text>
+                <View style={styles.representativeBadge}>
+                  <Text style={styles.representativeBadgeLabel}>대표</Text>
+                </View>
+              </View>
+
+              <View style={styles.cardGrid}>
+                {profile.representativeRestaurants.map((item, index) => (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => onOpenRestaurantDetail?.(item.name)}
+                    style={styles.card}
+                  >
+                    {restaurantMetaMap.get(item.id)?.imageUri ? (
+                      <Image
+                        resizeMode="cover"
+                        source={{ uri: restaurantMetaMap.get(item.id)?.imageUri ?? undefined }}
+                        style={styles.cardImage}
+                      />
+                    ) : (
+                      <View style={styles.cardImage} />
+                    )}
+                    <View style={styles.cardOverlay} />
+                    <View style={styles.cardTextBlock}>
+                      <Text style={styles.cardTitle}>{`${index + 1}. ${item.name}`}</Text>
+                      <Text ellipsizeMode="tail" numberOfLines={1} style={styles.cardAddress}>
+                        {restaurantMetaMap.get(item.id)?.address || item.address}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))}
               </View>
             </View>
-
-            <View style={styles.cardGrid}>
-              {profile.representativeRestaurants.map((item, index) => (
-                <Pressable
-                  key={item.id}
-                  onPress={() => onOpenRestaurantDetail?.(item.name)}
-                  style={styles.card}
-                >
-                  {restaurantMetaMap.get(item.id)?.imageUri ? (
-                    <Image
-                      resizeMode="cover"
-                      source={{ uri: restaurantMetaMap.get(item.id)?.imageUri ?? undefined }}
-                      style={styles.cardImage}
-                    />
-                  ) : (
-                    <View style={styles.cardImage} />
-                  )}
-                  <View style={styles.cardOverlay} />
-                  <View style={styles.cardTextBlock}>
-                    <Text style={styles.cardTitle}>{`${index + 1}. ${item.name}`}</Text>
-                    <Text ellipsizeMode="tail" numberOfLines={1} style={styles.cardAddress}>
-                      {restaurantMetaMap.get(item.id)?.address || item.address}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          </View>
+          ) : null}
         </ScrollView>
       </View>
     </SafeAreaView>
