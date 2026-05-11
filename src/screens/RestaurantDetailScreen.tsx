@@ -20,11 +20,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import {
   ApiRestaurant,
+  ApiReviewSummary,
   cancelReviewVote,
   deleteReview,
   getRestaurant,
   getRestaurantPhotoUris,
   getRestaurantReviews,
+  getRestaurantReviewSummary,
   searchRestaurants,
   voteReview,
 } from '../api/wagu';
@@ -79,6 +81,14 @@ type RestaurantReviewDisplay = RestaurantReview & {
   isVotePending?: boolean;
 };
 
+type RestaurantReviewSummaryDisplay = {
+  negatives: string[];
+  positives: string[];
+  reviewCount: number;
+  sentiment?: string;
+  summary?: string;
+};
+
 const { width: screenWidth } = Dimensions.get('window');
 
 const HORIZONTAL_PADDING = 16;
@@ -92,7 +102,6 @@ const REVIEW_IMAGE_SIZE = 172;
 const PHOTO_LOAD_BATCH = 10;
 const HERO_HEIGHT = 284;
 const COLLAPSE_TRIGGER = 18;
-const EXPAND_TRIGGER = -18;
 const HERO_TRANSITION_MS = 280;
 
 const tabs: { id: RestaurantDetailTab; label: string }[] = [
@@ -442,6 +451,19 @@ function formatReviewDate(createdAt: string) {
   return `${year}.${month}.${day}`;
 }
 
+function mapReviewSummary(
+  reviewSummary: ApiReviewSummary,
+  fallbackReviewCount: number,
+): RestaurantReviewSummaryDisplay {
+  return {
+    negatives: reviewSummary.negatives ?? [],
+    positives: reviewSummary.positives ?? [],
+    reviewCount: reviewSummary.reviewCount ?? fallbackReviewCount,
+    sentiment: reviewSummary.sentiment,
+    summary: reviewSummary.summary,
+  };
+}
+
 function ReviewCard({
   review,
   onEditReview,
@@ -617,6 +639,7 @@ function BaseTabScroll({
 
 function HomeTabContent({
   restaurantMeta,
+  reviewSummary,
   isLoading,
   hasLoadError,
   scrollEnabled,
@@ -624,6 +647,7 @@ function HomeTabContent({
   onPressMoreMenu,
 }: {
   restaurantMeta: RestaurantMeta;
+  reviewSummary?: RestaurantReviewSummaryDisplay | null;
   isLoading: boolean;
   hasLoadError: boolean;
   onPressMoreMenu: () => void;
@@ -691,6 +715,51 @@ function HomeTabContent({
           />
         ) : null}
       </View>
+
+      {reviewSummary &&
+      (reviewSummary.summary ||
+        reviewSummary.positives.length > 0 ||
+        reviewSummary.negatives.length > 0) ? (
+        <>
+          <View style={styles.fullBleedDividerWrap}>
+            <View style={styles.sectionDivider} />
+          </View>
+
+          <View style={styles.tabInner}>
+            <View style={styles.reviewSummaryCard}>
+              <View style={styles.reviewSummaryHeader}>
+                <Text style={styles.reviewSummaryTitle}>AI 요약</Text>
+              </View>
+
+              {reviewSummary.summary ? (
+                <Text style={styles.reviewSummaryBody}>{reviewSummary.summary}</Text>
+              ) : null}
+
+              {reviewSummary.positives.length > 0 ? (
+                <View style={styles.reviewSummarySection}>
+                  <Text style={styles.reviewSummarySectionTitle}>좋았던 점</Text>
+                  {reviewSummary.positives.slice(0, 3).map((item, index) => (
+                    <Text key={`home-positive-${index}`} style={styles.reviewSummaryBullet}>
+                      • {item}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+
+              {reviewSummary.negatives.length > 0 ? (
+                <View style={styles.reviewSummarySection}>
+                  <Text style={styles.reviewSummarySectionTitle}>아쉬운 점</Text>
+                  {reviewSummary.negatives.slice(0, 3).map((item, index) => (
+                    <Text key={`home-negative-${index}`} style={styles.reviewSummaryBullet}>
+                      • {item}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          </View>
+        </>
+      ) : null}
     </BaseTabScroll>
   );
 }
@@ -806,6 +875,7 @@ function DetailInfoRow({
 
 function ReviewTabContent({
   reviews,
+  reviewSummary,
   reviewSort,
   onChangeSort,
   onEditReview,
@@ -819,6 +889,7 @@ function ReviewTabContent({
   onScroll,
 }: {
   reviews: RestaurantReviewDisplay[];
+  reviewSummary?: RestaurantReviewSummaryDisplay | null;
   reviewSort: ReviewSort;
   onChangeSort: (sort: ReviewSort) => void;
   onEditReview: (reviewId: string, content: string) => void;
@@ -832,6 +903,43 @@ function ReviewTabContent({
   return (
     <BaseTabScroll scrollEnabled={scrollEnabled} onScroll={onScroll}>
       <View style={styles.reviewTabInner}>
+        {reviewSummary &&
+        (reviewSummary.summary ||
+          reviewSummary.positives.length > 0 ||
+          reviewSummary.negatives.length > 0) ? (
+          <View style={styles.reviewSummaryCard}>
+            <View style={styles.reviewSummaryHeader}>
+              <Text style={styles.reviewSummaryTitle}>AI 요약</Text>
+            </View>
+
+            {reviewSummary.summary ? (
+              <Text style={styles.reviewSummaryBody}>{reviewSummary.summary}</Text>
+            ) : null}
+
+            {reviewSummary.positives.length > 0 ? (
+              <View style={styles.reviewSummarySection}>
+                <Text style={styles.reviewSummarySectionTitle}>좋았던 점</Text>
+                {reviewSummary.positives.slice(0, 3).map((item, index) => (
+                  <Text key={`positive-${index}`} style={styles.reviewSummaryBullet}>
+                    • {item}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+
+            {reviewSummary.negatives.length > 0 ? (
+              <View style={styles.reviewSummarySection}>
+                <Text style={styles.reviewSummarySectionTitle}>아쉬운 점</Text>
+                {reviewSummary.negatives.slice(0, 3).map((item, index) => (
+                  <Text key={`negative-${index}`} style={styles.reviewSummaryBullet}>
+                    • {item}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
         <View style={styles.reviewSortRow}>
           <Pressable
             style={[
@@ -934,6 +1042,7 @@ export function RestaurantDetailScreen({
   const [activeTab, setActiveTab] = useState<RestaurantDetailTab>(initialTab);
   const [reviewSort, setReviewSort] = useState<ReviewSort>('latest');
   const [isHeroCollapsed, setIsHeroCollapsed] = useState(false);
+  const [isHeroAnimating, setIsHeroAnimating] = useState(false);
   const [isTabScrollEnabled, setIsTabScrollEnabled] = useState(true);
   const [visiblePhotoCount, setVisiblePhotoCount] = useState(PHOTO_LOAD_BATCH);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
@@ -946,6 +1055,8 @@ export function RestaurantDetailScreen({
   const [reviewVotePendingIds, setReviewVotePendingIds] = useState<Record<string, boolean>>({});
   const [remoteRestaurant, setRemoteRestaurant] = useState<ApiRestaurant | null>(null);
   const [remoteReviews, setRemoteReviews] = useState<RestaurantReview[] | null>(null);
+  const [remoteReviewSummary, setRemoteReviewSummary] =
+    useState<RestaurantReviewSummaryDisplay | null>(null);
   const [isRestaurantLoading, setIsRestaurantLoading] = useState(false);
   const [hasRestaurantLoadError, setHasRestaurantLoadError] = useState(false);
   const [previewImageSizes, setPreviewImageSizes] = useState<
@@ -964,6 +1075,7 @@ export function RestaurantDetailScreen({
   useEffect(() => {
     setActiveTab(initialTab);
     setIsHeroCollapsed(initialTab !== 'home');
+    setIsHeroAnimating(false);
     setIsTabScrollEnabled(true);
     heroProgress.setValue(initialTab === 'home' ? 0 : 1);
     indicatorX.setValue(getTabIndicatorOffset(initialTab));
@@ -973,6 +1085,7 @@ export function RestaurantDetailScreen({
     if (!accessToken) {
       setRemoteRestaurant(null);
       setRemoteReviews(null);
+      setRemoteReviewSummary(null);
       setIsRestaurantLoading(false);
       setHasRestaurantLoadError(false);
       return;
@@ -1001,6 +1114,7 @@ export function RestaurantDetailScreen({
             if (!cancelled) {
               setRemoteRestaurant(null);
               setRemoteReviews([]);
+              setRemoteReviewSummary(null);
               setHasRestaurantLoadError(true);
               setIsRestaurantLoading(false);
             }
@@ -1009,7 +1123,11 @@ export function RestaurantDetailScreen({
 
         try {
           const detail = await getRestaurant(accessToken, Number(matchedCandidate.id));
-          const reviews = await getRestaurantReviews(accessToken, Number(matchedCandidate.id));
+          const restaurantId = Number(matchedCandidate.id);
+          const [reviews, reviewSummary] = await Promise.all([
+            getRestaurantReviews(accessToken, restaurantId),
+            getRestaurantReviewSummary(accessToken, restaurantId).catch(() => null),
+          ]);
 
           if (!cancelled) {
             setRemoteRestaurant(detail);
@@ -1027,17 +1145,24 @@ export function RestaurantDetailScreen({
                 restaurantName: detail.name,
               })),
             );
+            setRemoteReviewSummary(
+              reviewSummary
+                ? mapReviewSummary(reviewSummary, reviews.length)
+                : null,
+            );
           }
         } catch {
           if (!cancelled) {
             setRemoteRestaurant(matchedCandidate);
             setRemoteReviews(null);
+            setRemoteReviewSummary(null);
           }
         }
       } catch {
         if (!cancelled) {
           setRemoteRestaurant(null);
           setRemoteReviews(null);
+          setRemoteReviewSummary(null);
           setHasRestaurantLoadError(true);
         }
       } finally {
@@ -1215,7 +1340,9 @@ export function RestaurantDetailScreen({
 
   const displayReviewCount = restaurantReviewList.length
     ? String(restaurantReviewList.length)
-    : restaurantMeta.reviewCount;
+    : remoteReviewSummary?.reviewCount
+      ? String(remoteReviewSummary.reviewCount)
+      : restaurantMeta.reviewCount;
   const heroMetaParts = [
     restaurantMeta.category,
     restaurantMeta.regionName,
@@ -1357,14 +1484,6 @@ export function RestaurantDetailScreen({
   }, [restaurantName]);
 
   useEffect(() => {
-    return () => {
-      if (transitionTimeoutRef.current) {
-        clearTimeout(transitionTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     previewImages.forEach((photoUri) => {
       if (previewImageSizes[photoUri]) {
         return;
@@ -1388,18 +1507,6 @@ export function RestaurantDetailScreen({
     });
   }, [previewImageSizes, previewImages]);
 
-  const finishHeroTransition = () => {
-    if (transitionTimeoutRef.current) {
-      clearTimeout(transitionTimeoutRef.current);
-    }
-
-    transitionTimeoutRef.current = setTimeout(() => {
-      isHeroTransitioningRef.current = false;
-      setIsTabScrollEnabled(true);
-      transitionTimeoutRef.current = null;
-    }, HERO_TRANSITION_MS);
-  };
-
   const animateIndicatorToTab = (tab: RestaurantDetailTab) => {
     Animated.spring(indicatorX, {
       toValue: getTabIndicatorOffset(tab),
@@ -1409,12 +1516,34 @@ export function RestaurantDetailScreen({
     }).start();
   };
 
-  const runHeroTransition = (collapse: boolean) => {
+  const finishHeroTransition = () => {
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+    }
+
+    transitionTimeoutRef.current = setTimeout(() => {
+      isHeroTransitioningRef.current = false;
+      setIsHeroAnimating(false);
+      setIsTabScrollEnabled(true);
+    }, HERO_TRANSITION_MS);
+  };
+
+  const runHeroTransition = (
+    collapse: boolean,
+    onComplete?: () => void,
+  ) => {
     if (isHeroTransitioningRef.current || isHeroCollapsed === collapse) {
+      onComplete?.();
       return;
     }
 
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+      transitionTimeoutRef.current = null;
+    }
+
     isHeroTransitioningRef.current = true;
+    setIsHeroAnimating(true);
     setIsTabScrollEnabled(false);
     setIsHeroCollapsed(collapse);
 
@@ -1422,7 +1551,15 @@ export function RestaurantDetailScreen({
       toValue: collapse ? 1 : 0,
       duration: HERO_TRANSITION_MS,
       useNativeDriver: false,
-    }).start(() => {
+    }).start(({ finished }) => {
+      if (!finished) {
+        isHeroTransitioningRef.current = false;
+        setIsHeroAnimating(false);
+        setIsTabScrollEnabled(true);
+        return;
+      }
+
+      onComplete?.();
       finishHeroTransition();
     });
   };
@@ -1438,27 +1575,18 @@ export function RestaurantDetailScreen({
     }
 
     if (tab === 'home') {
-      setActiveTab('home');
+      setActiveTab(tab);
       setIsTabScrollEnabled(true);
-      animateIndicatorToTab('home');
+      animateIndicatorToTab(tab);
       return;
     }
 
     if (activeTab === 'home' && !isHeroCollapsed) {
-      isHeroTransitioningRef.current = true;
-      setIsTabScrollEnabled(false);
-      setIsHeroCollapsed(true);
-      Animated.timing(heroProgress, {
-        toValue: 1,
-        duration: HERO_TRANSITION_MS,
-        useNativeDriver: false,
-      }).start(() => {
+      animateIndicatorToTab(tab);
+      runHeroTransition(true, () => {
         setActiveTab(tab);
         setIsTabScrollEnabled(true);
-        isHeroTransitioningRef.current = false;
-        finishHeroTransition();
       });
-      animateIndicatorToTab(tab);
       return;
     }
 
@@ -1473,6 +1601,8 @@ export function RestaurantDetailScreen({
     handlePressTab('menu');
   };
 
+  const isContentScrollEnabled = isTabScrollEnabled && !isHeroAnimating;
+
   const handleTabScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (isHeroTransitioningRef.current) {
       return;
@@ -1485,7 +1615,7 @@ export function RestaurantDetailScreen({
       return;
     }
 
-    if (isHeroCollapsed && offsetY < EXPAND_TRIGGER) {
+    if (isHeroCollapsed && offsetY <= 0) {
       runHeroTransition(false);
     }
   };
@@ -1568,6 +1698,14 @@ export function RestaurantDetailScreen({
   });
 
   const showHero = !isHeroCollapsed;
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
@@ -1696,9 +1834,10 @@ export function RestaurantDetailScreen({
           {activeTab === 'home' ? (
             <HomeTabContent
               restaurantMeta={restaurantMeta}
+              reviewSummary={remoteReviewSummary}
               isLoading={isRestaurantLoading}
               hasLoadError={hasRestaurantLoadError}
-              scrollEnabled={isTabScrollEnabled}
+              scrollEnabled={isContentScrollEnabled}
               onScroll={handleTabScroll}
               onPressMoreMenu={handlePressMoreMenu}
             />
@@ -1706,15 +1845,16 @@ export function RestaurantDetailScreen({
           {activeTab === 'menu' ? (
             <MenuTabContent
               restaurantMeta={restaurantMeta}
-              scrollEnabled={isTabScrollEnabled}
+              scrollEnabled={isContentScrollEnabled}
               onScroll={handleTabScroll}
             />
           ) : null}
           {activeTab === 'review' ? (
-            <ReviewTabContent
-              reviews={restaurantReviewList}
-              reviewSort={reviewSort}
-              onChangeSort={setReviewSort}
+          <ReviewTabContent
+            reviews={restaurantReviewList}
+            reviewSummary={remoteReviewSummary}
+            reviewSort={reviewSort}
+            onChangeSort={setReviewSort}
               onEditReview={handleEditReview}
               onToggleFollow={handleToggleReviewFollow}
               onToggleReaction={handleToggleReviewReaction}
@@ -1722,14 +1862,14 @@ export function RestaurantDetailScreen({
               onOpenImagePreview={openPhotoPreview}
               onOpenUserProfile={onOpenUserProfile}
               onPressWriteReview={handlePressWriteReview}
-              scrollEnabled={isTabScrollEnabled}
+              scrollEnabled={isContentScrollEnabled}
               onScroll={handleTabScroll}
             />
           ) : null}
           {activeTab === 'photo' ? (
             <PhotoGalleryTabContent
               visiblePhotoUris={visiblePhotoUris}
-              scrollEnabled={isTabScrollEnabled}
+              scrollEnabled={isContentScrollEnabled}
               onOpenPreview={openPhotoPreview}
               onScroll={handlePhotoTabScroll}
             />
@@ -2083,6 +2223,53 @@ const styles = StyleSheet.create({
   reviewTabInner: {
     paddingHorizontal: HORIZONTAL_PADDING,
     gap: 20,
+  },
+  reviewSummaryCard: {
+    padding: 18,
+    borderRadius: 16,
+    backgroundColor: '#FAFAFA',
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    gap: 14,
+  },
+  reviewSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  reviewSummaryTitle: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  reviewSummaryMeta: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+    color: '#888888',
+  },
+  reviewSummaryBody: {
+    fontSize: 14,
+    lineHeight: 22,
+    fontWeight: '400',
+    color: '#333333',
+  },
+  reviewSummarySection: {
+    gap: 8,
+  },
+  reviewSummarySectionTitle: {
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  reviewSummaryBullet: {
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: '400',
+    color: '#666666',
   },
   reviewSortRow: {
     flexDirection: 'row',

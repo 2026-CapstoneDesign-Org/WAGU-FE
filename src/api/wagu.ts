@@ -80,6 +80,16 @@ export type ApiReview = {
   userId: number;
 };
 
+export type ApiReviewSummary = {
+  negatives?: string[];
+  positives?: string[];
+  restaurantId: number;
+  restaurantName: string;
+  reviewCount: number;
+  sentiment?: string;
+  summary?: string;
+};
+
 type ApiReviewVoteRequest = {
   voteType: 'DISLIKE' | 'LIKE';
 };
@@ -182,6 +192,12 @@ export async function getListRecommendations(token: string) {
 
 export async function getRestaurantReviews(token: string, restaurantId: number) {
   return apiRequest<ApiReview[]>(`/restaurants/${restaurantId}/reviews`, {
+    token,
+  });
+}
+
+export async function getRestaurantReviewSummary(token: string, restaurantId: number) {
+  return apiRequest<ApiReviewSummary>(`/restaurants/${restaurantId}/reviews/summary`, {
     token,
   });
 }
