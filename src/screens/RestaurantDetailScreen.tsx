@@ -38,6 +38,7 @@ import {
 import ClockIcon from '../../assets/icons/clock.svg';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
 import LocationIcon from '../../assets/icons/location.svg';
+import ParkingIcon from '../../assets/icons/parking.svg';
 import PhoneIcon from '../../assets/icons/phone.svg';
 import ShopIcon from '../../assets/icons/shop.svg';
 import StarIcon from '../../assets/icons/star.svg';
@@ -74,6 +75,8 @@ type RestaurantMeta = {
   openingHoursCollapsed?: string;
   openingHoursRows?: ApiBusinessHoursDisplayRow[];
   openingHoursStatus?: string;
+  parkingLots?: { distanceText?: string; name: string }[];
+  parkingSummary?: string;
   phone: string;
   features: string;
   menuItems: RestaurantMenuItem[];
@@ -181,6 +184,8 @@ const emptyRestaurantMeta: RestaurantMeta = {
   openingHours: '',
   openingHoursRows: [],
   phone: '',
+  parkingLots: [],
+  parkingSummary: '',
   features: '',
   menuItems: [],
 };
@@ -491,6 +496,47 @@ function buildFeaturesText(restaurant?: ApiRestaurant) {
   ];
 
   return Array.from(new Set(items)).join(', ');
+}
+
+function formatParkingDistance(distanceMeters?: number) {
+  if (typeof distanceMeters !== 'number' || !Number.isFinite(distanceMeters)) {
+    return '';
+  }
+
+  return distanceMeters >= 1000
+    ? `${(distanceMeters / 1000).toFixed(1)}km`
+    : `${Math.round(distanceMeters)}m`;
+}
+
+function buildParkingLots(restaurant?: ApiRestaurant) {
+  if (!restaurant?.nearbyParkingLots?.length) {
+    return [];
+  }
+
+  return restaurant.nearbyParkingLots
+    .map((lot) => ({
+      distanceText: formatParkingDistance(lot.distanceMeters),
+      name: lot.parkingLotName?.trim() || lot.roadAddress?.trim() || lot.lotAddress?.trim() || '',
+    }))
+    .filter((lot) => Boolean(lot.name))
+    .slice(0, 5);
+}
+
+function buildParkingSummary(restaurant?: ApiRestaurant) {
+  if (!restaurant) {
+    return '';
+  }
+
+  const availability =
+    typeof restaurant.parkingAvailable === 'boolean'
+      ? restaurant.parkingAvailable
+        ? '주차 가능'
+        : '주차 정보 없음'
+      : '';
+  const lots = buildParkingLots(restaurant);
+  const nearbyText = lots.length > 0 ? `근처 주차장 ${lots.length}곳` : '';
+
+  return [availability, nearbyText].filter(Boolean).join(' · ');
 }
 
 function MenuList({ menuItems }: { menuItems: RestaurantMenuItem[] }) {
@@ -822,8 +868,18 @@ function HomeTabContent({
 } & TabScrollProps) {
   const [isHoursExpanded, setIsHoursExpanded] = useState(false);
   const [isFeaturesExpanded, setIsFeaturesExpanded] = useState(false);
+  const [isParkingExpanded, setIsParkingExpanded] = useState(false);
   const openingHoursRows = restaurantMeta.openingHoursRows ?? [];
   const openingHoursStatus = restaurantMeta.openingHoursStatus?.trim();
+  const parkingLots = restaurantMeta.parkingLots ?? [];
+  const hasParkingLots = parkingLots.length > 0;
+  const parkingText = hasParkingLots
+    ? isParkingExpanded
+      ? parkingLots
+          .map((lot) => [lot.name, lot.distanceText].filter(Boolean).join(' · '))
+          .join('\n')
+      : restaurantMeta.parkingSummary || [parkingLots[0]?.name, parkingLots[0]?.distanceText].filter(Boolean).join(' · ')
+    : restaurantMeta.parkingSummary || '';
   const hasOpeningHoursRows = openingHoursRows.length > 0;
   const todayOpeningHoursText =
     openingHoursRows.find((row) => row.isToday && (row.dayText || row.timeText || row.subTexts?.length || row.isClosed)) ||
@@ -848,6 +904,7 @@ function HomeTabContent({
       Boolean(restaurantMeta.address) ||
     Boolean(openingHoursText) ||
       Boolean(restaurantMeta.phone) ||
+      Boolean(parkingText) ||
       Boolean(restaurantMeta.features) ||
       Boolean(restaurantMeta.regionName);
   const hasMenuItems = restaurantMeta.menuItems.length > 0;
@@ -908,6 +965,15 @@ function HomeTabContent({
               onPress={handlePressCall}
               singleLine
               text={restaurantMeta.phone}
+            />
+            <DetailInfoRow
+              actionElement={
+                hasParkingLots ? <ChevronIcon direction={isParkingExpanded ? 'up' : 'down'} /> : undefined
+              }
+              icon={<ParkingIcon width={18} height={18} color="#C4C4C4" />}
+              onPress={hasParkingLots ? () => setIsParkingExpanded((current) => !current) : undefined}
+              singleLine={!isParkingExpanded}
+              text={parkingText}
             />
             <DetailInfoRow
               actionElement={
@@ -1500,6 +1566,8 @@ export function RestaurantDetailScreen({
         const remoteOpeningHoursCollapsed = buildOpeningHoursCollapsedText(remoteRestaurant ?? undefined);
         const remoteOpeningHoursRows = buildOpeningHoursRows(remoteRestaurant ?? undefined);
         const remoteOpeningHoursStatus = buildOpeningHoursStatus(remoteRestaurant ?? undefined);
+        const remoteParkingLots = buildParkingLots(remoteRestaurant ?? undefined);
+        const remoteParkingSummary = buildParkingSummary(remoteRestaurant ?? undefined);
         const remoteFeatures = buildFeaturesText(remoteRestaurant ?? undefined);
       const remoteAddress =
         remoteRestaurant?.roadAddress?.trim() ||
@@ -1526,6 +1594,8 @@ export function RestaurantDetailScreen({
                 openingHoursCollapsed: matchedRestaurant.openingHours,
                 openingHoursRows: [],
                 openingHoursStatus: '',
+                parkingLots: [],
+                parkingSummary: '',
                 phone: matchedRestaurant.phone,
                 features: matchedRestaurant.features,
                 menuItems: matchedRestaurant.menuItems,
@@ -1541,6 +1611,8 @@ export function RestaurantDetailScreen({
                 openingHoursCollapsed: remoteOpeningHoursCollapsed,
                 openingHoursRows: remoteOpeningHoursRows,
                 openingHoursStatus: remoteOpeningHoursStatus,
+                parkingLots: remoteParkingLots,
+                parkingSummary: remoteParkingSummary,
                 phone: remotePhone,
                 features: remoteFeatures,
                 menuItems: remoteMenuItems,
@@ -1587,6 +1659,14 @@ export function RestaurantDetailScreen({
           openingHoursStatus:
             remoteOpeningHoursStatus ||
             matchedMeta?.openingHoursStatus ||
+            '',
+          parkingLots:
+            remoteParkingLots.length > 0
+              ? remoteParkingLots
+              : matchedMeta?.parkingLots || [],
+          parkingSummary:
+            remoteParkingSummary ||
+            matchedMeta?.parkingSummary ||
             '',
           phone:
             remotePhone ||
@@ -1946,6 +2026,10 @@ export function RestaurantDetailScreen({
     handlePressTab('menu');
   };
 
+  const handlePressPhotoGallery = () => {
+    handlePressTab('photo');
+  };
+
   const isContentScrollEnabled = isTabScrollEnabled && !isHeroAnimating;
 
   const handleTabScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -2115,19 +2199,23 @@ export function RestaurantDetailScreen({
 
           <View style={styles.galleryWrap}>
             {hasHeroPhotos ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.galleryContent}
-              >
-                {restaurantMeta.photoUris.slice(0, 5).map((photoUri, index) => (
-                  <Image
-                    key={`${photoUri}-${index}`}
-                    source={{ uri: photoUri }}
-                    style={styles.galleryCard}
-                  />
-                ))}
-              </ScrollView>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.galleryContent}
+                >
+                  {restaurantMeta.photoUris.slice(0, 5).map((photoUri, index) => (
+                    <Pressable
+                      key={`${photoUri}-${index}`}
+                      onPress={handlePressPhotoGallery}
+                    >
+                      <Image
+                        source={{ uri: photoUri }}
+                        style={styles.galleryCard}
+                      />
+                    </Pressable>
+                  ))}
+                </ScrollView>
             ) : (
               <View style={styles.galleryPlaceholderWrap}>
                 <View style={styles.galleryPlaceholderCard}>
