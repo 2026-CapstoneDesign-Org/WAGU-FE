@@ -4,13 +4,16 @@ import {
   Animated,
   Dimensions,
   Image,
+  Linking,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
   ScrollView,
+  StyleProp,
   StyleSheet,
   Text,
+  TextStyle,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -19,7 +22,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import {
+  ApiBusinessHoursDisplayRow,
   ApiRestaurant,
+  ApiRestaurantMenuItem,
   ApiReviewSummary,
   cancelReviewVote,
   deleteReview,
@@ -66,6 +71,9 @@ type RestaurantMeta = {
   address: string;
   regionName?: string;
   openingHours: string;
+  openingHoursCollapsed?: string;
+  openingHoursRows?: ApiBusinessHoursDisplayRow[];
+  openingHoursStatus?: string;
   phone: string;
   features: string;
   menuItems: RestaurantMenuItem[];
@@ -171,6 +179,7 @@ const emptyRestaurantMeta: RestaurantMeta = {
   address: '',
   regionName: '',
   openingHours: '',
+  openingHoursRows: [],
   phone: '',
   features: '',
   menuItems: [],
@@ -327,6 +336,163 @@ const restaurantMetaByName: Record<string, Partial<RestaurantMeta>> = {
   },
 };
 
+function formatPriceText(item: ApiRestaurantMenuItem) {
+  if (item.priceText?.trim()) {
+    return item.priceText.trim();
+  }
+
+  if (typeof item.priceValue === 'number' && Number.isFinite(item.priceValue)) {
+    return `${Math.round(item.priceValue).toLocaleString('ko-KR')}원`;
+  }
+
+  return '';
+}
+
+function mapRemoteMenuItems(
+  remoteMenus?: ApiRestaurantMenuItem[],
+): RestaurantMenuItem[] {
+  if (!remoteMenus?.length) {
+    return [];
+  }
+
+  return [...remoteMenus]
+    .sort((left, right) => (left.displayOrder ?? 0) - (right.displayOrder ?? 0))
+    .map((item, index) => ({
+      id: String(item.id ?? `remote-menu-${index}`),
+      name: item.menuName?.trim() || `메뉴 ${index + 1}`,
+      description: item.description?.trim() || undefined,
+      price: formatPriceText(item),
+    }));
+}
+
+function buildOpeningHoursText(restaurant?: ApiRestaurant) {
+  if (!restaurant) {
+    return '';
+  }
+
+  const statusLine = restaurant.currentBusinessStatus?.label?.trim();
+  const summaryLine = restaurant.businessHoursDisplay?.summaryLine?.trim();
+  const displayStatusLine = restaurant.businessHoursDisplay?.statusLine?.trim();
+  const freeText = restaurant.businessHours?.freeText?.trim();
+
+  return [statusLine || displayStatusLine, summaryLine, freeText]
+    .filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index)
+    .join(' · ');
+}
+
+function formatOpeningHoursRow(row: ApiBusinessHoursDisplayRow) {
+  const parts = [row.timeText?.trim(), ...(row.subTexts ?? []).map((item) => item.trim()).filter(Boolean)];
+  const body = row.isClosed ? '휴무' : parts.join(' · ');
+
+  return [row.dayText?.trim(), body].filter(Boolean).join(' ');
+}
+
+function formatOpeningHoursRowCompact(row: ApiBusinessHoursDisplayRow) {
+  const parts = [row.timeText?.trim(), ...(row.subTexts ?? []).map((item) => item.trim()).filter(Boolean)];
+  return row.isClosed ? '휴무' : parts.join(' · ');
+}
+
+function buildOpeningHoursRows(restaurant?: ApiRestaurant) {
+  if (!restaurant?.businessHoursDisplay?.rows?.length) {
+    return [];
+  }
+
+  return restaurant.businessHoursDisplay.rows
+    .map((row) => ({
+      ...row,
+      dayText: row.dayText?.trim(),
+      subTexts: row.subTexts?.map((item) => item.trim()).filter(Boolean),
+      timeText: row.timeText?.trim(),
+    }))
+    .filter((row) => Boolean(row.dayText || row.timeText || row.subTexts?.length || row.isClosed));
+}
+
+function buildOpeningHoursStatus(restaurant?: ApiRestaurant) {
+  if (!restaurant) {
+    return '';
+  }
+
+  const status = restaurant.currentBusinessStatus?.status?.trim().toUpperCase() || '';
+  const label = restaurant.currentBusinessStatus?.label?.trim() || '';
+  const reason = restaurant.currentBusinessStatus?.reason?.trim() || '';
+  const time = restaurant.currentBusinessStatus?.time?.trim() || '';
+  const summaryStatus = restaurant.businessHoursDisplay?.statusLine?.trim() || '';
+
+  const isBreakTime =
+    status.includes('BREAK') ||
+    label.includes('브레이크') ||
+    reason.includes('브레이크');
+  const isBeforeOpen =
+    status.includes('BEFORE') ||
+    status.includes('PREOPEN') ||
+    label.includes('영업 전') ||
+    label.includes('영업준비') ||
+    reason.includes('영업 전');
+  const isOpen =
+    restaurant.currentBusinessStatus?.isOpen === true ||
+    status === 'OPEN' ||
+    status.includes('OPEN_NOW') ||
+    label.includes('영업 중');
+  const isClosed =
+    status.includes('CLOSED') ||
+    label.includes('영업 종료') ||
+    reason.includes('영업 종료');
+
+  if (isBreakTime) {
+    return '브레이크타임';
+  }
+
+  if (isBeforeOpen) {
+    return '영업 전';
+  }
+
+  if (isOpen) {
+    return '영업중';
+  }
+
+  if (isClosed) {
+    return '영업 종료';
+  }
+
+  return label || summaryStatus || reason || time;
+}
+
+function buildOpeningHoursCollapsedText(restaurant?: ApiRestaurant) {
+  if (!restaurant) {
+    return '';
+  }
+
+  const statusLabel = buildOpeningHoursStatus(restaurant);
+  const todayRow =
+    restaurant.businessHoursDisplay?.rows?.find(
+      (row) => row.isToday && (row.dayText || row.timeText || row.subTexts?.length || row.isClosed),
+    ) || restaurant.businessHoursDisplay?.rows?.[0];
+  const todayTimeText = todayRow ? formatOpeningHoursRowCompact(todayRow) : '';
+
+  return [statusLabel, todayTimeText].filter(Boolean).join(' · ');
+}
+
+function buildFeaturesText(restaurant?: ApiRestaurant) {
+  if (!restaurant) {
+    return '';
+  }
+
+  const convenienceItems = restaurant.conveniences ?? [];
+  const tagItems = (restaurant.additionalInfoTags ?? [])
+    .map((tag) => tag.tagName?.trim())
+    .filter((value): value is string => Boolean(value));
+
+  const items = [
+    ...convenienceItems,
+    ...(typeof restaurant.parkingAvailable === 'boolean'
+      ? [restaurant.parkingAvailable ? '주차 가능' : '주차 정보 없음']
+      : []),
+    ...tagItems.slice(0, 3),
+  ];
+
+  return Array.from(new Set(items)).join(', ');
+}
+
 function MenuList({ menuItems }: { menuItems: RestaurantMenuItem[] }) {
   return (
     <View style={styles.menuSection}>
@@ -334,7 +500,9 @@ function MenuList({ menuItems }: { menuItems: RestaurantMenuItem[] }) {
         <View key={item.id}>
           <View style={styles.menuItem}>
             <Text style={styles.menuName}>{item.name}</Text>
-            <Text style={styles.menuDescription}>{item.description}</Text>
+            {item.description ? (
+              <Text style={styles.menuDescription}>{item.description}</Text>
+            ) : null}
             <Text style={styles.menuPrice}>{item.price}</Text>
           </View>
           {index < menuItems.length - 1 ? <View style={styles.menuDivider} /> : null}
@@ -652,13 +820,67 @@ function HomeTabContent({
   hasLoadError: boolean;
   onPressMoreMenu: () => void;
 } & TabScrollProps) {
+  const [isHoursExpanded, setIsHoursExpanded] = useState(false);
+  const [isFeaturesExpanded, setIsFeaturesExpanded] = useState(false);
+  const openingHoursRows = restaurantMeta.openingHoursRows ?? [];
+  const openingHoursStatus = restaurantMeta.openingHoursStatus?.trim();
+  const hasOpeningHoursRows = openingHoursRows.length > 0;
+  const todayOpeningHoursText =
+    openingHoursRows.find((row) => row.isToday && (row.dayText || row.timeText || row.subTexts?.length || row.isClosed)) ||
+    openingHoursRows[0];
+  const collapsedOpeningHoursText =
+    restaurantMeta.openingHoursCollapsed ||
+    (todayOpeningHoursText
+      ? [openingHoursStatus, formatOpeningHoursRowCompact(todayOpeningHoursText)].filter(Boolean).join(' · ')
+      : restaurantMeta.openingHours);
+  const expandedOpeningHoursText = [
+    openingHoursStatus,
+    ...openingHoursRows.map((row) => formatOpeningHoursRow(row)).filter(Boolean),
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const openingHoursText = hasOpeningHoursRows
+    ? isHoursExpanded
+      ? expandedOpeningHoursText
+      : collapsedOpeningHoursText
+    : restaurantMeta.openingHours;
   const hasInfo =
-    Boolean(restaurantMeta.address) ||
-    Boolean(restaurantMeta.openingHours) ||
-    Boolean(restaurantMeta.phone) ||
-    Boolean(restaurantMeta.features) ||
-    Boolean(restaurantMeta.regionName);
+      Boolean(restaurantMeta.address) ||
+    Boolean(openingHoursText) ||
+      Boolean(restaurantMeta.phone) ||
+      Boolean(restaurantMeta.features) ||
+      Boolean(restaurantMeta.regionName);
   const hasMenuItems = restaurantMeta.menuItems.length > 0;
+  const phoneNumber = restaurantMeta.phone.trim();
+
+  const handlePressCall = () => {
+    if (!phoneNumber) {
+      return;
+    }
+
+    Alert.alert('전화 걸기', `${phoneNumber}로 전화를 걸까요?`, [
+      {
+        text: '취소',
+        style: 'cancel',
+      },
+      {
+        text: '전화',
+        onPress: () => {
+          void (async () => {
+            const telUrl = `tel:${phoneNumber.replace(/[^0-9+]/g, '')}`;
+            const canOpen = await Linking.canOpenURL(telUrl);
+
+            if (!canOpen) {
+              Alert.alert('안내', '이 기기에서는 전화를 연결할 수 없어요.');
+              return;
+            }
+
+            await Linking.openURL(telUrl);
+          })();
+        },
+      },
+    ]);
+  };
 
   return (
     <BaseTabScroll scrollEnabled={scrollEnabled} onScroll={onScroll}>
@@ -670,15 +892,30 @@ function HomeTabContent({
               text={restaurantMeta.address}
             />
             <DetailInfoRow
+              actionElement={
+                hasOpeningHoursRows ? <ChevronIcon direction={isHoursExpanded ? 'up' : 'down'} /> : undefined
+              }
               icon={<ClockIcon width={18} height={18} color="#C4C4C4" />}
-              text={restaurantMeta.openingHours}
+              onPress={hasOpeningHoursRows ? () => setIsHoursExpanded((current) => !current) : undefined}
+              singleLine={!isHoursExpanded}
+              text={openingHoursText}
             />
             <DetailInfoRow
               icon={<PhoneIcon width={18} height={18} color="#C4C4C4" />}
+              actionLabel="전화"
+              actionLabelStyle={styles.phoneActionLabel}
+              inlineAction
+              onPress={handlePressCall}
+              singleLine
               text={restaurantMeta.phone}
             />
             <DetailInfoRow
+              actionElement={
+                <ChevronIcon direction={isFeaturesExpanded ? 'up' : 'down'} />
+              }
               icon={<ShopIcon width={18} height={18} color="#C4C4C4" />}
+              onPress={() => setIsFeaturesExpanded((current) => !current)}
+              singleLine={!isFeaturesExpanded}
               text={restaurantMeta.features || restaurantMeta.regionName || ''}
             />
           </View>
@@ -761,6 +998,26 @@ function HomeTabContent({
         </>
       ) : null}
     </BaseTabScroll>
+  );
+}
+
+function ChevronIcon({
+  color = '#8A8A8A',
+  direction,
+}: {
+  color?: string;
+  direction: 'down' | 'up';
+}) {
+  return (
+    <Svg width={10} height={6} viewBox="0 0 10 6" fill="none">
+      <Path
+        d={direction === 'down' ? 'M1 1L5 5L9 1' : 'M1 5L5 1L9 5'}
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
   );
 }
 
@@ -855,22 +1112,65 @@ function EmptySectionState({
 }
 
 function DetailInfoRow({
+  actionElement,
+  actionLabel,
+  actionLabelStyle,
   icon,
+  inlineAction = false,
+  onPress,
+  singleLine = false,
   text,
 }: {
+  actionElement?: React.ReactNode;
+  actionLabel?: string;
+  actionLabelStyle?: StyleProp<TextStyle>;
   icon: React.ReactNode;
+  inlineAction?: boolean;
+  onPress?: () => void;
+  singleLine?: boolean;
   text: string;
 }) {
   if (!text) {
     return null;
   }
 
-  return (
+  const resolvedInlineActionLabel = inlineAction ? '전화' : actionLabel;
+
+  const content = (
     <View style={styles.infoRow}>
       {icon}
-      <Text style={styles.infoText}>{text}</Text>
+      <View style={styles.infoTextWrap}>
+        {inlineAction && resolvedInlineActionLabel ? (
+          <Text
+            style={styles.infoText}
+            numberOfLines={singleLine ? 1 : undefined}
+            ellipsizeMode={singleLine ? 'tail' : undefined}
+          >
+            {text}
+            <Text style={[styles.infoActionLabel, actionLabelStyle]}>{'   '}{resolvedInlineActionLabel}</Text>
+          </Text>
+        ) : (
+          <Text
+            style={styles.infoText}
+            numberOfLines={singleLine ? 1 : undefined}
+            ellipsizeMode={singleLine ? 'tail' : undefined}
+          >
+            {text}
+          </Text>
+        )}
+      </View>
+      {!inlineAction && actionElement ? <View style={styles.infoActionIconWrap}>{actionElement}</View> : null}
+      {!inlineAction && actionLabel ? (
+        <Text style={[styles.infoActionLabel, actionLabelStyle]}>{actionLabel}</Text>
+      ) : null}
     </View>
   );
+
+  if (!onPress) {
+    return content;
+  }
+
+  return <Pressable onPress={onPress}>{content}</Pressable>;
 }
 
 function ReviewTabContent({
@@ -1194,35 +1494,63 @@ export function RestaurantDetailScreen({
             : undefined)
         : undefined;
       const baseRestaurantMeta = MOCK_DATA_ENABLED ? defaultRestaurantMeta : emptyRestaurantMeta;
-      const remotePhotoUris = remoteRestaurant ? getRestaurantPhotoUris(remoteRestaurant) : [];
+        const remotePhotoUris = remoteRestaurant ? getRestaurantPhotoUris(remoteRestaurant) : [];
+        const remoteMenuItems = mapRemoteMenuItems(remoteRestaurant?.menus);
+        const remoteOpeningHours = buildOpeningHoursText(remoteRestaurant ?? undefined);
+        const remoteOpeningHoursCollapsed = buildOpeningHoursCollapsedText(remoteRestaurant ?? undefined);
+        const remoteOpeningHoursRows = buildOpeningHoursRows(remoteRestaurant ?? undefined);
+        const remoteOpeningHoursStatus = buildOpeningHoursStatus(remoteRestaurant ?? undefined);
+        const remoteFeatures = buildFeaturesText(remoteRestaurant ?? undefined);
+      const remoteAddress =
+        remoteRestaurant?.roadAddress?.trim() ||
+        remoteRestaurant?.address?.trim() ||
+        remoteRestaurant?.lotAddress?.trim() ||
+        '';
+      const remotePhone = remoteRestaurant?.phoneNumber?.trim() || '';
+      const remoteCategory =
+        remoteRestaurant?.primaryCategoryName?.trim() ||
+        remoteRestaurant?.categoryName?.trim() ||
+        remoteRestaurant?.categories?.[0] ||
+        remoteRestaurant?.regionName ||
+        '';
 
       return {
         ...baseRestaurantMeta,
         ...(matchedRestaurant
           ? {
               category: matchedRestaurant.category,
-              photoUris: matchedRestaurant.photoUris,
-              reviewCount: matchedRestaurant.reviewCount,
-              address: matchedRestaurant.address,
-              openingHours: matchedRestaurant.openingHours,
-              phone: matchedRestaurant.phone,
-              features: matchedRestaurant.features,
-              menuItems: matchedRestaurant.menuItems,
+                photoUris: matchedRestaurant.photoUris,
+                reviewCount: matchedRestaurant.reviewCount,
+                address: matchedRestaurant.address,
+                openingHours: matchedRestaurant.openingHours,
+                openingHoursCollapsed: matchedRestaurant.openingHours,
+                openingHoursRows: [],
+                openingHoursStatus: '',
+                phone: matchedRestaurant.phone,
+                features: matchedRestaurant.features,
+                menuItems: matchedRestaurant.menuItems,
             }
           : {}),
         ...(remoteRestaurant
           ? {
-              category: remoteRestaurant.categories?.[0] ?? remoteRestaurant.regionName,
-              photoUris: remotePhotoUris,
-              address: remoteRestaurant.address,
-              regionName: remoteRestaurant.regionName,
+              category: remoteCategory,
+                photoUris: remotePhotoUris,
+                address: remoteAddress,
+                regionName: remoteRestaurant.regionName,
+                openingHours: remoteOpeningHours,
+                openingHoursCollapsed: remoteOpeningHoursCollapsed,
+                openingHoursRows: remoteOpeningHoursRows,
+                openingHoursStatus: remoteOpeningHoursStatus,
+                phone: remotePhone,
+                features: remoteFeatures,
+                menuItems: remoteMenuItems,
             }
           : {}),
         ...matchedMeta,
         category:
-          remoteRestaurant?.categories?.[0] ??
-          matchedRestaurant?.category ??
-          matchedMeta?.category ??
+          remoteCategory ||
+          matchedRestaurant?.category ||
+          matchedMeta?.category ||
           baseRestaurantMeta.category,
         photoUris:
           (remotePhotoUris.length ? remotePhotoUris : undefined) ??
@@ -1234,27 +1562,44 @@ export function RestaurantDetailScreen({
           matchedMeta?.reviewCount ??
           baseRestaurantMeta.reviewCount,
         address:
-          remoteRestaurant?.address ??
-          matchedRestaurant?.address ??
-          matchedMeta?.address ??
+          remoteAddress ||
+          matchedRestaurant?.address ||
+          matchedMeta?.address ||
           baseRestaurantMeta.address,
         regionName:
           remoteRestaurant?.regionName ??
           matchedMeta?.regionName ??
           baseRestaurantMeta.regionName,
-        openingHours:
-          matchedRestaurant?.openingHours ??
-          matchedMeta?.openingHours ??
-          baseRestaurantMeta.openingHours,
-        phone:
-          matchedRestaurant?.phone ??
-          matchedMeta?.phone ??
+          openingHours:
+            remoteOpeningHours ||
+            matchedRestaurant?.openingHours ||
+            matchedMeta?.openingHours ||
+            baseRestaurantMeta.openingHours,
+          openingHoursCollapsed:
+            remoteOpeningHoursCollapsed ||
+            matchedMeta?.openingHoursCollapsed ||
+            matchedRestaurant?.openingHours ||
+            baseRestaurantMeta.openingHours,
+          openingHoursRows:
+            remoteOpeningHoursRows.length > 0
+              ? remoteOpeningHoursRows
+              : matchedMeta?.openingHoursRows || [],
+          openingHoursStatus:
+            remoteOpeningHoursStatus ||
+            matchedMeta?.openingHoursStatus ||
+            '',
+          phone:
+            remotePhone ||
+          matchedRestaurant?.phone ||
+          matchedMeta?.phone ||
           baseRestaurantMeta.phone,
         features:
-          matchedRestaurant?.features ??
-          matchedMeta?.features ??
+          remoteFeatures ||
+          matchedRestaurant?.features ||
+          matchedMeta?.features ||
           baseRestaurantMeta.features,
         menuItems:
+          (remoteMenuItems.length ? remoteMenuItems : undefined) ??
           matchedRestaurant?.menuItems ??
           matchedMeta?.menuItems ??
           baseRestaurantMeta.menuItems,
@@ -2125,6 +2470,37 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '500',
     color: '#000000',
+  },
+  infoTextWrap: {
+    flex: 1,
+  },
+  infoInlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
+  },
+  infoInlineText: {
+    flexShrink: 0,
+    flexGrow: 0,
+  },
+  infoActionLabel: {
+    marginLeft: 6,
+    fontSize: 12,
+    lineHeight: 12,
+    fontWeight: '600',
+    color: '#8A8A8A',
+  },
+  infoActionIconWrap: {
+    marginLeft: 6,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  phoneActionLabel: {
+    color: '#F92A1D',
+    marginLeft: 10,
+    fontSize: 13,
+    lineHeight: 16,
   },
   linkText: {
     color: '#1427FF',

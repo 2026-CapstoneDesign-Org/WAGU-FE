@@ -1,7 +1,7 @@
 export type RestaurantMenuItem = {
+  description?: string;
   id: string;
   name: string;
-  description: string;
   price: string;
 };
 

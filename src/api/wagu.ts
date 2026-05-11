@@ -7,22 +7,108 @@ export type AuthProvider = 'google' | 'kakao' | 'naver';
 
 export type ApiRestaurant = {
   address: string;
+  additionalInfoTags?: ApiRestaurantTag[];
+  businessHours?: ApiRestaurantBusinessHours;
+  businessHoursDisplay?: ApiRestaurantBusinessHoursDisplay;
   categories?: string[];
+  categoryName?: string;
+  conveniences?: string[];
+  currentBusinessStatus?: ApiRestaurantCurrentBusinessStatus;
   id: number;
   imageUrl?: string;
   imageUrls?: string[];
   lat?: number;
   lng?: number;
+  lotAddress?: string;
+  menus?: ApiRestaurantMenuItem[];
   name: string;
+  nearbyParkingLots?: ApiParkingLot[];
+  parkingAvailable?: boolean;
+  phoneNumber?: string;
   photoUrls?: string[];
   photos?: ApiRestaurantPhoto[];
+  primaryCategoryName?: string;
   regionName: string;
+  roadAddress?: string;
 };
 
 export type ApiRestaurantPhoto = {
   displayOrder?: number;
   imageUrl?: string;
   source?: string;
+};
+
+export type ApiRestaurantMenuItem = {
+  description?: string;
+  displayOrder?: number;
+  id?: number;
+  menuName?: string;
+  priceText?: string;
+  priceValue?: number;
+};
+
+export type ApiRestaurantTag = {
+  isPrimary?: boolean;
+  matchedMenuCount?: number;
+  parentTagKey?: string;
+  tagId?: number;
+  tagKey?: string;
+  tagName?: string;
+};
+
+export type ApiRestaurantCurrentBusinessStatus = {
+  checkedAt?: string;
+  day?: string;
+  isOpen?: boolean;
+  label?: string;
+  reason?: string;
+  status?: string;
+  time?: string;
+};
+
+export type ApiBusinessHoursDisplayRow = {
+  dayText?: string;
+  isClosed?: boolean;
+  isToday?: boolean;
+  subTexts?: string[];
+  timeText?: string;
+};
+
+export type ApiRestaurantBusinessHoursDisplay = {
+  noticeText?: string;
+  rows?: ApiBusinessHoursDisplayRow[];
+  statusLine?: string;
+  summaryLine?: string;
+};
+
+export type ApiRestaurantBusinessHours = {
+  comingIrregularClosedDays?: unknown[];
+  comingRegularClosedDays?: string;
+  days?: unknown[];
+  freeText?: string;
+  source?: string;
+};
+
+export type ApiParkingLot = {
+  additionalUnitFee?: number;
+  additionalUnitTime?: number;
+  alternateNoDivision?: string;
+  basicParkingFee?: number;
+  basicParkingTime?: number;
+  distanceMeters?: number;
+  holidayOperatingHours?: string;
+  id?: number;
+  lat?: number;
+  lng?: number;
+  lotAddress?: string;
+  parkingCapacity?: number;
+  parkingLotDivision?: string;
+  parkingLotName?: string;
+  parkingLotType?: string;
+  phoneNumber?: string;
+  roadAddress?: string;
+  saturdayOperatingHours?: string;
+  weekdayOperatingHours?: string;
 };
 
 type ApiRestaurantRankingItem = {
