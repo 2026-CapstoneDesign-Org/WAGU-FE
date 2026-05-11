@@ -3,9 +3,10 @@ import { MyListRestaurant } from './myLists';
 export type UserProfile = {
   id: string;
   nickname: string;
-  temperature: string;
-  followerCount: string;
-  reviewCount: string;
+  profileImageUrl?: string;
+  temperature?: string;
+  followerCount?: string;
+  reviewCount?: string;
   representativeListTitle: string;
   representativeAccentColor: string;
   representativeRestaurants: MyListRestaurant[];

@@ -64,6 +64,13 @@ const mealFriends = [
   { id: 'follower-7', name: '역북동라멘살인마', meta: '리뷰 · 632' },
 ];
 
+export type HomeProfileCardItem = {
+  id: string;
+  imageUri?: string;
+  meta?: string;
+  name: string;
+};
+
 type RankingSectionProps = {
   accentTitle?: string;
   initialScrollX?: number;
@@ -77,7 +84,7 @@ type RankingSectionProps = {
 
 type HorizontalProfileSectionProps = {
   initialScrollX?: number;
-  items: { id: string; name: string; meta: string }[];
+  items: HomeProfileCardItem[];
   onPressItem?: (userId: string) => void;
   onScrollPositionChange?: (x: number) => void;
   restoreScrollKey?: number;
@@ -87,6 +94,7 @@ type HorizontalProfileSectionProps = {
 type MainHomeScreenProps = {
   initialScrollState?: HomeScrollState;
   localRankingItems?: RankingEntry[];
+  mealFriendItems?: HomeProfileCardItem[];
   nationalRankingItems?: RankingEntry[];
   onOpenUserProfile?: (userId: string) => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
@@ -162,7 +170,17 @@ function RankingSection({
                     style={styles.listItem}
                     onPress={() => onPressItem?.(item.name)}
                   >
-                    <View style={styles.thumbnail} />
+                    <View style={styles.thumbnail}>
+                      {item.imageUri ? (
+                        <Image
+                          source={{ uri: item.imageUri }}
+                          style={styles.thumbnailImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.thumbnailFallback} />
+                      )}
+                    </View>
                     <View style={styles.itemCopy}>
                       <Text style={styles.itemName}>{item.name}</Text>
                       <Text style={styles.itemMeta}>{item.meta}</Text>
@@ -213,10 +231,18 @@ function HorizontalProfileSection({
               style={styles.profileCard}
               onPress={() => onPressItem?.(item.id)}
             >
-              <View style={styles.profileImage} />
+              {item.imageUri ? (
+                <Image
+                  source={{ uri: item.imageUri }}
+                  style={styles.profileImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.profileImage} />
+              )}
               <View style={styles.profileCopy}>
                 <Text style={styles.profileName}>{item.name}</Text>
-                <Text style={styles.profileMeta}>{item.meta}</Text>
+                {item.meta ? <Text style={styles.profileMeta}>{item.meta}</Text> : null}
               </View>
             </Pressable>
           ))}
@@ -229,6 +255,7 @@ function HorizontalProfileSection({
 export function MainHomeScreen({
   initialScrollState,
   localRankingItems,
+  mealFriendItems,
   nationalRankingItems,
   onOpenUserProfile,
   onOpenRestaurantDetail,
@@ -251,6 +278,7 @@ export function MainHomeScreen({
   const indicatorPosition = useRef(new Animated.Value(1)).current;
 
   const localRanking = (localRankingItems ?? localRankingEntries).slice(0, 20);
+  const mealFriendProfiles = mealFriendItems ?? (MOCK_DATA_ENABLED ? mealFriends : []);
   const nationalRanking = (nationalRankingItems ?? nationalRankingEntries).slice(0, 20);
 
   const clearAutoSlideTimer = () => {
@@ -445,7 +473,7 @@ export function MainHomeScreen({
             <HorizontalProfileSection
               title="나랑 비슷한 밥친구"
               initialScrollX={initialScrollState?.mealFriendsX ?? 0}
-              items={MOCK_DATA_ENABLED ? mealFriends : []}
+              items={mealFriendProfiles}
               onPressItem={onOpenUserProfile}
               onScrollPositionChange={(x) => onScrollStateChange?.({ mealFriendsX: x })}
               restoreScrollKey={restoreScrollKey}
@@ -613,6 +641,15 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 6,
+    overflow: 'hidden',
+    backgroundColor: '#D9D9D9',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbnailFallback: {
+    flex: 1,
     backgroundColor: '#D9D9D9',
   },
   itemCopy: {

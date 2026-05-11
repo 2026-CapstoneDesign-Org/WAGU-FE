@@ -22,9 +22,10 @@ import FilterIcon from '../../assets/icons/filter.svg';
 import MyLocationIcon from '../../assets/icons/mylocation.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import StarIcon from '../../assets/icons/star.svg';
-import { searchRestaurants } from '../api/wagu';
+import { getRestaurantPhotoUris, searchRestaurants } from '../api/wagu';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
+import { Restaurant } from '../data/restaurants';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -40,9 +41,12 @@ const DEFAULT_MAP_SEARCH_KEYWORDS = ['용인', '처인구', '기흥구', '수지
 type SheetStage = 'collapsed' | 'medium' | 'expanded';
 
 type MapRestaurant = {
+  address?: string;
   id: string;
+  imageUri?: string;
   name: string;
   category: string;
+  photoUris?: string[];
   status: string;
   reviews: string[];
   fallbackX: number;
@@ -143,7 +147,7 @@ const fallbackMapRestaurants: MapRestaurant[] = [];
 type MapScreenProps = {
   accessToken?: string;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
-  onAddToList?: (restaurantName: string) => void;
+  onAddToList?: (restaurant: Restaurant) => void;
   getFavoriteColor?: (restaurantName: string) => string;
   onPressSearchBar?: () => void;
   searchQuery?: string;
@@ -249,8 +253,11 @@ export function MapScreen({
 
         const nextRestaurants = Array.from(dedupedRestaurants.values()).map(
           (restaurant, index) => ({
+            address: restaurant.address,
             id: String(restaurant.id),
+            imageUri: restaurant.imageUrl,
             name: restaurant.name,
+            photoUris: getRestaurantPhotoUris(restaurant),
             category: restaurant.categories?.[0] ?? restaurant.regionName ?? '맛집',
             status: restaurant.regionName ?? '용인',
             reviews: [],
@@ -767,7 +774,15 @@ export function MapScreen({
                           hitSlop={10}
                           onPress={(event) => {
                             event.stopPropagation();
-                            onAddToList?.(restaurant.name);
+                            onAddToList?.({
+                              address: restaurant.address,
+                              category: restaurant.category,
+                              id: restaurant.id,
+                              imageUri: restaurant.imageUri,
+                              name: restaurant.name,
+                              photoUris: restaurant.photoUris,
+                              shortName: restaurant.name,
+                            });
                           }}
                         >
                           <StarIcon width={34} height={34} color={accentColor} />

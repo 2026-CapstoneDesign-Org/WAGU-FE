@@ -12,19 +12,19 @@ const CARD_GAP = 6;
 const CARD_WIDTH = (screenWidth - HORIZONTAL_PADDING * 2 - CARD_GAP) / 2;
 
 type UserProfileScreenProps = {
-  profile: UserProfile;
   onBack: () => void;
   onOpenFollowers?: () => void;
-  onOpenReviews?: () => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
+  onOpenReviews?: () => void;
+  profile: UserProfile;
 };
 
 export function UserProfileScreen({
-  profile,
   onBack,
   onOpenFollowers,
-  onOpenReviews,
   onOpenRestaurantDetail,
+  onOpenReviews,
+  profile,
 }: UserProfileScreenProps) {
   const restaurantMetaMap = useMemo(
     () =>
@@ -32,47 +32,54 @@ export function UserProfileScreen({
         allRestaurants.map((restaurant) => [
           restaurant.id,
           {
-            imageUri: restaurant.photoUris?.[0] ?? restaurant.imageUri ?? null,
             address: restaurant.address ?? '',
+            imageUri: restaurant.photoUris?.[0] ?? restaurant.imageUri ?? null,
           },
         ]),
       ),
     [],
   );
 
+  const hasMetrics = Boolean(profile.temperature || profile.reviewCount || profile.followerCount);
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.screen}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.container}
-        >
+        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
           <View style={styles.headerRow}>
             <Pressable hitSlop={10} onPress={onBack} style={styles.backButton}>
-              <ArrowLeftIcon width={24} height={24} />
+              <ArrowLeftIcon height={24} width={24} />
             </Pressable>
           </View>
 
           <View style={styles.profileSection}>
             <Text style={styles.nickname}>{profile.nickname}</Text>
-            <View style={styles.metricsRow}>
-              <View style={styles.metricGroup}>
-                <Text style={styles.metricLabel}>매너온도</Text>
-                <Text style={styles.temperatureValue}>{profile.temperature}</Text>
+            {hasMetrics ? (
+              <View style={styles.metricsRow}>
+                {profile.temperature ? (
+                  <View style={styles.metricGroup}>
+                    <Text style={styles.metricLabel}>매너온도</Text>
+                    <Text style={styles.temperatureValue}>{profile.temperature}</Text>
+                  </View>
+                ) : null}
+                {profile.reviewCount ? (
+                  <Pressable hitSlop={8} onPress={onOpenReviews} style={styles.metricPressable}>
+                    <View style={styles.metricGroup}>
+                      <Text style={styles.metricLabel}>리뷰</Text>
+                      <Text style={styles.metricValue}>{profile.reviewCount}</Text>
+                    </View>
+                  </Pressable>
+                ) : null}
+                {profile.followerCount ? (
+                  <Pressable hitSlop={8} onPress={onOpenFollowers} style={styles.metricPressable}>
+                    <View style={styles.metricGroup}>
+                      <Text style={styles.metricLabel}>팔로워</Text>
+                      <Text style={styles.metricValue}>{profile.followerCount}</Text>
+                    </View>
+                  </Pressable>
+                ) : null}
               </View>
-              <Pressable style={styles.metricPressable} hitSlop={8} onPress={onOpenReviews}>
-                <View style={styles.metricGroup}>
-                  <Text style={styles.metricLabel}>리뷰</Text>
-                  <Text style={styles.metricValue}>{profile.reviewCount}</Text>
-                </View>
-              </Pressable>
-              <Pressable style={styles.metricPressable} hitSlop={8} onPress={onOpenFollowers}>
-                <View style={styles.metricGroup}>
-                  <Text style={styles.metricLabel}>팔로워</Text>
-                  <Text style={styles.metricValue}>{profile.followerCount}</Text>
-                </View>
-              </Pressable>
-            </View>
+            ) : null}
           </View>
 
           <View style={styles.mainListSection}>
@@ -87,14 +94,14 @@ export function UserProfileScreen({
               {profile.representativeRestaurants.map((item, index) => (
                 <Pressable
                   key={item.id}
-                  style={styles.card}
                   onPress={() => onOpenRestaurantDetail?.(item.name)}
+                  style={styles.card}
                 >
                   {restaurantMetaMap.get(item.id)?.imageUri ? (
                     <Image
+                      resizeMode="cover"
                       source={{ uri: restaurantMetaMap.get(item.id)?.imageUri ?? undefined }}
                       style={styles.cardImage}
-                      resizeMode="cover"
                     />
                   ) : (
                     <View style={styles.cardImage} />
@@ -102,7 +109,7 @@ export function UserProfileScreen({
                   <View style={styles.cardOverlay} />
                   <View style={styles.cardTextBlock}>
                     <Text style={styles.cardTitle}>{`${index + 1}. ${item.name}`}</Text>
-                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.cardAddress}>
+                    <Text ellipsizeMode="tail" numberOfLines={1} style={styles.cardAddress}>
                       {restaurantMetaMap.get(item.id)?.address || item.address}
                     </Text>
                   </View>

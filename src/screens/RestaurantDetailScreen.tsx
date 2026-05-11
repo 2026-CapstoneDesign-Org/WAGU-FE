@@ -30,7 +30,7 @@ import LocationIcon from '../../assets/icons/location.svg';
 import PhoneIcon from '../../assets/icons/phone.svg';
 import ShopIcon from '../../assets/icons/shop.svg';
 import StarIcon from '../../assets/icons/star.svg';
-import { RestaurantMenuItem, restaurants } from '../data/restaurants';
+import { Restaurant, RestaurantMenuItem, restaurants } from '../data/restaurants';
 import { RestaurantReview, restaurantReviews } from '../data/restaurantReviews';
 import { ReviewMediaItem } from '../types/reviews';
 
@@ -43,7 +43,7 @@ type RestaurantDetailScreenProps = {
   initialTab?: RestaurantDetailTab;
   onBack: () => void;
   restaurantName?: string;
-  onAddToList?: (restaurantName: string) => void;
+  onAddToList?: (restaurant: Restaurant) => void;
   onOpenUserProfile?: (authorName: string) => void;
   onOpenWriteReview?: (restaurantName: string) => void;
   favoriteColor?: string;
@@ -1060,6 +1060,29 @@ export function RestaurantDetailScreen({
     [restaurantMeta.photoUris, visiblePhotoCount],
   );
 
+  const addToListRestaurant = useMemo<Restaurant>(() => {
+    const matchedRestaurant = MOCK_DATA_ENABLED
+      ? restaurants.find((item) => item.name === restaurantName || item.shortName === restaurantName)
+      : undefined;
+
+    return {
+      address: restaurantMeta.address,
+      category: restaurantMeta.category || '맛집',
+      id: String(remoteRestaurant?.id ?? matchedRestaurant?.id ?? restaurantName),
+      imageUri: restaurantMeta.photoUris[0] ?? matchedRestaurant?.imageUri,
+      name: remoteRestaurant?.name ?? matchedRestaurant?.name ?? restaurantName,
+      photoUris: restaurantMeta.photoUris,
+      shortName: matchedRestaurant?.shortName ?? remoteRestaurant?.name ?? restaurantName,
+    };
+  }, [
+    remoteRestaurant?.id,
+    remoteRestaurant?.name,
+    restaurantMeta.address,
+    restaurantMeta.category,
+    restaurantMeta.photoUris,
+    restaurantName,
+  ]);
+
   const restaurantReviewList = useMemo(() => {
     const resolvedRestaurantName = remoteRestaurant?.name ?? restaurantName;
     const matchedRestaurant = MOCK_DATA_ENABLED
@@ -1399,7 +1422,7 @@ export function RestaurantDetailScreen({
           </View>
           <Pressable
             style={styles.favoriteButton}
-            onPress={() => onAddToList?.(restaurantName)}
+            onPress={() => onAddToList?.(addToListRestaurant)}
           >
             <StarIcon width={22} height={22} color={favoriteColor} />
           </Pressable>

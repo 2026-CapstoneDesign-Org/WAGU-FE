@@ -14,6 +14,7 @@ import {
   getFollowCount,
   getFollowings,
   getListDetail,
+  getListRecommendations,
   getMyInfo,
   getMyLists,
   getRestaurantRankings,
@@ -44,7 +45,7 @@ import { AddRestaurantToListSelectScreen } from '../screens/AddRestaurantToListS
 import { AiChatScreen } from '../screens/AiChatScreen';
 import { DeleteAccountScreen } from '../screens/DeleteAccountScreen';
 import { EditNicknameScreen } from '../screens/EditNicknameScreen';
-import { HomeScrollState, MainHomeScreen } from '../screens/MainHomeScreen';
+import { HomeProfileCardItem, HomeScrollState, MainHomeScreen } from '../screens/MainHomeScreen';
 import { MapScreen } from '../screens/MapScreen';
 import { MapSearchScreen } from '../screens/MapSearchScreen';
 import { LoginProvider, MyInfoScreen } from '../screens/MyInfoScreen';
@@ -71,7 +72,7 @@ import { TasteListNameScreen } from '../screens/TasteListNameScreen';
 import { TasteSelectionScreen } from '../screens/TasteSelectionScreen';
 import { UserReviewsScreen } from '../screens/UserReviewsScreen';
 import { UserProfileScreen } from '../screens/UserProfileScreen';
-import { userProfiles } from '../data/userProfiles';
+import { UserProfile, userProfiles } from '../data/userProfiles';
 
 type SearchResultTabKey = 'restaurant' | 'user' | 'region';
 
@@ -157,12 +158,39 @@ function mapFollowUsersToFriendUsers(
   }));
 }
 
+const HOME_PROFILE_ACCENT_COLORS = [
+  '#F46A67',
+  '#56CDB5',
+  '#8361C8',
+  '#F6B033',
+  '#5D8DF4',
+  '#E96DC0',
+];
+
+function mergeUserProfiles(
+  primaryProfiles: UserProfile[],
+  fallbackProfiles: UserProfile[],
+) {
+  const mergedProfiles = [...primaryProfiles];
+  const existingIds = new Set(primaryProfiles.map((profile) => profile.id));
+
+  fallbackProfiles.forEach((profile) => {
+    if (existingIds.has(profile.id)) {
+      return;
+    }
+
+    mergedProfiles.push(profile);
+  });
+
+  return mergedProfiles;
+}
+
 export function AppRoot() {
   const fallbackMyLists = MOCK_DATA_ENABLED ? initialMyLists : [];
   const fallbackFollowerCount = MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS.length : 0;
   const fallbackFollowingUsers = MOCK_DATA_ENABLED ? MY_FOLLOWING_USERS : [];
   const fallbackFollowerUsers = MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : [];
-  const visibleUserProfiles = MOCK_DATA_ENABLED ? userProfiles : [];
+  const fallbackUserProfiles = MOCK_DATA_ENABLED ? userProfiles : [];
   const visibleUserReviewsByUserId = MOCK_DATA_ENABLED ? userReviewsByUserId : {};
   const visibleUserFriendConnectionsByUserId = MOCK_DATA_ENABLED
     ? userFriendConnectionsByUserId
@@ -230,6 +258,10 @@ export function AppRoot() {
     local: RankingEntry[];
     national: RankingEntry[];
   }>(fallbackRankingEntries);
+  const [recommendedMealFriendItems, setRecommendedMealFriendItems] = useState<
+    HomeProfileCardItem[]
+  >([]);
+  const [recommendedUserProfiles, setRecommendedUserProfiles] = useState<UserProfile[]>([]);
   const [selectedMyListId, setSelectedMyListId] = useState<string | null>(null);
   const [selectedUserProfileId, setSelectedUserProfileId] = useState<string | null>(null);
   const [userProfileSource, setUserProfileSource] = useState<UserProfileSource>(null);
@@ -251,12 +283,17 @@ export function AppRoot() {
   const [addToListSource, setAddToListSource] = useState<'restaurant-detail' | 'map' | null>(
     null,
   );
+  const [addToListRestaurantSnapshot, setAddToListRestaurantSnapshot] =
+    useState<Restaurant | null>(null);
   const [addToListRestaurantId, setAddToListRestaurantId] = useState<string | null>(null);
   const [addToListRestaurantName, setAddToListRestaurantName] = useState<string | null>(null);
   const [addToListTargetListIds, setAddToListTargetListIds] = useState<string[]>([]);
+  const visibleUserProfiles = mergeUserProfiles(recommendedUserProfiles, fallbackUserProfiles);
 
   useEffect(() => {
     if (!session?.accessToken) {
+      setRecommendedMealFriendItems([]);
+      setRecommendedUserProfiles([]);
       return;
     }
 
@@ -283,6 +320,7 @@ export function AppRoot() {
           nationalRankingResult,
           followingsResult,
           followersResult,
+          recommendationsResult,
         ] =
           await Promise.allSettled([
             getFollowCount(session.accessToken, me.id),
@@ -291,6 +329,7 @@ export function AppRoot() {
             getRestaurantRankings(session.accessToken, { limit: 40 }),
             getFollowings(session.accessToken, me.id),
             getFollowers(session.accessToken, me.id),
+            getListRecommendations(session.accessToken),
           ]);
 
         if (cancelled) {
@@ -339,12 +378,75 @@ export function AppRoot() {
             setMyLists(listDetails);
           }
         }
+
+        if (recommendationsResult.status === 'fulfilled') {
+          const uniqueRecommendations = recommendationsResult.value.items.reduce<
+            typeof recommendationsResult.value.items
+          >((accumulator, item) => {
+            if (accumulator.some((currentItem) => currentItem.owner.ownerId === item.owner.ownerId)) {
+              return accumulator;
+            }
+
+            accumulator.push(item);
+            return accumulator;
+          }, []);
+
+          const recommendedProfiles = await Promise.all(
+            uniqueRecommendations.map(async (item, index) => {
+              const [detailResult, followCountForOwnerResult] = await Promise.allSettled([
+                getListDetail(session.accessToken, item.listId),
+                getFollowCount(session.accessToken, item.owner.ownerId),
+              ]);
+
+              const representativeRestaurants =
+                detailResult.status === 'fulfilled'
+                  ? detailResult.value.restaurants.slice(0, 5).map((restaurantItem) => ({
+                      address: restaurantItem.restaurant.address,
+                      id: String(restaurantItem.restaurant.id),
+                      imageUri: restaurantItem.restaurant.imageUrl,
+                      name: restaurantItem.restaurant.name,
+                    }))
+                  : [];
+
+              return {
+                card: {
+                  id: String(item.owner.ownerId),
+                  imageUri: item.owner.profileImageUrl,
+                  name: item.owner.nickname,
+                },
+                profile: {
+                  followerCount:
+                    followCountForOwnerResult.status === 'fulfilled'
+                      ? String(followCountForOwnerResult.value.followerCount)
+                      : undefined,
+                  id: String(item.owner.ownerId),
+                  nickname: item.owner.nickname,
+                  profileImageUrl: item.owner.profileImageUrl,
+                  representativeAccentColor:
+                    HOME_PROFILE_ACCENT_COLORS[index % HOME_PROFILE_ACCENT_COLORS.length],
+                  representativeListTitle: item.title,
+                  representativeRestaurants,
+                },
+              };
+            }),
+          );
+
+          if (!cancelled) {
+            setRecommendedMealFriendItems(recommendedProfiles.map((item) => item.card));
+            setRecommendedUserProfiles(recommendedProfiles.map((item) => item.profile));
+          }
+        } else if (!cancelled) {
+          setRecommendedMealFriendItems([]);
+          setRecommendedUserProfiles([]);
+        }
       } catch {
         if (!cancelled && !MOCK_DATA_ENABLED) {
           setFollowerCount(0);
           setMyUserId(null);
           setMyFollowingUsers([]);
           setMyFollowerUsers([]);
+          setRecommendedMealFriendItems([]);
+          setRecommendedUserProfiles([]);
           setRankingEntries({
             local: [],
             national: [],
@@ -878,6 +980,10 @@ export function AppRoot() {
     ) ?? null;
 
   const getAddToListRestaurant = (): Restaurant | null => {
+    if (addToListRestaurantSnapshot) {
+      return addToListRestaurantSnapshot;
+    }
+
     const fallbackName = addToListRestaurantName ?? addToListRestaurantId;
 
     const matchedRestaurant =
@@ -903,21 +1009,31 @@ export function AppRoot() {
 
     return {
       id: addToListRestaurantId ?? fallbackName,
+      imageUri: undefined,
       name: fallbackName,
+      photoUris: undefined,
       shortName: fallbackName,
       category: '맛집',
     };
   };
 
   const openAddRestaurantToListFlow = (
-    restaurantName: string,
+    restaurantInput: Restaurant | string,
     source: 'restaurant-detail' | 'map',
   ) => {
-    const restaurant = resolveRestaurant(restaurantName);
+    const fallbackName =
+      typeof restaurantInput === 'string'
+        ? restaurantInput
+        : restaurantInput.shortName || restaurantInput.name;
+    const restaurant =
+      typeof restaurantInput === 'string'
+        ? resolveRestaurant(restaurantInput)
+        : restaurantInput;
 
     setAddToListSource(source);
-    setAddToListRestaurantId(restaurant?.id ?? restaurantName);
-    setAddToListRestaurantName(restaurant?.name ?? restaurantName);
+    setAddToListRestaurantSnapshot(restaurant ?? null);
+    setAddToListRestaurantId(restaurant?.id ?? fallbackName);
+    setAddToListRestaurantName(restaurant?.name ?? fallbackName);
     setAddToListTargetListIds([]);
     setScreen('add-to-list-select');
   };
@@ -1627,6 +1743,7 @@ export function AppRoot() {
         <MainHomeScreen
           initialScrollState={homeScrollState}
           localRankingItems={rankingEntries.local}
+          mealFriendItems={recommendedMealFriendItems}
           nationalRankingItems={rankingEntries.national}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'home' })
