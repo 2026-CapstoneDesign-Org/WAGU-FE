@@ -94,14 +94,15 @@ export function WriteReviewScreen({
       return;
     }
 
-    const nextItems = result.assets
-      .slice(0, MAX_MEDIA_COUNT - media.length)
-      .map((asset, index) => ({
-        id: `${Date.now()}-${index}-${asset.assetId ?? asset.fileName ?? 'media'}`,
-        type: 'image' as const,
-        uri: asset.uri,
-        fileName: asset.fileName,
-      })) satisfies ReviewMediaItem[];
+      const nextItems = result.assets
+        .slice(0, MAX_MEDIA_COUNT - media.length)
+        .map((asset, index) => ({
+          id: `${Date.now()}-${index}-${asset.assetId ?? asset.fileName ?? 'media'}`,
+          fileName: asset.fileName,
+          mimeType: asset.mimeType,
+          type: 'image' as const,
+          uri: asset.uri,
+        })) satisfies ReviewMediaItem[];
 
     setMedia((current) => [...current, ...nextItems]);
   };

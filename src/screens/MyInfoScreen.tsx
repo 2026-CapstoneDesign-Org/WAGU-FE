@@ -19,9 +19,16 @@ import CameraIcon from '../../assets/icons/camera.svg';
 
 export type LoginProvider = 'kakao' | 'naver' | 'google';
 
+type ProfileImageSelection = {
+  fileName?: string | null;
+  mimeType?: string | null;
+  uri: string;
+};
+
 type MyInfoScreenProps = {
   onBack: () => void;
   onOpenEditNickname?: () => void;
+  onUpdateProfileImage?: (selection: ProfileImageSelection) => Promise<string | null>;
   loginProvider?: LoginProvider;
   profileImageUrl?: string | null;
   genderLabel?: string | null;
@@ -85,6 +92,7 @@ function LoginMethodValue({ provider }: { provider: LoginProvider }) {
 export function MyInfoScreen({
   onBack,
   onOpenEditNickname,
+  onUpdateProfileImage,
   loginProvider = 'kakao',
   profileImageUrl,
   genderLabel,
@@ -93,6 +101,7 @@ export function MyInfoScreen({
 }: MyInfoScreenProps) {
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
   const [isSheetVisible, setIsSheetVisible] = useState(false);
+  const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
   const sheetProgress = useRef(new Animated.Value(0)).current;
   const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -144,6 +153,10 @@ export function MyInfoScreen({
   };
 
   const handleOpenGallery = async () => {
+    if (isUploadingProfileImage) {
+      return;
+    }
+
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
@@ -159,11 +172,42 @@ export function MyInfoScreen({
     });
 
     if (!result.canceled && result.assets[0]?.uri) {
-      setProfileImageUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      const previousImageUri = profileImageUri;
+
+      setProfileImageUri(asset.uri);
+
+      if (!onUpdateProfileImage) {
+        return;
+      }
+
+      try {
+        setIsUploadingProfileImage(true);
+        const uploadedImageUrl = await onUpdateProfileImage({
+          fileName: asset.fileName,
+          mimeType: asset.mimeType,
+          uri: asset.uri,
+        });
+        setProfileImageUri(uploadedImageUrl ?? asset.uri);
+      } catch (error) {
+        setProfileImageUri(previousImageUri);
+        Alert.alert(
+          '업로드 실패',
+          error instanceof Error && error.message
+            ? error.message
+            : '프로필 사진을 업로드하지 못했어요.',
+        );
+      } finally {
+        setIsUploadingProfileImage(false);
+      }
     }
   };
 
   const handleOpenCamera = async () => {
+    if (isUploadingProfileImage) {
+      return;
+    }
+
     const permission = await ImagePicker.requestCameraPermissionsAsync();
 
     if (!permission.granted) {
@@ -178,7 +222,34 @@ export function MyInfoScreen({
     });
 
     if (!result.canceled && result.assets[0]?.uri) {
-      setProfileImageUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      const previousImageUri = profileImageUri;
+
+      setProfileImageUri(asset.uri);
+
+      if (!onUpdateProfileImage) {
+        return;
+      }
+
+      try {
+        setIsUploadingProfileImage(true);
+        const uploadedImageUrl = await onUpdateProfileImage({
+          fileName: asset.fileName,
+          mimeType: asset.mimeType,
+          uri: asset.uri,
+        });
+        setProfileImageUri(uploadedImageUrl ?? asset.uri);
+      } catch (error) {
+        setProfileImageUri(previousImageUri);
+        Alert.alert(
+          '업로드 실패',
+          error instanceof Error && error.message
+            ? error.message
+            : '프로필 사진을 업로드하지 못했어요.',
+        );
+      } finally {
+        setIsUploadingProfileImage(false);
+      }
     }
   };
 

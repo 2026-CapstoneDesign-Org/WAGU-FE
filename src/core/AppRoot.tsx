@@ -33,6 +33,7 @@ import {
   updateList,
   updateMyUser,
 } from '../api/wagu';
+import { uploadImageWithPresignedUrl } from '../api/upload';
 import { AppTab } from '../components/BottomTabBar';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { FriendTabKey, FriendUser, FollowTogglePayload, MY_FOLLOWER_USERS, MY_FOLLOWING_USERS } from '../data/myFriends';
@@ -1237,6 +1238,21 @@ export function AppRoot() {
       Alert.alert('??덇땀', '?귐됰윮?????館釉???몃뼣 ?類ｋ궖??筌≪뼚? 筌륁궢六??щ빍??');
       return;
     }
+    const uploadedImageUrls =
+      draft.media.length > 0
+        ? await Promise.all(
+            draft.media.map((item) =>
+              uploadImageWithPresignedUrl({
+                fileName: item.fileName,
+                mimeType: item.mimeType,
+                token: session.accessToken!,
+                type: 'REVIEW',
+                uri: item.uri,
+              }),
+            ),
+          )
+        : undefined;
+
     if (writeReviewMode === 'edit') {
       if (!editingReviewId) {
         Alert.alert('?덈궡', '?섏젙??由щ럭 ?뺣낫瑜?李얠? 紐삵뻽?듬땲??');
@@ -1245,19 +1261,39 @@ export function AppRoot() {
 
       await updateReview(session.accessToken, editingReviewId, {
         content: draft.content,
+        imageUrls: uploadedImageUrls,
       });
     } else {
       await createRestaurantReview(session.accessToken, writeReviewRestaurantId, {
         content: draft.content,
+        imageUrls: uploadedImageUrls,
       });
     }
 
     setRestaurantDetailInitialTab('review');
     setScreen('restaurant-detail');
+  };
 
-    if (draft.media.length > 0) {
-      Alert.alert('??덇땀', '??彛딀???덉겫????낆쨮??뺣뮉 ???곕떽?????됱젟???? ??용뮞?紐꺿봺?????館由??됰선??');
+  const handleUpdateProfileImage = async (selection: {
+    fileName?: string | null;
+    mimeType?: string | null;
+    uri: string;
+  }) => {
+    if (!session?.accessToken) {
+      throw new Error('로그인이 필요합니다.');
     }
+
+    const uploadedImageUrl = await uploadImageWithPresignedUrl({
+      fileName: selection.fileName,
+      mimeType: selection.mimeType,
+      token: session.accessToken,
+      type: 'PROFILE',
+      uri: selection.uri,
+    });
+
+    await updateMyUser(session.accessToken, { profileImageUrl: uploadedImageUrl });
+    setProfileImageUrl(uploadedImageUrl);
+    return uploadedImageUrl;
   };
 
   const openUserProfileFromRestaurantDetail = (authorName: string) => {
@@ -1641,6 +1677,7 @@ export function AppRoot() {
         <MyInfoScreen
           onBack={() => setScreen('settings')}
           onOpenEditNickname={() => setScreen('edit-nickname')}
+          onUpdateProfileImage={handleUpdateProfileImage}
           loginProvider={loginProvider}
           profileImageUrl={profileImageUrl}
           genderLabel={genderLabel}
