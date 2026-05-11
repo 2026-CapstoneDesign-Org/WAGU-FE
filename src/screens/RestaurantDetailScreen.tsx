@@ -20,9 +20,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import {
   ApiRestaurant,
+  cancelReviewVote,
+  deleteReview,
   getRestaurant,
   getRestaurantPhotoUris,
+  getRestaurantReviews,
   searchRestaurants,
+  voteReview,
 } from '../api/wagu';
 import ClockIcon from '../../assets/icons/clock.svg';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
@@ -30,6 +34,7 @@ import LocationIcon from '../../assets/icons/location.svg';
 import PhoneIcon from '../../assets/icons/phone.svg';
 import ShopIcon from '../../assets/icons/shop.svg';
 import StarIcon from '../../assets/icons/star.svg';
+import TrashIcon from '../../assets/icons/trash.svg';
 import { Restaurant, RestaurantMenuItem, restaurants } from '../data/restaurants';
 import { RestaurantReview, restaurantReviews } from '../data/restaurantReviews';
 import { ReviewMediaItem } from '../types/reviews';
@@ -40,12 +45,14 @@ type ReviewReaction = 'like' | 'dislike' | null;
 
 type RestaurantDetailScreenProps = {
   accessToken?: string | null;
+  currentUserId?: number | null;
   initialTab?: RestaurantDetailTab;
   onBack: () => void;
   restaurantName?: string;
   onAddToList?: (restaurant: Restaurant) => void;
+  onEditReview?: (reviewId: number, restaurantName: string, restaurantId?: number, content?: string) => void;
   onOpenUserProfile?: (authorName: string) => void;
-  onOpenWriteReview?: (restaurantName: string) => void;
+  onOpenWriteReview?: (restaurantName: string, restaurantId?: number) => void;
   favoriteColor?: string;
   reviewsData?: RestaurantReview[];
 };
@@ -69,6 +76,7 @@ type TabScrollProps = {
 
 type RestaurantReviewDisplay = RestaurantReview & {
   currentReaction?: ReviewReaction;
+  isVotePending?: boolean;
 };
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -355,6 +363,20 @@ function ThumbDownIcon({ color }: { color: string }) {
   );
 }
 
+function PenIcon({ color }: { color: string }) {
+  return (
+    <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M13.5 6.5L17.5 10.5M5 19L8.386 18.624C8.801 18.578 9.008 18.555 9.201 18.492C9.371 18.437 9.533 18.36 9.682 18.264C9.851 18.155 9.999 18.007 10.294 17.712L19 9.006C19.552 8.454 19.552 7.559 19 7.006L16.994 5C16.441 4.448 15.546 4.448 14.994 5L6.288 13.706C5.993 14.001 5.845 14.149 5.736 14.318C5.64 14.467 5.563 14.629 5.508 14.799C5.445 14.992 5.422 15.199 5.376 15.614L5 19Z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 function ReviewReactionButton({
   count,
   icon,
@@ -406,16 +428,34 @@ function getReviewMediaItems(
   }));
 }
 
+function formatReviewDate(createdAt: string) {
+  const parsedDate = new Date(createdAt);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return createdAt;
+  }
+
+  const year = parsedDate.getFullYear();
+  const month = `${parsedDate.getMonth() + 1}`.padStart(2, '0');
+  const day = `${parsedDate.getDate()}`.padStart(2, '0');
+
+  return `${year}.${month}.${day}`;
+}
+
 function ReviewCard({
   review,
+  onEditReview,
   onToggleFollow,
   onToggleReaction,
+  onDeleteReview,
   onOpenImagePreview,
   onOpenUserProfile,
 }: {
   review: RestaurantReviewDisplay;
+  onEditReview: (reviewId: string, content: string) => void;
   onToggleFollow: (reviewId: string) => void;
   onToggleReaction: (reviewId: string, reaction: Exclude<ReviewReaction, null>) => void;
+  onDeleteReview: (reviewId: string) => void;
   onOpenImagePreview: (images: string[], index: number) => void;
   onOpenUserProfile?: (authorName: string) => void;
 }) {
@@ -465,7 +505,7 @@ function ReviewCard({
 
       {false && review.imageUris?.length ? (
         <View style={styles.reviewImageRow}>
-          {review.imageUris?.slice(0, 3).map((imageUri, index) => (
+          {(review.imageUris ?? []).slice(0, 3).map((_, index) => (
             <View key={`${review.id}-${index}`} style={styles.reviewImageCard}>
               <Text style={styles.reviewImagePlaceholder}>사진</Text>
             </View>
@@ -518,7 +558,7 @@ function ReviewCard({
         <ReviewReactionButton
           count={review.likes}
           active={review.currentReaction === 'like'}
-          disabled={review.isOwner}
+          disabled={review.isOwner || review.isVotePending}
           onPress={() => onToggleReaction(review.id, 'like')}
           icon={
             <ThumbUpIcon color={review.currentReaction === 'like' ? '#F92A1D' : '#666666'} />
@@ -527,7 +567,7 @@ function ReviewCard({
         <ReviewReactionButton
           count={review.dislikes}
           active={review.currentReaction === 'dislike'}
-          disabled={review.isOwner}
+          disabled={review.isOwner || review.isVotePending}
           onPress={() => onToggleReaction(review.id, 'dislike')}
           icon={
             <ThumbDownIcon
@@ -535,6 +575,20 @@ function ReviewCard({
             />
           }
         />
+
+        {review.isOwner ? (
+          <View style={styles.reviewOwnerActions}>
+            <Pressable
+              style={styles.reviewEditButton}
+              onPress={() => onEditReview(review.id, review.content)}
+            >
+              <PenIcon color="#7A7A7A" />
+            </Pressable>
+            <Pressable style={styles.reviewDeleteButton} onPress={() => onDeleteReview(review.id)}>
+              <TrashIcon width={16} height={16} color="#7A7A7A" />
+            </Pressable>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -754,8 +808,10 @@ function ReviewTabContent({
   reviews,
   reviewSort,
   onChangeSort,
+  onEditReview,
   onToggleFollow,
   onToggleReaction,
+  onDeleteReview,
   onOpenImagePreview,
   onOpenUserProfile,
   onPressWriteReview,
@@ -765,8 +821,10 @@ function ReviewTabContent({
   reviews: RestaurantReviewDisplay[];
   reviewSort: ReviewSort;
   onChangeSort: (sort: ReviewSort) => void;
+  onEditReview: (reviewId: string, content: string) => void;
   onToggleFollow: (reviewId: string) => void;
   onToggleReaction: (reviewId: string, reaction: Exclude<ReviewReaction, null>) => void;
+  onDeleteReview: (reviewId: string) => void;
   onOpenImagePreview: (images: string[], index: number) => void;
   onOpenUserProfile?: (authorName: string) => void;
   onPressWriteReview: () => void;
@@ -816,8 +874,10 @@ function ReviewTabContent({
               <View key={review.id}>
                 <ReviewCard
                   review={review}
+                  onEditReview={onEditReview}
                   onToggleFollow={onToggleFollow}
                   onToggleReaction={onToggleReaction}
+                  onDeleteReview={onDeleteReview}
                   onOpenImagePreview={onOpenImagePreview}
                   onOpenUserProfile={onOpenUserProfile}
                 />
@@ -853,10 +913,12 @@ function getTabIndicatorOffset(tab: RestaurantDetailTab) {
 
 export function RestaurantDetailScreen({
   accessToken,
+  currentUserId,
   initialTab = 'home',
   onBack,
   restaurantName = '와이앤웍',
   onAddToList,
+  onEditReview,
   onOpenUserProfile,
   onOpenWriteReview,
   favoriteColor = '#D9D9D9',
@@ -881,7 +943,9 @@ export function RestaurantDetailScreen({
   const [reviewReactionStates, setReviewReactionStates] = useState<
     Record<string, ReviewReaction>
   >({});
+  const [reviewVotePendingIds, setReviewVotePendingIds] = useState<Record<string, boolean>>({});
   const [remoteRestaurant, setRemoteRestaurant] = useState<ApiRestaurant | null>(null);
+  const [remoteReviews, setRemoteReviews] = useState<RestaurantReview[] | null>(null);
   const [isRestaurantLoading, setIsRestaurantLoading] = useState(false);
   const [hasRestaurantLoadError, setHasRestaurantLoadError] = useState(false);
   const [previewImageSizes, setPreviewImageSizes] = useState<
@@ -890,7 +954,7 @@ export function RestaurantDetailScreen({
 
   const handlePressWriteReview = () => {
     if (onOpenWriteReview) {
-      onOpenWriteReview(remoteRestaurant?.name ?? restaurantName);
+      onOpenWriteReview(remoteRestaurant?.name ?? restaurantName, remoteRestaurant?.id);
       return;
     }
 
@@ -908,6 +972,7 @@ export function RestaurantDetailScreen({
   useEffect(() => {
     if (!accessToken) {
       setRemoteRestaurant(null);
+      setRemoteReviews(null);
       setIsRestaurantLoading(false);
       setHasRestaurantLoadError(false);
       return;
@@ -932,29 +997,47 @@ export function RestaurantDetailScreen({
           ) ??
           candidates[0];
 
-        if (!matchedCandidate) {
-          if (!cancelled) {
-            setRemoteRestaurant(null);
-            setHasRestaurantLoadError(true);
-            setIsRestaurantLoading(false);
-          }
+          if (!matchedCandidate) {
+            if (!cancelled) {
+              setRemoteRestaurant(null);
+              setRemoteReviews([]);
+              setHasRestaurantLoadError(true);
+              setIsRestaurantLoading(false);
+            }
           return;
         }
 
         try {
           const detail = await getRestaurant(accessToken, Number(matchedCandidate.id));
+          const reviews = await getRestaurantReviews(accessToken, Number(matchedCandidate.id));
 
           if (!cancelled) {
             setRemoteRestaurant(detail);
+            setRemoteReviews(
+              reviews.map((review) => ({
+                authorName: review.nickname,
+                content: review.content,
+                date: formatReviewDate(review.createdAt),
+                dislikes: review.dislikeCount,
+                id: String(review.id),
+                imageUris: review.imageUrls,
+                isFollowing: false,
+                isOwner: review.userId === currentUserId,
+                likes: review.likeCount,
+                restaurantName: detail.name,
+              })),
+            );
           }
         } catch {
           if (!cancelled) {
             setRemoteRestaurant(matchedCandidate);
+            setRemoteReviews(null);
           }
         }
       } catch {
         if (!cancelled) {
           setRemoteRestaurant(null);
+          setRemoteReviews(null);
           setHasRestaurantLoadError(true);
         }
       } finally {
@@ -1088,7 +1171,10 @@ export function RestaurantDetailScreen({
     const matchedRestaurant = MOCK_DATA_ENABLED
       ? restaurants.find((item) => item.name === restaurantName || item.shortName === restaurantName)
       : undefined;
-    const reviewSource = reviewsData ?? (MOCK_DATA_ENABLED ? restaurantReviews : []);
+    const reviewSource =
+      reviewsData ??
+      remoteReviews ??
+      (MOCK_DATA_ENABLED ? restaurantReviews : []);
 
     const filteredReviews = reviewSource.filter(
           (review) =>
@@ -1104,6 +1190,7 @@ export function RestaurantDetailScreen({
       currentReaction: reviewReactionStates[review.id] ?? null,
       likes: review.likes + (reviewReactionStates[review.id] === 'like' ? 1 : 0),
       dislikes: review.dislikes + (reviewReactionStates[review.id] === 'dislike' ? 1 : 0),
+      isVotePending: reviewVotePendingIds[review.id] ?? false,
     }));
 
     return [...reviewsWithFollowState].sort((left, right) => {
@@ -1121,6 +1208,8 @@ export function RestaurantDetailScreen({
     reviewSort,
     reviewFollowStates,
     reviewReactionStates,
+    reviewVotePendingIds,
+    remoteReviews,
     reviewsData,
   ]);
 
@@ -1152,25 +1241,112 @@ export function RestaurantDetailScreen({
     });
   };
 
-  const handleToggleReviewReaction = (
+  const handleToggleReviewReaction = async (
     reviewId: string,
     reaction: Exclude<ReviewReaction, null>,
   ) => {
-    setReviewReactionStates((current) => {
-      const reviewSource = reviewsData ?? (MOCK_DATA_ENABLED ? restaurantReviews : []);
-      const targetReview = reviewSource.find((review) => review.id === reviewId);
+    const reviewSource = remoteReviews ?? reviewsData ?? (MOCK_DATA_ENABLED ? restaurantReviews : []);
+    const targetReview = reviewSource.find((review) => review.id === reviewId);
 
-      if (targetReview?.isOwner) {
-        return current;
+    if (targetReview?.isOwner || reviewVotePendingIds[reviewId]) {
+      return;
+    }
+
+    const currentValue = reviewReactionStates[reviewId] ?? null;
+    const nextValue = currentValue === reaction ? null : reaction;
+
+    setReviewVotePendingIds((current) => ({
+      ...current,
+      [reviewId]: true,
+    }));
+
+    try {
+      if (accessToken) {
+        const numericReviewId = Number(reviewId);
+
+        if (Number.isNaN(numericReviewId)) {
+          throw new Error('invalid_review_id');
+        }
+
+        if (nextValue === null) {
+          await cancelReviewVote(accessToken, numericReviewId);
+        } else {
+          await voteReview(accessToken, numericReviewId, {
+            voteType: nextValue === 'like' ? 'LIKE' : 'DISLIKE',
+          });
+        }
       }
 
-      const currentValue = current[reviewId] ?? null;
-
-      return {
+      setReviewReactionStates((current) => ({
         ...current,
-        [reviewId]: currentValue === reaction ? null : reaction,
-      };
-    });
+        [reviewId]: nextValue,
+      }));
+    } catch {
+      Alert.alert('안내', '리뷰 반응을 저장하지 못했습니다.');
+    } finally {
+      setReviewVotePendingIds((current) => ({
+        ...current,
+        [reviewId]: false,
+      }));
+    }
+  };
+
+  const handleDeleteReview = (reviewId: string) => {
+    Alert.alert('리뷰 삭제', '정말 이 리뷰를 삭제하시겠습니까?', [
+      {
+        text: '취소',
+        style: 'cancel',
+      },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            if (!accessToken) {
+              Alert.alert('안내', '로그인 정보가 없어 리뷰를 삭제할 수 없습니다.');
+              return;
+            }
+
+            const numericReviewId = Number(reviewId);
+
+            if (Number.isNaN(numericReviewId)) {
+              Alert.alert('안내', '리뷰 정보를 확인하지 못했습니다.');
+              return;
+            }
+
+            try {
+              await deleteReview(accessToken, numericReviewId);
+              setRemoteReviews((current) =>
+                current ? current.filter((review) => review.id !== reviewId) : current,
+              );
+              setReviewReactionStates((current) => {
+                const next = { ...current };
+                delete next[reviewId];
+                return next;
+              });
+            } catch {
+              Alert.alert('안내', '리뷰를 삭제하지 못했습니다.');
+            }
+          })();
+        },
+      },
+    ]);
+  };
+
+  const handleEditReview = (reviewId: string, content: string) => {
+    const numericReviewId = Number(reviewId);
+
+    if (Number.isNaN(numericReviewId)) {
+      Alert.alert('안내', '리뷰 정보를 확인하지 못했습니다.');
+      return;
+    }
+
+    onEditReview?.(
+      numericReviewId,
+      remoteRestaurant?.name ?? restaurantName,
+      remoteRestaurant?.id,
+      content,
+    );
   };
 
   useEffect(() => {
@@ -1539,8 +1715,10 @@ export function RestaurantDetailScreen({
               reviews={restaurantReviewList}
               reviewSort={reviewSort}
               onChangeSort={setReviewSort}
+              onEditReview={handleEditReview}
               onToggleFollow={handleToggleReviewFollow}
               onToggleReaction={handleToggleReviewReaction}
+              onDeleteReview={handleDeleteReview}
               onOpenImagePreview={openPhotoPreview}
               onOpenUserProfile={onOpenUserProfile}
               onPressWriteReview={handlePressWriteReview}
@@ -2033,6 +2211,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  reviewOwnerActions: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  reviewEditButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewDeleteButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   reviewFollowButton: {
     minWidth: 62,

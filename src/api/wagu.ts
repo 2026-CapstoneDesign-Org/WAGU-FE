@@ -15,8 +15,14 @@ export type ApiRestaurant = {
   lng?: number;
   name: string;
   photoUrls?: string[];
-  photos?: string[];
+  photos?: ApiRestaurantPhoto[];
   regionName: string;
+};
+
+export type ApiRestaurantPhoto = {
+  displayOrder?: number;
+  imageUrl?: string;
+  source?: string;
 };
 
 type ApiRestaurantRankingItem = {
@@ -61,6 +67,21 @@ export type ApiRecommendationOwner = {
   nickname: string;
   ownerId: number;
   profileImageUrl?: string;
+};
+
+export type ApiReview = {
+  content: string;
+  createdAt: string;
+  dislikeCount: number;
+  id: number;
+  imageUrls?: string[];
+  likeCount: number;
+  nickname: string;
+  userId: number;
+};
+
+type ApiReviewVoteRequest = {
+  voteType: 'DISLIKE' | 'LIKE';
 };
 
 export type ApiListRecommendationItem = {
@@ -156,6 +177,68 @@ export async function getRestaurant(token: string, restaurantId: number) {
 export async function getListRecommendations(token: string) {
   return apiRequest<ApiListRecommendationResponse>('/recommendations/lists', {
     token,
+  });
+}
+
+export async function getRestaurantReviews(token: string, restaurantId: number) {
+  return apiRequest<ApiReview[]>(`/restaurants/${restaurantId}/reviews`, {
+    token,
+  });
+}
+
+export async function createRestaurantReview(
+  token: string,
+  restaurantId: number,
+  body: {
+    content: string;
+    imageUrls?: string[];
+  },
+) {
+  return apiRequest<ApiReview>(`/restaurants/${restaurantId}/reviews`, {
+    method: 'POST',
+    token,
+    body,
+  });
+}
+
+export async function voteReview(
+  token: string,
+  reviewId: number,
+  body: ApiReviewVoteRequest,
+) {
+  return apiRequest<void>(`/reviews/${reviewId}/vote`, {
+    method: 'POST',
+    token,
+    body,
+  });
+}
+
+export async function cancelReviewVote(token: string, reviewId: number) {
+  return apiRequest<void>(`/reviews/${reviewId}/vote`, {
+    method: 'DELETE',
+    token,
+  });
+}
+
+export async function deleteReview(token: string, reviewId: number) {
+  return apiRequest<void>(`/reviews/${reviewId}`, {
+    method: 'DELETE',
+    token,
+  });
+}
+
+export async function updateReview(
+  token: string,
+  reviewId: number,
+  body: {
+    content: string;
+    imageUrls?: string[];
+  },
+) {
+  return apiRequest<void>(`/reviews/${reviewId}`, {
+    method: 'PATCH',
+    token,
+    body,
   });
 }
 
@@ -341,13 +424,15 @@ export async function unfollowUser(token: string, userId: number) {
   });
 }
 
-export function getRestaurantPhotoUris(restaurant: Pick<ApiRestaurant, 'imageUrl' | 'imageUrls' | 'photoUrls' | 'photos'>) {
+export function getRestaurantPhotoUris(
+  restaurant: Pick<ApiRestaurant, 'imageUrl' | 'imageUrls' | 'photoUrls' | 'photos'>,
+) {
   const photoUris = [
     ...(restaurant.imageUrls ?? []),
     ...(restaurant.photoUrls ?? []),
-    ...(restaurant.photos ?? []),
+    ...(restaurant.photos ?? []).map((photo) => photo?.imageUrl),
     ...(restaurant.imageUrl ? [restaurant.imageUrl] : []),
-  ].filter(Boolean);
+  ].filter((uri): uri is string => typeof uri === 'string' && uri.trim().length > 0);
 
   return Array.from(new Set(photoUris));
 }

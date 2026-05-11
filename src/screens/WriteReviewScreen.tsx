@@ -3,6 +3,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -20,6 +21,7 @@ import RemoveIcon from '../../assets/icons/remove.svg';
 import { ReviewMediaItem } from '../types/reviews';
 
 const MAX_MEDIA_COUNT = 5;
+const MAX_REVIEW_LENGTH = 300;
 
 export type WriteReviewDraft = {
   content: string;
@@ -27,9 +29,12 @@ export type WriteReviewDraft = {
 };
 
 type WriteReviewScreenProps = {
+  initialContent?: string;
   restaurantName: string;
   onBack: () => void;
   onSubmit: (draft: WriteReviewDraft) => Promise<void> | void;
+  submitLabel?: string;
+  title?: string;
 };
 
 function MediaCard({
@@ -41,16 +46,7 @@ function MediaCard({
 }) {
   return (
     <View style={styles.mediaCard}>
-      {item.type === 'image' ? (
-        <Image source={{ uri: item.uri }} style={styles.mediaImage} />
-      ) : (
-        <View style={styles.videoCard}>
-          <Text style={styles.videoBadge}>VIDEO</Text>
-          <Text numberOfLines={2} style={styles.videoLabel}>
-            {item.fileName || '동영상'}
-          </Text>
-        </View>
-      )}
+      <Image source={{ uri: item.uri }} style={styles.mediaImage} />
 
       <Pressable style={styles.removeButton} onPress={() => onRemove(item.id)}>
         <RemoveIcon width={16} height={16} />
@@ -60,32 +56,36 @@ function MediaCard({
 }
 
 export function WriteReviewScreen({
+  initialContent = '',
   restaurantName,
   onBack,
   onSubmit,
+  submitLabel = '리뷰 등록',
+  title = '리뷰 쓰기',
 }: WriteReviewScreenProps) {
   const insets = useSafeAreaInsets();
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState(initialContent);
   const [media, setMedia] = useState<ReviewMediaItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isNoticeVisible, setIsNoticeVisible] = useState(false);
 
   const canSubmit = content.trim().length > 0 && !isSubmitting;
 
   const handlePickMedia = async () => {
     if (media.length >= MAX_MEDIA_COUNT) {
-      Alert.alert('업로드 제한', `사진과 동영상은 최대 ${MAX_MEDIA_COUNT}개까지 올릴 수 있어요.`);
+      Alert.alert('업로드 제한', `사진은 최대 ${MAX_MEDIA_COUNT}장까지 담을 수 있어요.`);
       return;
     }
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert('권한 필요', '사진이나 동영상을 올리려면 앨범 접근 권한이 필요해요.');
+      Alert.alert('권한 필요', '사진을 추가하려면 사진 접근 권한이 필요해요.');
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
+      mediaTypes: ['images'],
       allowsMultipleSelection: true,
       quality: 1,
     });
@@ -98,7 +98,7 @@ export function WriteReviewScreen({
       .slice(0, MAX_MEDIA_COUNT - media.length)
       .map((asset, index) => ({
         id: `${Date.now()}-${index}-${asset.assetId ?? asset.fileName ?? 'media'}`,
-        type: asset.type === 'video' ? 'video' : 'image',
+        type: 'image' as const,
         uri: asset.uri,
         fileName: asset.fileName,
       })) satisfies ReviewMediaItem[];
@@ -117,8 +117,12 @@ export function WriteReviewScreen({
         content: content.trim(),
         media,
       });
-    } catch {
-      Alert.alert('등록 실패', '리뷰를 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : '리뷰를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.';
+      Alert.alert('저장 실패', message);
     } finally {
       setIsSubmitting(false);
     }
@@ -134,7 +138,9 @@ export function WriteReviewScreen({
           <Pressable style={styles.backButton} onPress={onBack}>
             <ArrowLeftIcon width={24} height={24} />
           </Pressable>
-          <Text style={styles.headerTitle}>리뷰 쓰기</Text>
+          <Text numberOfLines={1} style={styles.headerTitle}>
+            {restaurantName || title}
+          </Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -142,22 +148,10 @@ export function WriteReviewScreen({
           <ScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={[
-              styles.content,
-              { paddingBottom: 28 + insets.bottom },
-            ]}
+            contentContainerStyle={[styles.content, { paddingBottom: 28 + insets.bottom }]}
           >
-            <View style={styles.restaurantChip}>
-              <Text numberOfLines={1} style={styles.restaurantChipLabel}>
-                {restaurantName}
-              </Text>
-            </View>
-
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>사진 또는 동영상</Text>
-              <Text style={styles.sectionDescription}>
-                최대 5개까지 올릴 수 있어요.
-              </Text>
+              <Text style={styles.sectionTitle}>사진 업로드</Text>
 
               <ScrollView
                 horizontal
@@ -168,7 +162,7 @@ export function WriteReviewScreen({
                   <View style={styles.addMediaIconWrap}>
                     <CameraIcon width={18} height={18} />
                   </View>
-                  <Text style={styles.addMediaLabel}>파일 추가</Text>
+                  <Text style={styles.addMediaLabel}>사진 추가</Text>
                 </Pressable>
 
                 {media.map((item) => (
@@ -186,19 +180,23 @@ export function WriteReviewScreen({
             <View style={styles.section}>
               <View style={styles.textHeaderRow}>
                 <Text style={styles.sectionTitle}>리뷰 내용</Text>
-                <Text style={styles.countLabel}>{content.trim().length}자</Text>
+                <Text style={styles.countLabel}>{content.length}/{MAX_REVIEW_LENGTH}</Text>
               </View>
 
               <TextInput
                 multiline
-                placeholder="이 가게에서 어떤 점이 좋았는지 자유롭게 적어주세요."
+                placeholder="이 가게에 대해 좋았던 점이나 아쉬웠던 점을 자유롭게 적어주세요."
                 placeholderTextColor="#B3B3B3"
                 style={styles.textInput}
                 textAlignVertical="top"
                 value={content}
                 onChangeText={setContent}
-                maxLength={1000}
+                maxLength={MAX_REVIEW_LENGTH}
               />
+
+              <Pressable style={styles.noticeButton} onPress={() => setIsNoticeVisible(true)}>
+                <Text style={styles.noticeButtonLabel}>리뷰 작성 유의사항</Text>
+              </Pressable>
             </View>
           </ScrollView>
 
@@ -209,12 +207,50 @@ export function WriteReviewScreen({
               disabled={!canSubmit}
             >
               <Text style={styles.submitButtonLabel}>
-                {isSubmitting ? '등록하는 중...' : '리뷰 등록'}
+                {isSubmitting ? '저장하는 중...' : submitLabel}
               </Text>
             </Pressable>
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={isNoticeVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsNoticeVisible(false)}
+      >
+        <Pressable style={styles.noticeOverlay} onPress={() => setIsNoticeVisible(false)}>
+          <Pressable style={styles.noticeModal} onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.noticeModalTitle}>리뷰 작성 유의사항</Text>
+
+            <View style={styles.noticeList}>
+              <Text style={styles.noticeListItem}>
+                <Text style={styles.noticeBullet}>• </Text>
+                <Text style={styles.noticeEmphasis}>장소와 무관한 내용</Text>
+                은 작성하지 않도록 유의해 주세요.
+              </Text>
+              <Text style={styles.noticeListItem}>
+                <Text style={styles.noticeBullet}>• </Text>
+                <Text style={styles.noticeEmphasis}>타인의 얼굴</Text>
+                이 나오지 않도록 유의해 주세요.
+              </Text>
+              <Text style={styles.noticeListItem}>
+                <Text style={styles.noticeBullet}>• </Text>
+                <Text style={styles.noticeEmphasis}>욕설, 비방, 허위 내용</Text>
+                은 제재될 수 있어요.
+              </Text>
+            </View>
+
+            <Pressable
+              style={styles.noticeCloseButton}
+              onPress={() => setIsNoticeVisible(false)}
+            >
+              <Text style={styles.noticeCloseButtonLabel}>확인</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -259,20 +295,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 28,
   },
-  restaurantChip: {
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: '#FFF0EE',
-  },
-  restaurantChipLabel: {
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: '700',
-    color: '#FF3B30',
-  },
   section: {
     gap: 10,
   },
@@ -281,12 +303,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontWeight: '700',
     color: '#111111',
-  },
-  sectionDescription: {
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '500',
-    color: '#8A8A8A',
   },
   mediaRow: {
     flexDirection: 'row',
@@ -331,28 +347,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  videoCard: {
-    flex: 1,
-    backgroundColor: '#1F1F1F',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    gap: 10,
-  },
-  videoBadge: {
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.8,
-  },
-  videoLabel: {
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.88)',
-    textAlign: 'center',
-  },
   removeButton: {
     position: 'absolute',
     top: 8,
@@ -388,6 +382,16 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#111111',
   },
+  noticeButton: {
+    alignSelf: 'flex-start',
+  },
+  noticeButtonLabel: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+    color: '#8A8A8A',
+    textDecorationLine: 'underline',
+  },
   bottomBar: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -411,5 +415,58 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: '800',
     color: '#FFFFFF',
+  },
+  noticeOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  noticeModal: {
+    width: '100%',
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 18,
+    gap: 16,
+  },
+  noticeModalTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '800',
+    color: '#111111',
+  },
+  noticeList: {
+    gap: 10,
+  },
+  noticeListItem: {
+    fontSize: 14,
+    lineHeight: 24,
+    fontWeight: '500',
+    color: '#4A4A4A',
+  },
+  noticeBullet: {
+    color: '#8A8A8A',
+    fontWeight: '700',
+  },
+  noticeEmphasis: {
+    color: '#111111',
+    fontWeight: '700',
+  },
+  noticeCloseButton: {
+    marginTop: 4,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noticeCloseButtonLabel: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '700',
+    color: '#444444',
   },
 });

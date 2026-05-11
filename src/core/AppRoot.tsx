@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import {
   addRestaurantToList,
+  createRestaurantReview,
   createList,
   deleteList,
   formatBirthDate,
@@ -27,6 +28,7 @@ import {
   signupProfile,
   toggleListVisibility,
   unfollowUser,
+  updateReview,
   updateRestaurantInList,
   updateList,
   updateMyUser,
@@ -72,6 +74,7 @@ import { TasteListNameScreen } from '../screens/TasteListNameScreen';
 import { TasteSelectionScreen } from '../screens/TasteSelectionScreen';
 import { UserReviewsScreen } from '../screens/UserReviewsScreen';
 import { UserProfileScreen } from '../screens/UserProfileScreen';
+import { WriteReviewDraft, WriteReviewScreen } from '../screens/WriteReviewScreen';
 import { UserProfile, userProfiles } from '../data/userProfiles';
 
 type SearchResultTabKey = 'restaurant' | 'user' | 'region';
@@ -102,6 +105,7 @@ type FlowScreen =
   | 'my-list-place-edit'
   | 'my-reviews'
   | 'user-reviews'
+  | 'write-review'
   | 'edit-nickname'
   | 'delete-account'
   | 'restaurant-detail'
@@ -275,6 +279,9 @@ export function AppRoot() {
   const [pendingNickname, setPendingNickname] = useState<string | null>(null);
   const [nickname, setNickname] = useState('먹부림');
   const [selectedRestaurantName, setSelectedRestaurantName] = useState('와이앤웍');
+  const [restaurantDetailInitialTab, setRestaurantDetailInitialTab] = useState<'home' | 'review'>(
+    'home',
+  );
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [birthDateLabel, setBirthDateLabel] = useState<string | null>(null);
   const [genderLabel, setGenderLabel] = useState<string | null>(null);
@@ -288,6 +295,11 @@ export function AppRoot() {
   const [addToListRestaurantId, setAddToListRestaurantId] = useState<string | null>(null);
   const [addToListRestaurantName, setAddToListRestaurantName] = useState<string | null>(null);
   const [addToListTargetListIds, setAddToListTargetListIds] = useState<string[]>([]);
+  const [writeReviewRestaurantId, setWriteReviewRestaurantId] = useState<number | null>(null);
+  const [writeReviewRestaurantName, setWriteReviewRestaurantName] = useState('');
+  const [writeReviewInitialContent, setWriteReviewInitialContent] = useState('');
+  const [writeReviewMode, setWriteReviewMode] = useState<'create' | 'edit'>('create');
+  const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
   const visibleUserProfiles = mergeUserProfiles(recommendedUserProfiles, fallbackUserProfiles);
 
   useEffect(() => {
@@ -325,7 +337,7 @@ export function AppRoot() {
           await Promise.allSettled([
             getFollowCount(session.accessToken, me.id),
             getMyLists(session.accessToken),
-            getRestaurantRankings(session.accessToken, { regionName: '용인', limit: 40 }),
+            getRestaurantRankings(session.accessToken, { regionName: '?⑹씤', limit: 40 }),
             getRestaurantRankings(session.accessToken, { limit: 40 }),
             getFollowings(session.accessToken, me.id),
             getFollowers(session.accessToken, me.id),
@@ -641,7 +653,7 @@ export function AppRoot() {
     const parsedUserId = Number(userId);
 
     if (Number.isNaN(parsedUserId)) {
-      Alert.alert('팔로우를 변경하지 못했습니다.');
+      Alert.alert('?붾줈?곕? 蹂寃쏀븯吏 紐삵뻽?듬땲??');
       return false;
     }
 
@@ -652,7 +664,7 @@ export function AppRoot() {
         await unfollowUser(session.accessToken, parsedUserId);
       }
     } catch {
-      Alert.alert('팔로우를 변경하지 못했습니다.');
+      Alert.alert('?붾줈?곕? 蹂寃쏀븯吏 紐삵뻽?듬땲??');
       return false;
     }
 
@@ -778,7 +790,7 @@ export function AppRoot() {
       );
       applyLocalRemove();
     } catch {
-      Alert.alert('안내', '가게를 삭제하지 못했습니다.');
+      Alert.alert('?덈궡', '媛寃뚮? ??젣?섏? 紐삵뻽?듬땲??');
     }
   };
 
@@ -881,7 +893,7 @@ export function AppRoot() {
 
       applyLocalUpdate();
     } catch {
-      Alert.alert('안내', '가게 점수를 수정하지 못했습니다.');
+      Alert.alert('?덈궡', '媛寃??먯닔瑜??섏젙?섏? 紐삵뻽?듬땲??');
     }
   };
 
@@ -908,7 +920,7 @@ export function AppRoot() {
           candidates[0];
 
         if (!matched) {
-          throw new Error(`${restaurant.name} 식당을 서버에서 찾지 못했어요.`);
+          throw new Error(`${restaurant.name} ?앸떦???쒕쾭?먯꽌 李얠? 紐삵뻽?댁슂.`);
         }
 
         return matched;
@@ -918,7 +930,7 @@ export function AppRoot() {
     const regionName =
       resolvedRestaurants[0]?.regionName ??
       selected[0]?.address?.split(' ')[0] ??
-      '용인';
+      '?⑹씤';
 
     const existingListCount = myLists.length;
     const createdList = await createList(session.accessToken, {
@@ -1013,7 +1025,7 @@ export function AppRoot() {
       name: fallbackName,
       photoUris: undefined,
       shortName: fallbackName,
-      category: '맛집',
+      category: '留쏆쭛',
     };
   };
 
@@ -1114,7 +1126,7 @@ export function AppRoot() {
           ),
         );
       } catch {
-        Alert.alert('안내', '리스트에 식당을 추가하지 못했습니다.');
+        Alert.alert('?덈궡', '由ъ뒪?몄뿉 ?앸떦??異붽??섏? 紐삵뻽?듬땲??');
         return;
       }
     }
@@ -1180,8 +1192,72 @@ export function AppRoot() {
     source: Exclude<RestaurantDetailSource, null>,
   ) => {
     setSelectedRestaurantName(restaurantName);
+    setRestaurantDetailInitialTab('home');
     setRestaurantDetailSource(source);
     setScreen('restaurant-detail');
+  };
+
+  const openWriteReview = (restaurantName: string, restaurantId?: number) => {
+    if (!restaurantId) {
+      Alert.alert('??덇땀', '??몃뼣 ?類ｋ궖???븍뜄???삳뮉 餓λ쵐??癒?뼄. ?醫롫뻻 ????쇰뻻 ??뺣즲??곻폒?紐꾩뒄.');
+      return;
+    }
+
+    setWriteReviewRestaurantId(restaurantId);
+    setWriteReviewRestaurantName(restaurantName);
+    setWriteReviewInitialContent('');
+    setWriteReviewMode('create');
+    setEditingReviewId(null);
+    setRestaurantDetailInitialTab('review');
+    setScreen('write-review');
+  };
+
+  const openEditReview = (
+    reviewId: number,
+    restaurantName: string,
+    restaurantId: number | undefined,
+    content?: string,
+  ) => {
+    if (!restaurantId) {
+      Alert.alert('?덈궡', '?앸떦 ?뺣낫瑜??뺤씤?섏? 紐삵빐 由щ럭瑜??섏젙?????놁뒿?덈떎.');
+      return;
+    }
+
+    setWriteReviewRestaurantId(restaurantId);
+    setWriteReviewRestaurantName(restaurantName);
+    setWriteReviewInitialContent(content ?? '');
+    setWriteReviewMode('edit');
+    setEditingReviewId(reviewId);
+    setRestaurantDetailInitialTab('review');
+    setScreen('write-review');
+  };
+
+  const handleSubmitRestaurantReview = async (draft: WriteReviewDraft) => {
+    if (!session?.accessToken || !writeReviewRestaurantId) {
+      Alert.alert('??덇땀', '?귐됰윮?????館釉???몃뼣 ?類ｋ궖??筌≪뼚? 筌륁궢六??щ빍??');
+      return;
+    }
+    if (writeReviewMode === 'edit') {
+      if (!editingReviewId) {
+        Alert.alert('?덈궡', '?섏젙??由щ럭 ?뺣낫瑜?李얠? 紐삵뻽?듬땲??');
+        return;
+      }
+
+      await updateReview(session.accessToken, editingReviewId, {
+        content: draft.content,
+      });
+    } else {
+      await createRestaurantReview(session.accessToken, writeReviewRestaurantId, {
+        content: draft.content,
+      });
+    }
+
+    setRestaurantDetailInitialTab('review');
+    setScreen('restaurant-detail');
+
+    if (draft.media.length > 0) {
+      Alert.alert('??덇땀', '??彛딀???덉겫????낆쨮??뺣뮉 ???곕떽?????됱젟???? ??용뮞?紐꺿봺?????館由??됰선??');
+    }
   };
 
   const openUserProfileFromRestaurantDetail = (authorName: string) => {
@@ -1334,7 +1410,7 @@ export function AppRoot() {
     gender: 'FEMALE' | 'MALE';
   }) => {
     if (!session?.accessToken) {
-      throw new Error('로그인 정보가 없어서 프로필을 저장할 수 없어요.');
+      throw new Error('濡쒓렇???뺣낫媛 ?놁뼱???꾨줈?꾩쓣 ??ν븷 ???놁뼱??');
     }
 
     if (pendingNickname) {
@@ -1531,13 +1607,29 @@ export function AppRoot() {
       ) : screen === 'restaurant-detail' ? (
         <RestaurantDetailScreen
           accessToken={session?.accessToken}
+          currentUserId={myUserId}
+          initialTab={restaurantDetailInitialTab}
           restaurantName={selectedRestaurantName}
           onBack={handleBackFromRestaurantDetail}
           favoriteColor={getFavoriteColor(selectedRestaurantName)}
-          onAddToList={(restaurantName) =>
-            openAddRestaurantToListFlow(restaurantName, 'restaurant-detail')
+          onAddToList={(restaurant) =>
+            openAddRestaurantToListFlow(restaurant, 'restaurant-detail')
           }
+          onEditReview={openEditReview}
           onOpenUserProfile={openUserProfileFromRestaurantDetail}
+          onOpenWriteReview={openWriteReview}
+        />
+      ) : screen === 'write-review' ? (
+        <WriteReviewScreen
+          initialContent={writeReviewInitialContent}
+          restaurantName={writeReviewRestaurantName || selectedRestaurantName}
+          onBack={() => {
+            setRestaurantDetailInitialTab('review');
+            setScreen('restaurant-detail');
+          }}
+          onSubmit={handleSubmitRestaurantReview}
+          submitLabel={writeReviewMode === 'edit' ? '리뷰 수정' : '리뷰 등록'}
+          title={writeReviewMode === 'edit' ? '리뷰 수정' : '리뷰 쓰기'}
         />
       ) : screen === 'settings' ? (
         <SettingsScreen
@@ -1572,9 +1664,10 @@ export function AppRoot() {
       ) : screen === 'user-friends' && selectedUserProfileId ? (
         <MyFriendsScreen
           initialTab={myFriendsInitialTab}
-          title={`${
-            visibleUserProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ?? ''
-          }님의 밥친구`}
+          title={
+            (visibleUserProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ??
+              '') + '님의 밥친구'
+          }
           followingUsersData={
             visibleUserFriendConnectionsByUserId[selectedUserProfileId]?.following ?? []
           }
@@ -1645,9 +1738,10 @@ export function AppRoot() {
         />
       ) : screen === 'user-reviews' && selectedUserProfileId ? (
         <UserReviewsScreen
-          title={`${
-            visibleUserProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ?? ''
-          }님의 리뷰`}
+          title={
+            (visibleUserProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ??
+              '') + '님의 리뷰'
+          }
           reviews={visibleUserReviewsByUserId[selectedUserProfileId] ?? []}
           onBack={() => setScreen('user-profile')}
           onOpenRestaurantDetail={(restaurantName) =>
