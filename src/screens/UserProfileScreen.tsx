@@ -12,7 +12,11 @@ const CARD_GAP = 6;
 const CARD_WIDTH = (screenWidth - HORIZONTAL_PADDING * 2 - CARD_GAP) / 2;
 
 type UserProfileScreenProps = {
+  isFollowLoading?: boolean;
+  isFollowing?: boolean;
+  isOwnProfile?: boolean;
   onBack: () => void;
+  onFollowToggle?: (nextIsFollowing: boolean) => void;
   onOpenFollowers?: () => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onOpenReviews?: () => void;
@@ -20,7 +24,11 @@ type UserProfileScreenProps = {
 };
 
 export function UserProfileScreen({
+  isFollowLoading = false,
+  isFollowing = false,
+  isOwnProfile = false,
   onBack,
+  onFollowToggle,
   onOpenFollowers,
   onOpenRestaurantDetail,
   onOpenReviews,
@@ -54,7 +62,30 @@ export function UserProfileScreen({
           </View>
 
           <View style={styles.profileSection}>
-            <Text style={styles.nickname}>{profile.nickname}</Text>
+            <View style={styles.profileHeader}>
+              <Text style={styles.nickname}>{profile.nickname}</Text>
+              {!isOwnProfile && onFollowToggle ? (
+                <Pressable
+                  disabled={isFollowLoading}
+                  onPress={() => onFollowToggle(!isFollowing)}
+                  style={[
+                    styles.followButton,
+                    isFollowing && styles.followingButton,
+                    isFollowLoading && styles.disabledButton,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.followButtonLabel,
+                      isFollowing && styles.followingButtonLabel,
+                    ]}
+                  >
+                    {isFollowLoading ? '처리 중...' : isFollowing ? '팔로잉' : '팔로우'}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+
             {hasMetrics ? (
               <View style={styles.metricsRow}>
                 {profile.temperature ? (
@@ -152,13 +183,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   profileSection: {
-    gap: 5,
+    gap: 8,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   nickname: {
+    flex: 1,
     fontSize: 24,
     lineHeight: 28,
     fontWeight: '800',
     color: '#000000',
+  },
+  followButton: {
+    minWidth: 72,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FF5C57',
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  followingButton: {
+    backgroundColor: '#F3F3F3',
+  },
+  disabledButton: {
+    opacity: 0.55,
+  },
+  followButtonLabel: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  followingButtonLabel: {
+    color: '#666666',
   },
   metricsRow: {
     flexDirection: 'row',

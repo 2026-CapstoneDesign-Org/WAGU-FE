@@ -216,6 +216,16 @@ export type ApiSearchResponse = {
   users?: ApiSearchUserItem[];
 };
 
+export type ApiReliabilityScore = {
+  grade?: string;
+  honorPeriod?: string;
+  honorTitle?: string;
+  nickname?: string;
+  score?: number;
+  updatedAt?: string;
+  userId: number;
+};
+
 type ApiReviewVoteRequest = {
   voteType: 'DISLIKE' | 'LIKE';
 };
@@ -427,6 +437,18 @@ export async function updateMyUser(
   });
 }
 
+export async function getUserInfo(token: string, userId: number) {
+  return apiRequest<ApiUser>(`/users/${userId}`, {
+    token,
+  });
+}
+
+export async function getUserReviews(token: string, userId: number) {
+  return apiRequest<ApiReview[]>(`/users/${userId}/reviews`, {
+    token,
+  });
+}
+
 export async function getMyLists(token: string) {
   return apiRequest<ApiUserListSummary[]>('/lists', {
     token,
@@ -549,6 +571,18 @@ export async function getFollowCount(token: string, userId: number) {
 
 export async function getFollowings(token: string, userId: number) {
   return apiRequest<ApiFollowUser[]>(`/users/${userId}/followings`, {
+    token,
+  });
+}
+
+export async function getFollowStatus(token: string, userId: number) {
+  return apiRequest<boolean>(`/users/${userId}/follow/status`, {
+    token,
+  });
+}
+
+export async function getReliabilityScore(token: string, userId: number) {
+  return apiRequest<ApiReliabilityScore>(`/users/${userId}/reliability`, {
     token,
   });
 }

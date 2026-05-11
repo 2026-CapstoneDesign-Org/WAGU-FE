@@ -13,12 +13,16 @@ import {
   followUser,
   getFollowers,
   getFollowCount,
+  getFollowStatus,
   getFollowings,
   getListDetail,
   getListRecommendations,
   getMyInfo,
   getMyLists,
+  getReliabilityScore,
   getRestaurantRankings,
+  getUserInfo,
+  getUserReviews,
   mapListDetailToMyList,
   mapListSummaryToMyList,
   mapRankingItems,
@@ -290,7 +294,12 @@ export function AppRoot() {
     HomeProfileCardItem[]
   >([]);
   const [recommendedUserProfiles, setRecommendedUserProfiles] = useState<UserProfile[]>([]);
+  const [remoteUserProfiles, setRemoteUserProfiles] = useState<UserProfile[]>([]);
   const [searchResultUserProfiles, setSearchResultUserProfiles] = useState<UserProfile[]>([]);
+  const [userProfileFollowStateById, setUserProfileFollowStateById] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [userProfileFollowPendingIds, setUserProfileFollowPendingIds] = useState<string[]>([]);
   const [selectedMyListId, setSelectedMyListId] = useState<string | null>(null);
   const [selectedUserProfileId, setSelectedUserProfileId] = useState<string | null>(null);
   const [userProfileSource, setUserProfileSource] = useState<UserProfileSource>(null);
@@ -326,9 +335,202 @@ export function AppRoot() {
   const [writeReviewMode, setWriteReviewMode] = useState<'create' | 'edit'>('create');
   const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
   const visibleUserProfiles = mergeUserProfiles(
-    mergeUserProfiles(searchResultUserProfiles, recommendedUserProfiles),
+    mergeUserProfiles(
+      remoteUserProfiles,
+      mergeUserProfiles(searchResultUserProfiles, recommendedUserProfiles),
+    ),
     fallbackUserProfiles,
   );
+
+  useEffect(() => {
+    if (!session?.accessToken || !selectedUserProfileId) {
+      return;
+    }
+
+    const userId = Number(selectedUserProfileId);
+
+    if (!Number.isFinite(userId)) {
+      return;
+    }
+
+    let cancelled = false;
+    const baseProfile =
+      remoteUserProfiles.find((item) => item.id === selectedUserProfileId) ??
+      searchResultUserProfiles.find((item) => item.id === selectedUserProfileId) ??
+      recommendedUserProfiles.find((item) => item.id === selectedUserProfileId) ??
+      fallbackUserProfiles.find((item) => item.id === selectedUserProfileId) ??
+      null;
+
+    const hydrateUserProfile = async () => {
+      const [
+        userInfoResult,
+        followCountResult,
+        reliabilityResult,
+        userReviewsResult,
+        followStatusResult,
+      ] =
+        await Promise.allSettled([
+          getUserInfo(session.accessToken, userId),
+          getFollowCount(session.accessToken, userId),
+          getReliabilityScore(session.accessToken, userId),
+          getUserReviews(session.accessToken, userId),
+          getFollowStatus(session.accessToken, userId),
+        ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      const userInfo = userInfoResult.status === 'fulfilled' ? userInfoResult.value : null;
+      const followCount = followCountResult.status === 'fulfilled' ? followCountResult.value : null;
+      const reliability =
+        reliabilityResult.status === 'fulfilled' ? reliabilityResult.value : null;
+      const userReviews =
+        userReviewsResult.status === 'fulfilled' ? userReviewsResult.value : null;
+      const followStatus =
+        followStatusResult.status === 'fulfilled' ? followStatusResult.value : null;
+
+      const nextProfile: UserProfile = {
+        id: selectedUserProfileId,
+        nickname: userInfo?.nickname ?? baseProfile?.nickname ?? '',
+        profileImageUrl: userInfo?.profileImageUrl ?? baseProfile?.profileImageUrl,
+        temperature:
+          reliability?.score !== undefined ? reliability.score.toFixed(1) : baseProfile?.temperature,
+        followerCount:
+          followCount?.followerCount !== undefined
+            ? String(followCount.followerCount)
+            : baseProfile?.followerCount,
+        reviewCount:
+          userReviews !== null ? String(userReviews.length) : baseProfile?.reviewCount,
+        representativeListTitle: baseProfile?.representativeListTitle ?? '대표 리스트',
+        representativeAccentColor:
+          baseProfile?.representativeAccentColor ??
+          HOME_PROFILE_ACCENT_COLORS[userId % HOME_PROFILE_ACCENT_COLORS.length],
+        representativeRestaurants: baseProfile?.representativeRestaurants ?? [],
+      };
+
+      setRemoteUserProfiles((current) => {
+        const existing = current.find((item) => item.id === selectedUserProfileId);
+
+        if (
+          existing &&
+          existing.nickname === nextProfile.nickname &&
+          existing.profileImageUrl === nextProfile.profileImageUrl &&
+          existing.temperature === nextProfile.temperature &&
+          existing.followerCount === nextProfile.followerCount &&
+          existing.reviewCount === nextProfile.reviewCount
+        ) {
+          return current;
+        }
+
+        const filtered = current.filter((item) => item.id !== selectedUserProfileId);
+        return [...filtered, nextProfile];
+      });
+
+      if (followStatus !== null) {
+        setUserProfileFollowStateById((current) => ({
+          ...current,
+          [selectedUserProfileId]: followStatus,
+        }));
+      }
+    };
+
+    void hydrateUserProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    fallbackUserProfiles,
+    recommendedUserProfiles,
+    remoteUserProfiles,
+    searchResultUserProfiles,
+    selectedUserProfileId,
+    session?.accessToken,
+  ]);
+
+  const handleToggleUserProfileFollow = async (userId: string, nextIsFollowing: boolean) => {
+    if (!session?.accessToken) {
+      return;
+    }
+
+    const parsedUserId = Number(userId);
+
+    if (Number.isNaN(parsedUserId)) {
+      Alert.alert('팔로우를 변경하지 못했습니다.');
+      return;
+    }
+
+    setUserProfileFollowPendingIds((current) =>
+      current.includes(userId) ? current : [...current, userId],
+    );
+
+    try {
+      if (nextIsFollowing) {
+        await followUser(session.accessToken, parsedUserId);
+      } else {
+        await unfollowUser(session.accessToken, parsedUserId);
+      }
+
+      setUserProfileFollowStateById((current) => ({
+        ...current,
+        [userId]: nextIsFollowing,
+      }));
+      setRemoteUserProfiles((current) =>
+        current.map((profile) =>
+          profile.id === userId
+            ? {
+                ...profile,
+                followerCount: profile.followerCount
+                  ? String(Math.max(0, Number(profile.followerCount) + (nextIsFollowing ? 1 : -1)))
+                  : profile.followerCount,
+              }
+            : profile,
+        ),
+      );
+      setMyFollowingUsers((current) => {
+        if (nextIsFollowing) {
+          if (current.some((user) => user.id === userId)) {
+            return current;
+          }
+
+          const targetProfile =
+            remoteUserProfiles.find((profile) => profile.id === userId) ??
+            searchResultUserProfiles.find((profile) => profile.id === userId) ??
+            recommendedUserProfiles.find((profile) => profile.id === userId) ??
+            fallbackUserProfiles.find((profile) => profile.id === userId);
+
+          if (!targetProfile) {
+            return current;
+          }
+
+          return [
+            ...current,
+            {
+              id: userId,
+              isFollowing: true,
+              name: targetProfile.nickname,
+              reviewCount: Number(targetProfile.reviewCount ?? 0) || 0,
+              showFollowAction: true,
+            },
+          ];
+        }
+
+        return current.filter((user) => user.id !== userId);
+      });
+      setMyFollowerUsers((current) =>
+        sortFollowersForInitialView(
+          current.map((user) =>
+            user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
+          ),
+        ),
+      );
+    } catch {
+      Alert.alert('팔로우를 변경하지 못했습니다.');
+    } finally {
+      setUserProfileFollowPendingIds((current) => current.filter((id) => id !== userId));
+    }
+  };
 
   useEffect(() => {
     if (!session?.accessToken) {
@@ -1836,6 +2038,12 @@ export function AppRoot() {
         <DeleteAccountScreen onBack={() => setScreen('settings')} />
       ) : screen === 'user-profile' && selectedUserProfileId ? (
         <UserProfileScreen
+          isFollowLoading={userProfileFollowPendingIds.includes(selectedUserProfileId)}
+          isFollowing={userProfileFollowStateById[selectedUserProfileId]}
+          isOwnProfile={Number(selectedUserProfileId) === myUserId}
+          onFollowToggle={(nextIsFollowing) =>
+            void handleToggleUserProfileFollow(selectedUserProfileId, nextIsFollowing)
+          }
           profile={
             visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ??
             visibleUserProfiles[0]
