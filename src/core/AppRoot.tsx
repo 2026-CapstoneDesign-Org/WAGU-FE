@@ -184,6 +184,32 @@ function mapFollowUsersToFriendUsers(
   }));
 }
 
+function buildFriendUserFromSources(
+  userId: string,
+  sources: Array<FriendUser[]>,
+  fallbackProfiles: UserProfile[],
+) {
+  const matchedUser = sources.flat().find((user) => user.id === userId);
+
+  if (matchedUser) {
+    return { ...matchedUser };
+  }
+
+  const targetProfile = fallbackProfiles.find((profile) => profile.id === userId);
+
+  if (!targetProfile) {
+    return null;
+  }
+
+  return {
+    id: userId,
+    isFollowing: true,
+    name: targetProfile.nickname,
+    reviewCount: Number(targetProfile.reviewCount ?? 0) || 0,
+    showFollowAction: true,
+  } satisfies FriendUser;
+}
+
 const HOME_PROFILE_ACCENT_COLORS = [
   '#F46A67',
   '#56CDB5',
@@ -1081,8 +1107,30 @@ export function AppRoot() {
         current.map((user) =>
           user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
         ),
-      ),
-    );
+        ),
+      );
+  };
+
+  const syncFollowStateAcrossUserConnections = (userId: string, nextIsFollowing: boolean) => {
+    setUserProfileFollowStateById((current) => ({
+      ...current,
+      [userId]: nextIsFollowing,
+    }));
+    setRemoteUserFriendConnectionsByUserId((current) => {
+      const nextEntries = Object.entries(current).map(([profileId, connections]) => [
+        profileId,
+        {
+          followers: connections.followers.map((user) =>
+            user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
+          ),
+          following: connections.following.map((user) =>
+            user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
+          ),
+        },
+      ]);
+
+      return Object.fromEntries(nextEntries);
+    });
   };
 
   const refreshMyReviews = async (token: string, userId: number) => {
@@ -1524,7 +1572,7 @@ export function AppRoot() {
     const parsedUserId = Number(userId);
 
     if (Number.isNaN(parsedUserId)) {
-      Alert.alert('?붾줈?곕? 蹂寃쏀븯吏 紐삵뻽?듬땲??');
+      Alert.alert('안내', '팔로우를 변경하지 못했습니다.');
       return false;
     }
 
@@ -1534,10 +1582,86 @@ export function AppRoot() {
       } else {
         await unfollowUser(session.accessToken, parsedUserId);
       }
-    } catch {
-      Alert.alert('?붾줈?곕? 蹂寃쏀븯吏 紐삵뻽?듬땲??');
-      return false;
+    } catch (error) {
+      try {
+        const followStatus = await getFollowStatus(session.accessToken, parsedUserId);
+        const currentIsFollowing = Boolean(followStatus);
+
+        if (currentIsFollowing === nextIsFollowing) {
+          syncFollowStateAcrossUserConnections(userId, nextIsFollowing);
+
+          if (sourceTab === 'following') {
+            setMyFollowingUsers((current) =>
+              nextIsFollowing
+                ? current
+                : current.filter((user) => user.id !== userId),
+            );
+            setMyFollowerUsers((current) =>
+              sortFollowersForInitialView(
+                current.map((user) =>
+                  user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
+                ),
+              ),
+            );
+            return true;
+          }
+
+          let targetFollower: FriendUser | null = null;
+
+          setMyFollowerUsers((current) =>
+            sortFollowersForInitialView(
+              current.map((user) => {
+                if (user.id !== userId) {
+                  return user;
+                }
+
+                targetFollower = { ...user, isFollowing: nextIsFollowing };
+                return targetFollower;
+              }),
+            ),
+          );
+
+          setMyFollowingUsers((current) => {
+            if (nextIsFollowing) {
+              if (!targetFollower || current.some((user) => user.id === userId)) {
+                return current;
+              }
+
+              return [...current, targetFollower];
+            }
+
+            return current.filter((user) => user.id !== userId);
+          });
+
+          return true;
+        }
+      } catch {
+        // Ignore follow status reconciliation errors and fall through to message handling.
+      }
+
+      if (error instanceof ApiError) {
+        const normalizedMessage = error.message.replace(/\s/g, '');
+        const isAlreadyFollowingError =
+          nextIsFollowing &&
+          (normalizedMessage.includes('이미팔로우') || normalizedMessage.includes('이미팔로잉'));
+        const isAlreadyUnfollowedError =
+          !nextIsFollowing &&
+          (error.status === 404 ||
+            normalizedMessage.includes('이미언팔로우') ||
+            normalizedMessage.includes('팔로우상태가아닙') ||
+            normalizedMessage.includes('팔로우하지않'));
+
+        if (!(isAlreadyFollowingError || isAlreadyUnfollowedError)) {
+          Alert.alert('안내', error.message || '팔로우를 변경하지 못했습니다.');
+          return false;
+        }
+      } else {
+        Alert.alert('안내', '팔로우를 변경하지 못했습니다.');
+        return false;
+      }
     }
+
+    syncFollowStateAcrossUserConnections(userId, nextIsFollowing);
 
     if (sourceTab === 'following') {
       setMyFollowingUsers((current) =>
@@ -1555,7 +1679,24 @@ export function AppRoot() {
       return true;
     }
 
-    let targetFollower: FriendUser | null = null;
+    const nextFollowUser = buildFriendUserFromSources(
+      userId,
+      [
+        myFollowerUsers,
+        myFollowingUsers,
+        ...Object.values(remoteUserFriendConnectionsByUserId).map((connection) => [
+          ...connection.followers,
+          ...connection.following,
+        ]),
+      ],
+      mergeUserProfiles(
+        mergeUserProfiles(
+          remoteUserProfiles,
+          mergeUserProfiles(searchResultUserProfiles, recommendedUserProfiles),
+        ),
+        fallbackUserProfiles,
+      ),
+    );
 
     setMyFollowerUsers((current) =>
       sortFollowersForInitialView(
@@ -1564,19 +1705,18 @@ export function AppRoot() {
             return user;
           }
 
-          targetFollower = { ...user, isFollowing: nextIsFollowing };
-          return targetFollower;
+          return { ...user, isFollowing: nextIsFollowing };
         }),
       ),
     );
 
     setMyFollowingUsers((current) => {
       if (nextIsFollowing) {
-        if (!targetFollower || current.some((user) => user.id === userId)) {
+        if (!nextFollowUser || current.some((user) => user.id === userId)) {
           return current;
         }
 
-        return [...current, targetFollower];
+        return [...current, { ...nextFollowUser, isFollowing: true }];
       }
 
       return current.filter((user) => user.id !== userId);
@@ -2676,6 +2816,7 @@ export function AppRoot() {
       ) : screen === 'user-friends' && selectedUserProfileId ? (
         <MyFriendsScreen
           initialTab={myFriendsInitialTab}
+          preserveListOnToggle
           title={
             (visibleUserProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ??
               '') + '님의 밥친구'
@@ -2688,6 +2829,7 @@ export function AppRoot() {
           }
             onBack={() => setScreen('user-profile')}
             onChangeTab={setMyFriendsInitialTab}
+            onToggleFollow={handleToggleMyFriendFollow}
             onOpenUserProfile={(userId) => {
               openNestedUserProfile(userId, {
                 type: 'user-friends',
@@ -2783,7 +2925,7 @@ export function AppRoot() {
         <UserProfileScreen
           isFollowLoading={userProfileFollowPendingIds.includes(selectedUserProfileId)}
           isFollowing={userProfileFollowStateById[selectedUserProfileId]}
-          isOwnProfile={Number(selectedUserProfileId) === myUserId}
+          isOwnProfile={myUserId !== null && Number(selectedUserProfileId) === myUserId}
           onFollowToggle={(nextIsFollowing) =>
             void handleToggleUserProfileFollow(selectedUserProfileId, nextIsFollowing)
           }

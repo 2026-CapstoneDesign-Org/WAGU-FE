@@ -30,6 +30,7 @@ type MyFriendsScreenProps = {
   onChangeTab?: (tab: FriendTabKey) => void;
   onOpenUserProfile?: (userId: string) => void;
   onToggleFollow?: (payload: FollowTogglePayload) => Promise<boolean> | boolean;
+  preserveListOnToggle?: boolean;
   title?: string;
 };
 
@@ -137,6 +138,7 @@ export function MyFriendsScreen({
   onChangeTab,
   onOpenUserProfile,
   onToggleFollow,
+  preserveListOnToggle = false,
   title = '\uBC25\uCE5C\uAD6C',
 }: MyFriendsScreenProps) {
   const pagerRef = useRef<ScrollView | null>(null);
@@ -146,8 +148,11 @@ export function MyFriendsScreen({
     followingUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWING_USERS : []),
   );
   const [followerUsers, setFollowerUsers] = useState(() =>
-    sortFollowersForInitialView(followerUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : [])),
+    sortFollowersForInitialView(
+      followerUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : []),
+    ),
   );
+  const [followOverrides, setFollowOverrides] = useState<Record<string, boolean>>({});
   const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -156,20 +161,72 @@ export function MyFriendsScreen({
 
   useEffect(() => {
     setFollowerUsers(
-      sortFollowersForInitialView(followerUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : [])),
+      sortFollowersForInitialView(
+        followerUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : []),
+      ),
     );
-  }, [followerUsersData]);
+  }, [followerUsersData, preserveListOnToggle]);
+
+  useEffect(() => {
+    if (!preserveListOnToggle) {
+      return;
+    }
+
+    const mergedUsers = [...(followingUsersData ?? []), ...(followerUsersData ?? [])];
+
+    setFollowOverrides((current) => {
+      const nextEntries = Object.entries(current).filter(([userId, isFollowing]) => {
+        const matchedUser = mergedUsers.find((user) => user.id === userId);
+
+        if (!matchedUser) {
+          return true;
+        }
+
+        return matchedUser.isFollowing !== isFollowing;
+      });
+
+      return nextEntries.length === Object.keys(current).length
+        ? current
+        : Object.fromEntries(nextEntries);
+    });
+  }, [followerUsersData, followingUsersData, preserveListOnToggle]);
+
+  const displayedFollowingUsers = useMemo(
+    () =>
+      followingUsers.map((user) => ({
+        ...user,
+        isFollowing:
+          followOverrides[user.id] !== undefined
+            ? followOverrides[user.id]
+            : user.isFollowing,
+      })),
+    [followOverrides, followingUsers],
+  );
+
+  const displayedFollowerUsers = useMemo(
+    () =>
+      sortFollowersForInitialView(
+        followerUsers.map((user) => ({
+          ...user,
+          isFollowing:
+            followOverrides[user.id] !== undefined
+              ? followOverrides[user.id]
+              : user.isFollowing,
+        })),
+      ),
+    [followOverrides, followerUsers],
+  );
 
   const tabs = useMemo(
     () => [
       {
         key: 'following' as const,
         label: '\uD314\uB85C\uC789',
-        count: followingUsers.length,
+        count: displayedFollowingUsers.length,
       },
-      { key: 'followers' as const, label: '\uD314\uB85C\uC6CC', count: followerUsers.length },
+      { key: 'followers' as const, label: '\uD314\uB85C\uC6CC', count: displayedFollowerUsers.length },
     ],
-    [followerUsers.length, followingUsers.length],
+    [displayedFollowerUsers.length, displayedFollowingUsers.length],
   );
 
   const initialIndex = useMemo(
@@ -219,6 +276,14 @@ export function MyFriendsScreen({
     sourceTab,
     userId,
   }: FollowTogglePayload) => {
+    if (preserveListOnToggle) {
+      setFollowOverrides((current) => ({
+        ...current,
+        [userId]: nextIsFollowing,
+      }));
+      return;
+    }
+
     if (sourceTab === 'following') {
       setFollowingUsers((current) =>
         nextIsFollowing
@@ -265,17 +330,26 @@ export function MyFriendsScreen({
     }
 
     if (onToggleFollow) {
+      const rollbackPayload: FollowTogglePayload = {
+        ...payload,
+        nextIsFollowing: !payload.nextIsFollowing,
+      };
+
+      applyFollowChange(payload);
       setPendingUserIds((current) => [...current, payload.userId]);
 
       try {
         const didSucceed = await onToggleFollow(payload);
 
         if (!didSucceed) {
+          applyFollowChange(rollbackPayload);
           return;
         }
       } finally {
         setPendingUserIds((current) => current.filter((id) => id !== payload.userId));
       }
+
+      return;
     }
 
     applyFollowChange(payload);
@@ -342,7 +416,7 @@ export function MyFriendsScreen({
               onToggleFollow={handleToggleFollow}
               onOpenUserProfile={onOpenUserProfile}
               sourceTab="following"
-              users={followingUsers}
+              users={displayedFollowingUsers}
             />
           </View>
           <View style={styles.page}>
@@ -351,7 +425,7 @@ export function MyFriendsScreen({
               onToggleFollow={handleToggleFollow}
               onOpenUserProfile={onOpenUserProfile}
               sourceTab="followers"
-              users={followerUsers}
+              users={displayedFollowerUsers}
             />
           </View>
         </Animated.ScrollView>
