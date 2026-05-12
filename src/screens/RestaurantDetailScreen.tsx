@@ -21,6 +21,7 @@ import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
+import { ApiError } from '../api/client';
 import {
   ApiReview,
   ApiBusinessHoursDisplayRow,
@@ -29,11 +30,13 @@ import {
   ApiReviewSummary,
   cancelReviewVote,
   deleteReview,
+  followUser,
   getRestaurant,
   getRestaurantPhotoUris,
   getRestaurantReviews,
   getRestaurantReviewSummary,
   searchRestaurants,
+  unfollowUser,
   voteReview,
 } from '../api/wagu';
 import ClockIcon from '../../assets/icons/clock.svg';
@@ -55,12 +58,14 @@ type ReviewReaction = 'like' | 'dislike' | null;
 type RestaurantDetailScreenProps = {
   accessToken?: string | null;
   currentUserId?: number | null;
+  followingUserIds?: number[];
   initialTab?: RestaurantDetailTab;
   onBack: () => void;
   restaurantName?: string;
   onAddToList?: (restaurant: Restaurant) => void;
   onEditReview?: (reviewId: number, restaurantName: string, restaurantId?: number, content?: string) => void;
   onOpenUserProfile?: (authorName: string) => void;
+  onReviewAuthorFollowChange?: (userId: string, nextIsFollowing: boolean) => void;
   onOpenWriteReview?: (restaurantName: string, restaurantId?: number) => void;
   favoriteColor?: string;
   reviewsData?: RestaurantReview[];
@@ -89,6 +94,7 @@ type TabScrollProps = {
 };
 
 type RestaurantReviewDisplay = RestaurantReview & {
+  isFollowPending?: boolean;
   currentReaction?: ReviewReaction;
   isVotePending?: boolean;
 };
@@ -685,13 +691,13 @@ function mapApiReviewToDisplayReview(
   currentUserId?: number | null,
 ): RestaurantReview {
   return {
+    authorUserId: review.userId,
     authorName: review.nickname,
     content: review.content,
     date: formatReviewDate(review.createdAt),
     dislikes: review.dislikeCount,
     id: String(review.id),
     imageUris: review.imageUrls,
-    isFollowing: false,
     isOwner: review.userId === currentUserId,
     likes: review.likeCount,
     restaurantName,
@@ -740,8 +746,10 @@ function ReviewCard({
         ) : (
           <Pressable
             onPress={() => onToggleFollow(review.id)}
+            disabled={review.isFollowPending}
             style={[
               styles.reviewFollowButton,
+              review.isFollowPending ? styles.reviewActionPending : null,
               review.isFollowing ? styles.reviewFollowingButton : null,
             ]}
           >
@@ -1408,12 +1416,14 @@ function getTabIndicatorOffset(tab: RestaurantDetailTab) {
 export function RestaurantDetailScreen({
   accessToken,
   currentUserId,
+  followingUserIds,
   initialTab = 'home',
   onBack,
   restaurantName = '와이앤웍',
   onAddToList,
   onEditReview,
   onOpenUserProfile,
+  onReviewAuthorFollowChange,
   onOpenWriteReview,
   favoriteColor = '#D9D9D9',
   reviewsData,
@@ -1435,6 +1445,9 @@ export function RestaurantDetailScreen({
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [previewCurrentIndex, setPreviewCurrentIndex] = useState(0);
   const [reviewFollowStates, setReviewFollowStates] = useState<Record<string, boolean>>({});
+  const [reviewFollowPendingIds, setReviewFollowPendingIds] = useState<Record<string, boolean>>(
+    {},
+  );
   const [reviewReactionStates, setReviewReactionStates] = useState<
     Record<string, ReviewReaction>
   >({});
@@ -1448,6 +1461,22 @@ export function RestaurantDetailScreen({
   const [previewImageSizes, setPreviewImageSizes] = useState<
     Record<string, { width: number; height: number }>
   >({});
+  const followingUserIdSet = useMemo(
+    () => new Set((followingUserIds ?? []).filter((userId) => Number.isFinite(userId))),
+    [followingUserIds],
+  );
+  const followingUserIdsKey = useMemo(
+    () =>
+      (followingUserIds ?? [])
+        .filter((userId) => Number.isFinite(userId))
+        .sort((left, right) => left - right)
+        .join(','),
+    [followingUserIds],
+  );
+
+  useEffect(() => {
+    setReviewFollowStates((current) => (Object.keys(current).length > 0 ? {} : current));
+  }, [followingUserIdsKey]);
 
   const handlePressWriteReview = () => {
     if (onOpenWriteReview) {
@@ -1743,7 +1772,12 @@ export function RestaurantDetailScreen({
 
     const reviewsWithFollowState = filteredReviews.map((review) => ({
       ...review,
-      isFollowing: reviewFollowStates[review.id] ?? review.isFollowing ?? false,
+      isFollowing:
+        reviewFollowStates[review.id] ??
+        (review.authorUserId ? followingUserIdSet.has(review.authorUserId) : undefined) ??
+        review.isFollowing ??
+        false,
+      isFollowPending: reviewFollowPendingIds[review.id] ?? false,
       currentReaction: reviewReactionStates[review.id] ?? null,
       likes: review.likes,
       dislikes: review.dislikes,
@@ -1764,8 +1798,10 @@ export function RestaurantDetailScreen({
     restaurantName,
     reviewSort,
     reviewFollowStates,
+    reviewFollowPendingIds,
     reviewReactionStates,
     reviewVotePendingIds,
+    followingUserIdSet,
     remoteReviews,
     reviewsData,
   ]);
@@ -1783,21 +1819,68 @@ export function RestaurantDetailScreen({
   const hasHeroPhotos = restaurantMeta.photoUris.length > 0;
 
   const handleToggleReviewFollow = (reviewId: string) => {
-    setReviewFollowStates((current) => {
-      const reviewSource = reviewsData ?? (MOCK_DATA_ENABLED ? restaurantReviews : []);
-      const targetReview = reviewSource.find((review) => review.id === reviewId);
+    const reviewSource = remoteReviews ?? reviewsData ?? (MOCK_DATA_ENABLED ? restaurantReviews : []);
+    const targetReview = reviewSource.find((review) => review.id === reviewId);
 
-      if (targetReview?.isOwner) {
-        return current;
-      }
+    if (targetReview?.isOwner || reviewFollowPendingIds[reviewId]) {
+      return;
+    }
 
-      const currentValue = current[reviewId] ?? targetReview?.isFollowing ?? false;
+    const currentValue =
+      reviewFollowStates[reviewId] ??
+      (targetReview?.authorUserId ? followingUserIdSet.has(targetReview.authorUserId) : undefined) ??
+      targetReview?.isFollowing ??
+      false;
+    const nextValue = !currentValue;
 
-      return {
+    if (!accessToken || !targetReview?.authorUserId) {
+      setReviewFollowStates((current) => ({
         ...current,
-        [reviewId]: !currentValue,
-      };
-    });
+        [reviewId]: nextValue,
+      }));
+      return;
+    }
+
+    const targetAuthorUserId = targetReview.authorUserId;
+
+    setReviewFollowPendingIds((current) => ({
+      ...current,
+      [reviewId]: true,
+    }));
+
+    void (async () => {
+      try {
+        if (nextValue) {
+          await followUser(accessToken, targetAuthorUserId);
+        } else {
+          await unfollowUser(accessToken, targetAuthorUserId);
+        }
+
+        setReviewFollowStates((current) => ({
+          ...current,
+          [reviewId]: nextValue,
+        }));
+        onReviewAuthorFollowChange?.(String(targetAuthorUserId), nextValue);
+      } catch (error) {
+        if (!nextValue && error instanceof ApiError && [400, 404].includes(error.status)) {
+          setReviewFollowStates((current) => ({
+            ...current,
+            [reviewId]: false,
+          }));
+          onReviewAuthorFollowChange?.(String(targetAuthorUserId), false);
+          return;
+        }
+
+        const message =
+          error instanceof ApiError ? error.message : '팔로우를 변경하지 못했습니다.';
+        Alert.alert('안내', message);
+      } finally {
+        setReviewFollowPendingIds((current) => ({
+          ...current,
+          [reviewId]: false,
+        }));
+      }
+    })();
   };
 
   const handleToggleReviewReaction = async (
@@ -2919,6 +3002,9 @@ const styles = StyleSheet.create({
   },
   reviewFollowingButton: {
     backgroundColor: '#F5F5F5',
+  },
+  reviewActionPending: {
+    opacity: 0.55,
   },
   reviewFollowButtonLabel: {
     fontSize: 14,

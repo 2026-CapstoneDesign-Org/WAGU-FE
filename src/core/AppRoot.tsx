@@ -739,6 +739,50 @@ export function AppRoot() {
     }
   };
 
+  const syncFollowStateAcrossScreens = (userId: string, nextIsFollowing: boolean) => {
+    setUserProfileFollowStateById((current) => ({
+      ...current,
+      [userId]: nextIsFollowing,
+    }));
+    setMyFollowingUsers((current) => {
+      if (nextIsFollowing) {
+        if (current.some((user) => user.id === userId)) {
+          return current;
+        }
+
+        const targetProfile =
+          remoteUserProfiles.find((profile) => profile.id === userId) ??
+          searchResultUserProfiles.find((profile) => profile.id === userId) ??
+          recommendedUserProfiles.find((profile) => profile.id === userId) ??
+          fallbackUserProfiles.find((profile) => profile.id === userId);
+
+        if (!targetProfile) {
+          return current;
+        }
+
+        return [
+          ...current,
+          {
+            id: userId,
+            isFollowing: true,
+            name: targetProfile.nickname,
+            reviewCount: Number(targetProfile.reviewCount ?? 0) || 0,
+            showFollowAction: true,
+          },
+        ];
+      }
+
+      return current.filter((user) => user.id !== userId);
+    });
+    setMyFollowerUsers((current) =>
+      sortFollowersForInitialView(
+        current.map((user) =>
+          user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
+        ),
+      ),
+    );
+  };
+
   const refreshMyReviews = async (token: string, userId: number) => {
     const reviews = await getUserReviews(token, userId);
     setMyReviewItems(reviews.map(mapApiReviewToMyReview));
@@ -769,7 +813,7 @@ export function AppRoot() {
         setMyUserId(me.id);
 
         const fetchPreferredLocalRanking = async () => {
-          const regionCandidates = ['용인', '용인시', '처인구', '기흥구', '수지구'];
+          const regionCandidates = ['용인시 처인구', '용인', '용인시', '처인구', '기흥구', '수지구'];
 
           for (const regionName of regionCandidates) {
             const result = await getRestaurantRankings(session.accessToken, {
@@ -782,7 +826,7 @@ export function AppRoot() {
             }
           }
 
-          return getRestaurantRankings(session.accessToken, { regionName: '용인', limit: 40 });
+          return getRestaurantRankings(session.accessToken, { regionName: '용인시 처인구', limit: 40 });
         };
 
           const [
@@ -2159,6 +2203,9 @@ export function AppRoot() {
         <RestaurantDetailScreen
           accessToken={session?.accessToken}
           currentUserId={myUserId}
+          followingUserIds={myFollowingUsers
+            .map((user) => Number(user.id))
+            .filter((userId) => Number.isFinite(userId))}
           initialTab={restaurantDetailInitialTab}
           restaurantName={selectedRestaurantName}
           onBack={handleBackFromRestaurantDetail}
@@ -2168,6 +2215,7 @@ export function AppRoot() {
           }
           onEditReview={openEditReview}
           onOpenUserProfile={openUserProfileFromRestaurantDetail}
+          onReviewAuthorFollowChange={syncFollowStateAcrossScreens}
           onOpenWriteReview={openWriteReview}
         />
       ) : screen === 'write-review' ? (

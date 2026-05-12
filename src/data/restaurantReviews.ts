@@ -2,6 +2,7 @@ import { ReviewMediaItem } from '../types/reviews';
 
 export type RestaurantReview = {
   id: string;
+  authorUserId?: number;
   restaurantName: string;
   authorName: string;
   isFollowing?: boolean;
