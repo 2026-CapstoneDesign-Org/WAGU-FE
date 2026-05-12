@@ -48,8 +48,9 @@ export function UserProfileScreen({
     [],
   );
 
-  const hasMetrics = Boolean(profile.temperature || profile.reviewCount || profile.followerCount);
+  const hasMetrics = Boolean(profile.reviewCount || profile.followerCount);
   const hasRepresentativeRestaurants = profile.representativeRestaurants.length > 0;
+  const hasReliability = Boolean(profile.reliabilityGrade);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
@@ -63,37 +64,40 @@ export function UserProfileScreen({
 
           <View style={styles.profileSection}>
             <View style={styles.profileHeader}>
-              <Text style={styles.nickname}>{profile.nickname}</Text>
-              {!isOwnProfile && onFollowToggle ? (
-                <Pressable
-                  disabled={isFollowLoading}
-                  onPress={() => onFollowToggle(!isFollowing)}
-                  style={[
-                    styles.followButton,
-                    isFollowing && styles.followingButton,
-                    isFollowLoading && styles.disabledButton,
-                  ]}
-                >
-                  <Text
+              <View style={styles.headerMetaRow}>
+                <View style={styles.nicknameRow}>
+                  <Text style={styles.nickname}>{profile.nickname}</Text>
+                  {hasReliability ? (
+                    <View style={styles.reliabilityBadge}>
+                      <Text style={styles.reliabilityBadgeLabel}>{profile.reliabilityGrade}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                {!isOwnProfile && onFollowToggle ? (
+                  <Pressable
+                    disabled={isFollowLoading}
+                    onPress={() => onFollowToggle(!isFollowing)}
                     style={[
-                      styles.followButtonLabel,
-                      isFollowing && styles.followingButtonLabel,
+                      styles.followButton,
+                      isFollowing && styles.followingButton,
+                      isFollowLoading && styles.disabledButton,
                     ]}
                   >
-                    {isFollowLoading ? '처리 중...' : isFollowing ? '팔로잉' : '팔로우'}
-                  </Text>
-                </Pressable>
-              ) : null}
+                    <Text
+                      style={[
+                        styles.followButtonLabel,
+                        isFollowing && styles.followingButtonLabel,
+                      ]}
+                    >
+                      {isFollowLoading ? '처리 중...' : isFollowing ? '팔로잉' : '팔로우'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
 
             {hasMetrics ? (
               <View style={styles.metricsRow}>
-                {profile.temperature ? (
-                  <View style={styles.metricGroup}>
-                    <Text style={styles.metricLabel}>매너온도</Text>
-                    <Text style={styles.temperatureValue}>{profile.temperature}</Text>
-                  </View>
-                ) : null}
                 {profile.reviewCount ? (
                   <Pressable hitSlop={8} onPress={onOpenReviews} style={styles.metricPressable}>
                     <View style={styles.metricGroup}>
@@ -183,7 +187,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   profileSection: {
-    gap: 8,
+    gap: 12,
   },
   profileHeader: {
     flexDirection: 'row',
@@ -191,12 +195,37 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  nickname: {
+  headerMetaRow: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  nicknameRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  nickname: {
     fontSize: 24,
     lineHeight: 28,
     fontWeight: '800',
     color: '#000000',
+  },
+  reliabilityBadge: {
+    minHeight: 24,
+    borderRadius: 12,
+    backgroundColor: '#F3F3F3',
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reliabilityBadgeLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#111111',
   },
   followButton: {
     minWidth: 72,
@@ -241,12 +270,6 @@ const styles = StyleSheet.create({
     lineHeight: 21.5,
     fontWeight: '500',
     color: '#000000',
-  },
-  temperatureValue: {
-    fontSize: 15,
-    lineHeight: 22.5,
-    fontWeight: '600',
-    color: '#FF0000',
   },
   metricValue: {
     fontSize: 15,

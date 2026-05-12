@@ -43,7 +43,7 @@ import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { FriendTabKey, FriendUser, FollowTogglePayload, MY_FOLLOWER_USERS, MY_FOLLOWING_USERS } from '../data/myFriends';
 import { userFriendConnectionsByUserId } from '../data/userFriendConnections';
 import { initialMyLists, MyList } from '../data/myLists';
-import { myReviews } from '../data/myReviews';
+import { MyReview, myReviews } from '../data/myReviews';
 import { localRankingEntries, nationalRankingEntries, RankingEntry } from '../data/rankings';
 import { Restaurant, restaurants as initialRestaurantPool } from '../data/restaurants';
 import { userReviewsByUserId } from '../data/userReviews';
@@ -217,6 +217,92 @@ function createSearchResultUserProfile(user: {
   };
 }
 
+function mapReliabilityGrade(grade?: string, score?: number) {
+  const normalizedGrade = grade?.trim().toUpperCase();
+
+  if (normalizedGrade === 'BRONZE') {
+    return '브론즈';
+  }
+
+  if (normalizedGrade === 'SILVER') {
+    return '실버';
+  }
+
+  if (normalizedGrade === 'GOLD') {
+    return '골드';
+  }
+
+  if (normalizedGrade === 'PLATINUM') {
+    return '플래티넘';
+  }
+
+  if (normalizedGrade === 'DIAMOND') {
+    return '다이아';
+  }
+
+  if (score === undefined) {
+    return grade;
+  }
+
+  if (score >= 80) {
+    return '다이아';
+  }
+
+  if (score >= 60) {
+    return '플래티넘';
+  }
+
+  if (score >= 40) {
+    return '골드';
+  }
+
+  if (score >= 20) {
+    return '실버';
+  }
+
+  return '브론즈';
+}
+
+function formatApiReviewDate(createdAt?: string) {
+  if (!createdAt) {
+    return '';
+  }
+
+  const parsed = new Date(createdAt);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return createdAt.replaceAll('-', '.').slice(0, 10);
+  }
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+
+  return `${year}.${month}.${day}`;
+}
+
+function mapApiReviewToMyReview(review: {
+  id: number;
+  content: string;
+  createdAt: string;
+  dislikeCount: number;
+  imageUrls?: string[];
+  likeCount: number;
+  restaurantName?: string;
+  categoryName?: string;
+}): MyReview {
+  return {
+    id: String(review.id),
+    restaurantName: review.restaurantName ?? '식당 정보 없음',
+    category: review.categoryName ?? '',
+    date: formatApiReviewDate(review.createdAt),
+    content: review.content,
+    likes: review.likeCount,
+    dislikes: review.dislikeCount,
+    imageUris: review.imageUrls ?? [],
+  };
+}
+
 export function AppRoot() {
   const fallbackMyLists = MOCK_DATA_ENABLED ? initialMyLists : [];
   const fallbackFollowerCount = MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS.length : 0;
@@ -285,7 +371,11 @@ export function AppRoot() {
   const [myFollowingUsers, setMyFollowingUsers] = useState<FriendUser[]>(fallbackFollowingUsers);
   const [myFollowerUsers, setMyFollowerUsers] =
     useState<FriendUser[]>(sortFollowersForInitialView(fallbackFollowerUsers));
+  const [myReviewItems, setMyReviewItems] = useState<MyReview[]>(MOCK_DATA_ENABLED ? myReviews : []);
   const [myUserId, setMyUserId] = useState<number | null>(null);
+  const [myReliabilityGrade, setMyReliabilityGrade] = useState<string | null>(null);
+  const [myHonorTitle, setMyHonorTitle] = useState<string | null>(null);
+  const [myHonorPeriod, setMyHonorPeriod] = useState<string | null>(null);
   const [rankingEntries, setRankingEntries] = useState<{
     local: RankingEntry[];
     national: RankingEntry[];
@@ -394,8 +484,11 @@ export function AppRoot() {
         id: selectedUserProfileId,
         nickname: userInfo?.nickname ?? baseProfile?.nickname ?? '',
         profileImageUrl: userInfo?.profileImageUrl ?? baseProfile?.profileImageUrl,
-        temperature:
-          reliability?.score !== undefined ? reliability.score.toFixed(1) : baseProfile?.temperature,
+        reliabilityGrade:
+          mapReliabilityGrade(reliability?.grade, reliability?.score) ??
+          baseProfile?.reliabilityGrade,
+        honorTitle: reliability?.honorTitle ?? baseProfile?.honorTitle,
+        honorPeriod: reliability?.honorPeriod ?? baseProfile?.honorPeriod,
         followerCount:
           followCount?.followerCount !== undefined
             ? String(followCount.followerCount)
@@ -416,7 +509,9 @@ export function AppRoot() {
           existing &&
           existing.nickname === nextProfile.nickname &&
           existing.profileImageUrl === nextProfile.profileImageUrl &&
-          existing.temperature === nextProfile.temperature &&
+          existing.reliabilityGrade === nextProfile.reliabilityGrade &&
+          existing.honorTitle === nextProfile.honorTitle &&
+          existing.honorPeriod === nextProfile.honorPeriod &&
           existing.followerCount === nextProfile.followerCount &&
           existing.reviewCount === nextProfile.reviewCount
         ) {
@@ -532,6 +627,11 @@ export function AppRoot() {
     }
   };
 
+  const refreshMyReviews = async (token: string, userId: number) => {
+    const reviews = await getUserReviews(token, userId);
+    setMyReviewItems(reviews.map(mapApiReviewToMyReview));
+  };
+
   useEffect(() => {
     if (!session?.accessToken) {
       setRecommendedMealFriendItems([]);
@@ -562,6 +662,8 @@ export function AppRoot() {
           nationalRankingResult,
           followingsResult,
           followersResult,
+          reliabilityResult,
+          myReviewsResult,
           recommendationsResult,
         ] =
           await Promise.allSettled([
@@ -571,6 +673,8 @@ export function AppRoot() {
             getRestaurantRankings(session.accessToken, { limit: 40 }),
             getFollowings(session.accessToken, me.id),
             getFollowers(session.accessToken, me.id),
+            getReliabilityScore(session.accessToken, me.id),
+            getUserReviews(session.accessToken, me.id),
             getListRecommendations(session.accessToken),
           ]);
 
@@ -580,6 +684,19 @@ export function AppRoot() {
 
         if (followCountResult.status === 'fulfilled') {
           setFollowerCount(followCountResult.value.followerCount);
+        }
+
+        if (reliabilityResult.status === 'fulfilled') {
+          setMyReliabilityGrade(
+            mapReliabilityGrade(reliabilityResult.value.grade, reliabilityResult.value.score) ??
+              null,
+          );
+          setMyHonorTitle(reliabilityResult.value.honorTitle ?? null);
+          setMyHonorPeriod(reliabilityResult.value.honorPeriod ?? null);
+        }
+
+        if (myReviewsResult.status === 'fulfilled') {
+          setMyReviewItems(myReviewsResult.value.map(mapApiReviewToMyReview));
         }
 
         if (followingsResult.status === 'fulfilled' && followersResult.status === 'fulfilled') {
@@ -1499,6 +1616,10 @@ export function AppRoot() {
       });
     }
 
+    if (myUserId !== null) {
+      await refreshMyReviews(session.accessToken, myUserId);
+    }
+
     setRestaurantDetailInitialTab('review');
     setScreen('restaurant-detail');
   };
@@ -2009,6 +2130,8 @@ export function AppRoot() {
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, { type: 'my-reviews' })
           }
+          reviewsData={myReviewItems}
+          title="내 리뷰"
         />
       ) : screen === 'user-reviews' && selectedUserProfileId ? (
         <UserReviewsScreen
@@ -2177,6 +2300,8 @@ export function AppRoot() {
       ) : (
         <MyPageScreen
           followerCount={followerCount}
+          honorPeriod={myHonorPeriod ?? undefined}
+          honorTitle={myHonorTitle ?? undefined}
           initialScrollState={myPageScrollState}
           nickname={nickname}
           myLists={myLists}
@@ -2202,7 +2327,8 @@ export function AppRoot() {
           }
           onOpenSettings={() => setScreen('settings')}
           onSelectTab={handleSelectTab}
-          reviewCount={MOCK_DATA_ENABLED ? myReviews.length : 0}
+          reliabilityGrade={myReliabilityGrade ?? undefined}
+          reviewCount={myReviewItems.length}
           restoreAnimated={myPageRestoreAnimated}
           restoreScrollKey={myPageRestoreKey}
         />

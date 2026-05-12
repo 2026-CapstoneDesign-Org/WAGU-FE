@@ -28,6 +28,8 @@ const quickMenus = [
 
 type MyPageScreenProps = {
   followerCount?: number;
+  honorPeriod?: string;
+  honorTitle?: string;
   initialScrollState?: MyPageScrollState;
   nickname?: string;
   myLists: MyList[];
@@ -40,6 +42,7 @@ type MyPageScreenProps = {
   onScrollStateChange?: (state: Partial<MyPageScrollState>) => void;
   onOpenSettings: () => void;
   onSelectTab: (tab: AppTab) => void;
+  reliabilityGrade?: string;
   restoreAnimated?: boolean;
   restoreScrollKey?: number;
   reviewCount?: number;
@@ -63,6 +66,8 @@ function QuickMenuIcon({ type }: { type: (typeof quickMenus)[number]['type'] }) 
 
 export function MyPageScreen({
   followerCount = 0,
+  honorPeriod,
+  honorTitle,
   initialScrollState,
   nickname = '먹부림',
   myLists,
@@ -75,6 +80,7 @@ export function MyPageScreen({
   onScrollStateChange,
   onOpenSettings,
   onSelectTab,
+  reliabilityGrade,
   restoreAnimated = false,
   restoreScrollKey = 0,
   reviewCount = 0,
@@ -106,6 +112,7 @@ export function MyPageScreen({
   const representativeCards = representativeList?.restaurants ?? [];
   const visibleCards = representativeCards.slice(0, visibleCount);
   const hasMoreCards = visibleCount < representativeCards.length;
+  const hasReliability = Boolean(reliabilityGrade);
 
   useEffect(() => {
     setVisibleCount(10);
@@ -119,7 +126,7 @@ export function MyPageScreen({
         animated: restoreAnimated,
       });
     });
-  }, [restoreAnimated, restoreScrollKey]);
+  }, [initialScrollState?.verticalY, restoreAnimated, restoreScrollKey]);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
@@ -135,12 +142,15 @@ export function MyPageScreen({
         >
           <View style={styles.profileSection}>
             <View style={styles.profileHeader}>
-              <Text style={styles.nickname}>{`${nickname}님`}</Text>
+              <View style={styles.nicknameRow}>
+                <Text style={styles.nickname}>{nickname}님</Text>
+                {hasReliability ? (
+                  <View style={styles.reliabilityBadge}>
+                    <Text style={styles.reliabilityBadgeLabel}>{reliabilityGrade}</Text>
+                  </View>
+                ) : null}
+              </View>
               <View style={styles.metricsRow}>
-                <View style={styles.metricGroup}>
-                  <Text style={styles.metricLabel}>매너온도</Text>
-                  <Text style={styles.temperatureValue}>36.5°</Text>
-                </View>
                 <Pressable style={styles.metricPressable} hitSlop={8} onPress={onOpenMyReviews}>
                   <View style={styles.metricGroup}>
                     <Text style={styles.metricLabel}>리뷰</Text>
@@ -195,7 +205,9 @@ export function MyPageScreen({
               }}
               disabled={!representativeList && !onOpenMyLists}
             >
-              <Text style={styles.sectionTitle}>{representativeList?.title ?? '대표 리스트'}</Text>
+              <Text style={styles.sectionTitle}>
+                {representativeList?.title ?? '대표 리스트'}
+              </Text>
               {representativeList ? (
                 <View style={styles.representativeBadge}>
                   <Text style={styles.representativeBadgeLabel}>대표</Text>
@@ -275,13 +287,32 @@ const styles = StyleSheet.create({
     gap: 30,
   },
   profileHeader: {
-    gap: 5,
+    gap: 8,
+  },
+  nicknameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   nickname: {
     fontSize: 24,
     lineHeight: 28,
     fontWeight: '800',
     color: '#000000',
+  },
+  reliabilityBadge: {
+    minHeight: 24,
+    borderRadius: 12,
+    backgroundColor: '#F3F3F3',
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reliabilityBadgeLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#111111',
   },
   metricsRow: {
     flexDirection: 'row',
@@ -302,12 +333,6 @@ const styles = StyleSheet.create({
     lineHeight: 21.5,
     fontWeight: '500',
     color: '#000000',
-  },
-  temperatureValue: {
-    fontSize: 15,
-    lineHeight: 22.5,
-    fontWeight: '600',
-    color: '#FF0000',
   },
   metricValue: {
     fontSize: 15,

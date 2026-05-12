@@ -156,6 +156,7 @@ export type ApiRecommendationOwner = {
 };
 
 export type ApiReview = {
+  categoryName?: string;
   content: string;
   createdAt: string;
   dislikeCount: number;
@@ -163,6 +164,7 @@ export type ApiReview = {
   imageUrls?: string[];
   likeCount: number;
   nickname: string;
+  restaurantName?: string;
   userId: number;
 };
 

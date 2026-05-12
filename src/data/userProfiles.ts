@@ -4,12 +4,15 @@ export type UserProfile = {
   id: string;
   nickname: string;
   profileImageUrl?: string;
-  temperature?: string;
   followerCount?: string;
+  honorPeriod?: string;
+  honorTitle?: string;
+  reliabilityGrade?: string;
   reviewCount?: string;
   representativeListTitle: string;
   representativeAccentColor: string;
   representativeRestaurants: MyListRestaurant[];
+  temperature?: string;
 };
 
 const createRestaurant = (id: string, name: string, address: string): MyListRestaurant => ({
