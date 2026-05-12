@@ -60,7 +60,6 @@ export function UserProfileScreen({
   );
 
   const hasMetrics = Boolean(profile.reviewCount || profile.followingCount || profile.followerCount);
-  const hasRepresentativeRestaurants = profile.representativeRestaurants.length > 0;
   const hasReliability = Boolean(profile.reliabilityGrade);
 
   return (
@@ -137,43 +136,43 @@ export function UserProfileScreen({
             ) : null}
           </View>
 
-          {hasRepresentativeRestaurants ? (
-            <View style={styles.mainListSection}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionTitleRow}>
-                  <Text style={styles.sectionTitle}>{profile.representativeListTitle}</Text>
-                  <View style={styles.representativeBadge}>
-                    <Text style={styles.representativeBadgeLabel}>대표</Text>
-                  </View>
+          <View style={styles.mainListSection}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <Text style={styles.sectionTitle}>{profile.representativeListTitle}</Text>
+                <View style={styles.representativeBadge}>
+                  <Text style={styles.representativeBadgeLabel}>대표</Text>
                 </View>
-                {representativeLikeCount !== undefined && profile.representativeListId ? (
-                  <Pressable
-                    disabled={!onToggleRepresentativeLike || representativeIsLikePending}
-                    hitSlop={8}
-                    onPress={() => void onToggleRepresentativeLike?.(profile.representativeListId!)}
+              </View>
+              {representativeLikeCount !== undefined && profile.representativeListId ? (
+                <Pressable
+                  disabled={!onToggleRepresentativeLike || representativeIsLikePending}
+                  hitSlop={8}
+                  onPress={() => void onToggleRepresentativeLike?.(profile.representativeListId!)}
+                  style={[
+                    styles.likeButton,
+                    representativeIsLiked && styles.likeButtonActive,
+                    representativeIsLikePending && styles.likeButtonPending,
+                  ]}
+                >
+                  <HeartIcon
+                    color={representativeIsLiked ? '#FF6B6B' : '#7A7A7A'}
+                    width={14}
+                    height={14}
+                  />
+                  <Text
                     style={[
-                      styles.likeButton,
-                      representativeIsLiked && styles.likeButtonActive,
-                      representativeIsLikePending && styles.likeButtonPending,
+                      styles.likeCountLabel,
+                      representativeIsLiked && styles.likeCountLabelActive,
                     ]}
                   >
-                    <HeartIcon
-                      color={representativeIsLiked ? '#FF6B6B' : '#7A7A7A'}
-                      width={14}
-                      height={14}
-                    />
-                    <Text
-                      style={[
-                        styles.likeCountLabel,
-                        representativeIsLiked && styles.likeCountLabelActive,
-                      ]}
-                    >
-                      {representativeLikeCount}
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </View>
+                    {representativeLikeCount}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
 
+            {profile.representativeRestaurants.length > 0 ? (
               <View style={styles.cardGrid}>
                 {profile.representativeRestaurants.map((item, index) => (
                   <Pressable
@@ -200,8 +199,12 @@ export function UserProfileScreen({
                   </Pressable>
                 ))}
               </View>
-            </View>
-          ) : null}
+            ) : (
+              <Text style={styles.emptyRepresentativeText}>
+                대표 리스트가 아직 없어요.
+              </Text>
+            )}
+          </View>
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -394,6 +397,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: CARD_GAP,
+  },
+  emptyRepresentativeText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '400',
+    color: '#8A8A8A',
   },
   card: {
     width: CARD_WIDTH,
