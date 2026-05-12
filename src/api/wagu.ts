@@ -171,6 +171,19 @@ export type ApiRestaurantRecommendationItem = {
   userPreferenceScore?: number;
 };
 
+export type ApiHiddenGemRestaurantItem = {
+  address?: string;
+  adjustedScore?: number;
+  averageAutoScore?: number;
+  evaluationCount?: number;
+  rank: number;
+  recommendationScore?: number;
+  regionName?: string;
+  regionTownName?: string;
+  restaurantId: number;
+  restaurantName: string;
+};
+
 export type ApiReview = {
   categoryName?: string;
   content: string;
@@ -278,6 +291,11 @@ type ApiRestaurantRecommendationResponse = {
   items: ApiRestaurantRecommendationItem[];
 };
 
+type ApiHiddenGemRestaurantResponse = {
+  items: ApiHiddenGemRestaurantItem[];
+  regionTownName?: string;
+};
+
 type ApiTokenResponse = {
   accessToken: string;
   refreshToken?: string | null;
@@ -373,6 +391,18 @@ export async function getListRecommendations(token: string) {
 export async function getRestaurantRecommendations(token: string) {
   return apiRequest<ApiRestaurantRecommendationResponse>('/recommendations/restaurants', {
     token,
+  });
+}
+
+export async function getHiddenGemRestaurants(
+  token: string,
+  query?: {
+    regionTownName?: string;
+  },
+) {
+  return apiRequest<ApiHiddenGemRestaurantResponse>('/recommendations/restaurants/hidden-gems', {
+    token,
+    query,
   });
 }
 

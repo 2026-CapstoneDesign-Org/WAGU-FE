@@ -22,7 +22,12 @@ import FilterIcon from '../../assets/icons/filter.svg';
 import MyLocationIcon from '../../assets/icons/mylocation.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import StarIcon from '../../assets/icons/star.svg';
-import { getRestaurantPhotoUris, searchRestaurants } from '../api/wagu';
+import {
+  getHiddenGemRestaurants,
+  getRestaurant,
+  getRestaurantPhotoUris,
+  searchRestaurants,
+} from '../api/wagu';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { Restaurant } from '../data/restaurants';
@@ -36,6 +41,7 @@ const DEFAULT_CAMERA = {
   longitude: 127.1902,
   zoom: 15.2,
 };
+const DEFAULT_HIDDEN_GEM_REGION_TOWN = '용인시 처인구';
 const DEFAULT_MAP_SEARCH_KEYWORDS = ['용인', '처인구', '기흥구', '수지구'] as const;
 
 type SheetStage = 'collapsed' | 'medium' | 'expanded';
@@ -44,6 +50,7 @@ type MapRestaurant = {
   address?: string;
   id: string;
   imageUri?: string;
+  isHiddenGem?: boolean;
   name: string;
   category: string;
   photoUris?: string[];
@@ -235,9 +242,12 @@ export function MapScreen({
           ? [trimmedSearchQuery]
           : ['용인', '처인구', '기흥구', '수지구'];
 
-        const results = await Promise.all(
-          keywords.map((keyword) => searchRestaurants(accessToken, keyword)),
-        );
+        const [results, hiddenGemResult] = await Promise.all([
+          Promise.all(keywords.map((keyword) => searchRestaurants(accessToken, keyword))),
+          getHiddenGemRestaurants(accessToken, {
+            regionTownName: DEFAULT_HIDDEN_GEM_REGION_TOWN,
+          }).catch(() => null),
+        ]);
 
         const dedupedRestaurants = new Map<number, (typeof results)[number][number]>();
 
@@ -248,6 +258,24 @@ export function MapScreen({
             typeof restaurant.lng === 'number'
           ) {
             dedupedRestaurants.set(restaurant.id, restaurant);
+          }
+        });
+
+        const hiddenGemIds = (hiddenGemResult?.items ?? [])
+          .map((item) => item.restaurantId)
+          .filter((id): id is number => Number.isFinite(id));
+
+        const hiddenGemDetails = await Promise.allSettled(
+          hiddenGemIds.map((restaurantId) => getRestaurant(accessToken, restaurantId)),
+        );
+
+        hiddenGemDetails.forEach((result) => {
+          if (
+            result.status === 'fulfilled' &&
+            typeof result.value.lat === 'number' &&
+            typeof result.value.lng === 'number'
+          ) {
+            dedupedRestaurants.set(result.value.id, result.value);
           }
         });
 
@@ -265,6 +293,7 @@ export function MapScreen({
             fallbackY: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
             latitude: restaurant.lat ?? DEFAULT_CAMERA.latitude,
             longitude: restaurant.lng ?? DEFAULT_CAMERA.longitude,
+            isHiddenGem: hiddenGemIds.includes(restaurant.id),
           }),
         );
 
@@ -329,6 +358,8 @@ export function MapScreen({
 
   const baseFilteredRestaurants = useMemo(() => {
     let results = mapDataRestaurants;
+    const hiddenGemOnly = activeFilters.includes('숨은 맛집');
+    const categoryFilters = activeFilters.filter((filter) => filter !== '숨은 맛집');
 
     if (trimmedSearchQuery) {
       const query = trimmedSearchQuery.toLowerCase();
@@ -339,11 +370,15 @@ export function MapScreen({
       );
     }
 
-    if (activeFilters.length === 0) {
+    if (hiddenGemOnly) {
+      results = results.filter((restaurant) => restaurant.isHiddenGem);
+    }
+
+    if (categoryFilters.length === 0) {
       return results;
     }
 
-    return results.filter((restaurant) => activeFilters.includes(restaurant.category));
+    return results.filter((restaurant) => categoryFilters.includes(restaurant.category));
   }, [activeFilters, mapDataRestaurants, trimmedSearchQuery]);
 
   const visibleRestaurants = useMemo(() => {
@@ -589,6 +624,11 @@ export function MapScreen({
               >
                 {baseFilteredRestaurants.map((restaurant) => {
                   const active = restaurant.id === focusedRestaurantId;
+                  const markerColor = restaurant.isHiddenGem
+                    ? '#161616'
+                    : active
+                      ? '#F24E46'
+                      : '#F5655E';
 
                   return (
                     <NaverMapMarkerOverlay
@@ -599,6 +639,7 @@ export function MapScreen({
                       height={active ? 42 : 34}
                       anchor={{ x: 0.5, y: 1 }}
                       image={{ symbol: 'red' }}
+                      tintColor={markerColor}
                       onTap={() => handlePressMarker(restaurant)}
                     />
                   );
@@ -610,6 +651,16 @@ export function MapScreen({
             <Pressable style={styles.mapFallback} onPress={handlePressMapBackground}>
               {baseFilteredRestaurants.map((restaurant) => {
                 const active = restaurant.id === focusedRestaurantId;
+                const markerStemStyle = restaurant.isHiddenGem
+                  ? styles.fallbackHiddenGemMarkerStem
+                  : active
+                    ? styles.fallbackMarkerStemActive
+                    : styles.fallbackMarkerStem;
+                const markerHeadStyle = restaurant.isHiddenGem
+                  ? styles.fallbackHiddenGemMarkerHead
+                  : active
+                    ? styles.fallbackMarkerHeadActive
+                    : styles.fallbackMarkerHead;
 
                 return (
                   <Pressable
@@ -623,8 +674,8 @@ export function MapScreen({
                     ]}
                     onPress={() => handlePressMarker(restaurant)}
                   >
-                    <View style={[styles.fallbackMarkerStem, active && styles.fallbackMarkerStemActive]} />
-                    <View style={[styles.fallbackMarkerHead, active && styles.fallbackMarkerHeadActive]} />
+                    <View style={[styles.fallbackMarkerStem, markerStemStyle]} />
+                    <View style={[styles.fallbackMarkerHead, markerHeadStyle]} />
                   </Pressable>
                 );
               })}
@@ -731,6 +782,22 @@ export function MapScreen({
                     height={16}
                     color={hasActiveFilters ? '#FF5A52' : '#9B9B9B'}
                   />
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.filterChip,
+                    activeFilters.includes('숨은 맛집') && styles.filterChipActive,
+                  ]}
+                  onPress={() => toggleFilter('숨은 맛집')}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipLabel,
+                      activeFilters.includes('숨은 맛집') && styles.filterChipLabelActive,
+                    ]}
+                  >
+                    숨은 맛집
+                  </Text>
                 </Pressable>
                 {filterOptions.map((filter) => {
                   const active = activeFilters.includes(filter);
@@ -885,6 +952,10 @@ const styles = StyleSheet.create({
     height: 32,
     backgroundColor: '#F24E46',
   },
+  fallbackHiddenGemMarkerStem: {
+    height: 32,
+    backgroundColor: '#161616',
+  },
   fallbackMarkerHead: {
     width: 22,
     height: 22,
@@ -898,6 +969,12 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: 13,
     backgroundColor: '#F24E46',
+  },
+  fallbackHiddenGemMarkerHead: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#161616',
   },
   topBackdrop: {
     position: 'absolute',
