@@ -269,6 +269,11 @@ type ApiRestaurantRecommendationResponse = {
   items: ApiRestaurantRecommendationItem[];
 };
 
+type ApiTokenResponse = {
+  accessToken: string;
+  refreshToken?: string | null;
+};
+
 type ApiUserListSummary = {
   createdAt?: string;
   description?: string;
@@ -448,6 +453,16 @@ export async function signupProfile(
     method: 'POST',
     token,
     body,
+  });
+}
+
+export async function refreshAuthToken(refreshToken: string) {
+  return apiRequest<ApiTokenResponse>('/auth/refresh', {
+    method: 'POST',
+    body: {
+      refreshToken,
+    },
+    skipAuthRefresh: true,
   });
 }
 

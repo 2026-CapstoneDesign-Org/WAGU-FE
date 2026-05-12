@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import {
+  ApiReview,
   ApiBusinessHoursDisplayRow,
   ApiRestaurant,
   ApiRestaurantMenuItem,
@@ -675,6 +676,25 @@ function mapReviewSummary(
     reviewCount: reviewSummary.reviewCount ?? fallbackReviewCount,
     sentiment: reviewSummary.sentiment,
     summary: reviewSummary.summary,
+  };
+}
+
+function mapApiReviewToDisplayReview(
+  review: ApiReview,
+  restaurantName: string,
+  currentUserId?: number | null,
+): RestaurantReview {
+  return {
+    authorName: review.nickname,
+    content: review.content,
+    date: formatReviewDate(review.createdAt),
+    dislikes: review.dislikeCount,
+    id: String(review.id),
+    imageUris: review.imageUrls,
+    isFollowing: false,
+    isOwner: review.userId === currentUserId,
+    likes: review.likeCount,
+    restaurantName,
   };
 }
 
@@ -1497,20 +1517,7 @@ export function RestaurantDetailScreen({
 
           if (!cancelled) {
             setRemoteRestaurant(detail);
-            setRemoteReviews(
-              reviews.map((review) => ({
-                authorName: review.nickname,
-                content: review.content,
-                date: formatReviewDate(review.createdAt),
-                dislikes: review.dislikeCount,
-                id: String(review.id),
-                imageUris: review.imageUrls,
-                isFollowing: false,
-                isOwner: review.userId === currentUserId,
-                likes: review.likeCount,
-                restaurantName: detail.name,
-              })),
-            );
+            setRemoteReviews(reviews.map((review) => mapApiReviewToDisplayReview(review, detail.name, currentUserId)));
             setRemoteReviewSummary(
               reviewSummary
                 ? mapReviewSummary(reviewSummary, reviews.length)
@@ -1738,8 +1745,8 @@ export function RestaurantDetailScreen({
       ...review,
       isFollowing: reviewFollowStates[review.id] ?? review.isFollowing ?? false,
       currentReaction: reviewReactionStates[review.id] ?? null,
-      likes: review.likes + (reviewReactionStates[review.id] === 'like' ? 1 : 0),
-      dislikes: review.dislikes + (reviewReactionStates[review.id] === 'dislike' ? 1 : 0),
+      likes: review.likes,
+      dislikes: review.dislikes,
       isVotePending: reviewVotePendingIds[review.id] ?? false,
     }));
 
@@ -1827,6 +1834,22 @@ export function RestaurantDetailScreen({
             voteType: nextValue === 'like' ? 'LIKE' : 'DISLIKE',
           });
         }
+      }
+
+      if (accessToken && remoteRestaurant?.id) {
+        const [reviews, reviewSummary] = await Promise.all([
+          getRestaurantReviews(accessToken, remoteRestaurant.id),
+          getRestaurantReviewSummary(accessToken, remoteRestaurant.id).catch(() => null),
+        ]);
+
+        setRemoteReviews(
+          reviews.map((review) =>
+            mapApiReviewToDisplayReview(review, remoteRestaurant.name, currentUserId),
+          ),
+        );
+        setRemoteReviewSummary(
+          reviewSummary ? mapReviewSummary(reviewSummary, reviews.length) : null,
+        );
       }
 
       setReviewReactionStates((current) => ({

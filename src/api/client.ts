@@ -7,8 +7,16 @@ type RequestOptions = {
   headers?: Record<string, string>;
   method?: 'DELETE' | 'GET' | 'PATCH' | 'POST';
   query?: Record<string, QueryValue>;
+  skipAuthRefresh?: boolean;
   token?: string | null;
 };
+
+type RefreshedAuthSession = {
+  accessToken: string;
+  refreshToken: string | null;
+};
+
+type AuthRefreshHandler = () => Promise<RefreshedAuthSession | null>;
 
 export class ApiError extends Error {
   constructor(
@@ -20,6 +28,9 @@ export class ApiError extends Error {
     this.name = 'ApiError';
   }
 }
+
+let authRefreshHandler: AuthRefreshHandler | null = null;
+let inflightAuthRefresh: Promise<RefreshedAuthSession | null> | null = null;
 
 function buildUrl(path: string, query?: Record<string, QueryValue>) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -77,6 +88,29 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}) 
   const contentType = response.headers.get('content-type');
   const text = await response.text();
   const parsedBody = parseResponseBody(text, contentType);
+  const isAuthLikeFailure =
+    response.status === 401 || response.status === 403 || contentType?.includes('text/html');
+
+  if (
+    options.token &&
+    !options.skipAuthRefresh &&
+    isAuthLikeFailure &&
+    authRefreshHandler
+  ) {
+    inflightAuthRefresh ??= authRefreshHandler().finally(() => {
+      inflightAuthRefresh = null;
+    });
+
+    const refreshedSession = await inflightAuthRefresh;
+
+    if (refreshedSession?.accessToken) {
+      return apiRequest<T>(path, {
+        ...options,
+        skipAuthRefresh: true,
+        token: refreshedSession.accessToken,
+      });
+    }
+  }
 
   if (contentType?.includes('text/html')) {
     throw new ApiError('로그인이 필요합니다.', response.status || 401, parsedBody);
@@ -103,4 +137,8 @@ export function getApiBaseUrl() {
 
 export function isAuthError(error: unknown) {
   return error instanceof ApiError && (error.status === 401 || error.status === 403);
+}
+
+export function setAuthRefreshHandler(handler: AuthRefreshHandler | null) {
+  authRefreshHandler = handler;
 }

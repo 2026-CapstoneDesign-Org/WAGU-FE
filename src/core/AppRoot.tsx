@@ -33,11 +33,13 @@ import {
   signupProfile,
   toggleListVisibility,
   unfollowUser,
+  refreshAuthToken,
   updateReview,
   updateRestaurantInList,
   updateList,
   updateMyUser,
 } from '../api/wagu';
+import { isAuthError, setAuthRefreshHandler } from '../api/client';
 import { uploadImageWithPresignedUrl } from '../api/upload';
 import { AppTab } from '../components/BottomTabBar';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
@@ -87,6 +89,11 @@ import { UserReviewsScreen } from '../screens/UserReviewsScreen';
 import { UserProfileScreen } from '../screens/UserProfileScreen';
 import { WriteReviewDraft, WriteReviewScreen } from '../screens/WriteReviewScreen';
 import { UserProfile, userProfiles } from '../data/userProfiles';
+import {
+  clearStoredSession,
+  readStoredSession,
+  writeStoredSession,
+} from './sessionStorage';
 
 type SearchResultTabKey = 'restaurant' | 'user' | 'region';
 
@@ -309,6 +316,11 @@ function mapApiReviewToMyReview(review: {
   };
 }
 
+type AuthSession = {
+  accessToken: string;
+  refreshToken: string | null;
+};
+
 export function AppRoot() {
   const fallbackMyLists = MOCK_DATA_ENABLED ? initialMyLists : [];
   const fallbackFollowerCount = MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS.length : 0;
@@ -404,10 +416,7 @@ export function AppRoot() {
   const [userProfileSource, setUserProfileSource] = useState<UserProfileSource>(null);
   const [userProfileHistory, setUserProfileHistory] = useState<UserProfileHistoryEntry[]>([]);
   const [loginProvider, setLoginProvider] = useState<LoginProvider>('kakao');
-  const [session, setSession] = useState<{
-    accessToken: string;
-    refreshToken: string | null;
-  } | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [requiresProfileSetup, setRequiresProfileSetup] = useState(false);
   const [pendingNickname, setPendingNickname] = useState<string | null>(null);
   const [nickname, setNickname] = useState('먹부림');
@@ -440,6 +449,100 @@ export function AppRoot() {
     ),
     fallbackUserProfiles,
   );
+
+  const applyStoredSession = async (
+    provider: LoginProvider,
+    nextSession: AuthSession,
+  ) => {
+    setLoginProvider(provider);
+    setSession(nextSession);
+    await writeStoredSession({
+      accessToken: nextSession.accessToken,
+      provider,
+      refreshToken: nextSession.refreshToken,
+    });
+  };
+
+  const clearAuthSession = async () => {
+    setSession(null);
+    setMyUserId(null);
+    setNickname('먹부림');
+    setProfileImageUrl(null);
+    setBirthDateLabel(null);
+    setGenderLabel(null);
+    setPendingNickname(null);
+    setRequiresProfileSetup(false);
+    setMyReliabilityGrade(null);
+    setMyHonorTitle(null);
+    setMyHonorPeriod(null);
+    setMyReviewItems([]);
+    setMyLists([]);
+    setMyFollowingUsers([]);
+    setMyFollowerUsers([]);
+    setFollowerCount(0);
+    setRecommendedRestaurantItems([]);
+    setRecommendedMealFriendItems([]);
+    setRecommendedUserProfiles([]);
+    setRankingEntries({
+      local: [],
+      national: [],
+    });
+    setScreen('login');
+    await clearStoredSession();
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const restoreStoredSession = async () => {
+      const storedSession = await readStoredSession();
+
+      if (!storedSession || cancelled) {
+        return;
+      }
+
+      setLoginProvider(storedSession.provider);
+      setSession({
+        accessToken: storedSession.accessToken,
+        refreshToken: storedSession.refreshToken,
+      });
+      setActiveTab('home');
+      setScreen('tabs');
+    };
+
+    void restoreStoredSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session?.refreshToken) {
+      setAuthRefreshHandler(null);
+      return;
+    }
+
+    setAuthRefreshHandler(async () => {
+      try {
+        const refreshed = await refreshAuthToken(session.refreshToken!);
+        const nextSession = {
+          accessToken: refreshed.accessToken,
+          refreshToken: refreshed.refreshToken ?? session.refreshToken,
+        };
+
+        await applyStoredSession(loginProvider, nextSession);
+        return nextSession;
+      } catch {
+        await clearAuthSession();
+        return null;
+      }
+    });
+
+    return () => {
+      setAuthRefreshHandler(null);
+    };
+  }, [loginProvider, session?.refreshToken]);
 
   useEffect(() => {
     if (!session?.accessToken || !selectedUserProfileId) {
@@ -842,8 +945,17 @@ export function AppRoot() {
           setRecommendedMealFriendItems([]);
           setRecommendedUserProfiles([]);
         }
-      } catch {
-        if (!cancelled && !MOCK_DATA_ENABLED) {
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        if (isAuthError(error)) {
+          await clearAuthSession();
+          return;
+        }
+
+        if (!MOCK_DATA_ENABLED) {
           setFollowerCount(0);
           setMyUserId(null);
           setMyFollowingUsers([]);
@@ -1776,13 +1888,9 @@ export function AppRoot() {
 
   const handleLoginSuccess = async (
     provider: LoginProvider,
-    nextSession: {
-      accessToken: string;
-      refreshToken: string | null;
-    },
+    nextSession: AuthSession,
   ) => {
-    setLoginProvider(provider);
-    setSession(nextSession);
+    await applyStoredSession(provider, nextSession);
     setActiveTab('home');
 
     try {
@@ -1860,6 +1968,10 @@ export function AppRoot() {
     const lists = await getMyLists(session.accessToken);
     setTasteFlowSource('onboarding');
     setScreen(lists.length === 0 ? 'intro' : 'tabs');
+  };
+
+  const handleLogout = async () => {
+    await clearAuthSession();
   };
 
   return (
@@ -2073,6 +2185,7 @@ export function AppRoot() {
       ) : screen === 'settings' ? (
         <SettingsScreen
           onBack={() => setScreen('tabs')}
+          onLogout={() => void handleLogout()}
           onOpenMyInfo={() => setScreen('my-info')}
           onOpenDeleteAccount={() => setScreen('delete-account')}
         />
