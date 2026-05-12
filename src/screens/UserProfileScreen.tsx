@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+﻿import { useMemo } from 'react';
 import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
+import HeartIcon from '../../assets/icons/heart.svg';
 import { restaurants as allRestaurants } from '../data/restaurants';
 import { UserProfile } from '../data/userProfiles';
 
@@ -20,7 +21,11 @@ type UserProfileScreenProps = {
   onOpenFollowers?: () => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onOpenReviews?: () => void;
+  onToggleRepresentativeLike?: (listId: string) => Promise<void> | void;
   profile: UserProfile;
+  representativeLikeCount?: number;
+  representativeIsLikePending?: boolean;
+  representativeIsLiked?: boolean;
 };
 
 export function UserProfileScreen({
@@ -32,7 +37,11 @@ export function UserProfileScreen({
   onOpenFollowers,
   onOpenRestaurantDetail,
   onOpenReviews,
+  onToggleRepresentativeLike,
   profile,
+  representativeLikeCount,
+  representativeIsLikePending = false,
+  representativeIsLiked = false,
 }: UserProfileScreenProps) {
   const restaurantMetaMap = useMemo(
     () =>
@@ -121,10 +130,38 @@ export function UserProfileScreen({
           {hasRepresentativeRestaurants ? (
             <View style={styles.mainListSection}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{profile.representativeListTitle}</Text>
-                <View style={styles.representativeBadge}>
-                  <Text style={styles.representativeBadgeLabel}>대표</Text>
+                <View style={styles.sectionTitleRow}>
+                  <Text style={styles.sectionTitle}>{profile.representativeListTitle}</Text>
+                  <View style={styles.representativeBadge}>
+                    <Text style={styles.representativeBadgeLabel}>대표</Text>
+                  </View>
                 </View>
+                {representativeLikeCount !== undefined && profile.representativeListId ? (
+                  <Pressable
+                    disabled={!onToggleRepresentativeLike || representativeIsLikePending}
+                    hitSlop={8}
+                    onPress={() => void onToggleRepresentativeLike?.(profile.representativeListId!)}
+                    style={[
+                      styles.likeButton,
+                      representativeIsLiked && styles.likeButtonActive,
+                      representativeIsLikePending && styles.likeButtonPending,
+                    ]}
+                  >
+                    <HeartIcon
+                      color={representativeIsLiked ? '#FF6B6B' : '#7A7A7A'}
+                      width={14}
+                      height={14}
+                    />
+                    <Text
+                      style={[
+                        styles.likeCountLabel,
+                        representativeIsLiked && styles.likeCountLabelActive,
+                      ]}
+                    >
+                      {representativeLikeCount}
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
 
               <View style={styles.cardGrid}>
@@ -283,14 +320,50 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 12,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    alignSelf: 'flex-start',
+    flexShrink: 1,
   },
   sectionTitle: {
     fontSize: 20,
     lineHeight: 22,
     fontWeight: '600',
     color: '#000000',
+  },
+  likeButton: {
+    minWidth: 64,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E2E2',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  likeButtonActive: {
+    backgroundColor: '#FFF1F0',
+    borderColor: '#FFC9C5',
+  },
+  likeButtonPending: {
+    opacity: 0.5,
+  },
+  likeCountLabel: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '600',
+    color: '#7A7A7A',
+  },
+  likeCountLabelActive: {
+    color: '#FF6B6B',
   },
   representativeBadge: {
     minWidth: 37,
@@ -346,3 +419,4 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.92)',
   },
 });
+

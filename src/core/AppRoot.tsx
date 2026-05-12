@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform, ToastAndroid } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -16,6 +16,7 @@ import {
   getFollowStatus,
   getFollowings,
   getListDetail,
+  getListLikeCount,
   getListRecommendations,
   getMyInfo,
   getMyLists,
@@ -32,14 +33,16 @@ import {
   setRepresentativeList,
   signupProfile,
   toggleListVisibility,
+  likeList,
   unfollowUser,
   refreshAuthToken,
+  unlikeList,
   updateReview,
   updateRestaurantInList,
   updateList,
   updateMyUser,
 } from '../api/wagu';
-import { isAuthError, setAuthRefreshHandler } from '../api/client';
+import { ApiError, isAuthError, setAuthRefreshHandler } from '../api/client';
 import { uploadImageWithPresignedUrl } from '../api/upload';
 import { AppTab } from '../components/BottomTabBar';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
@@ -225,6 +228,7 @@ function createSearchResultUserProfile(user: {
     nickname: user.nickname,
     profileImageUrl: user.profileImageUrl,
     representativeAccentColor: accentColor,
+    representativeListId: undefined,
     representativeListTitle: '대표 리스트',
     representativeRestaurants: [],
   };
@@ -412,6 +416,9 @@ export function AppRoot() {
   );
   const [userProfileFollowPendingIds, setUserProfileFollowPendingIds] = useState<string[]>([]);
   const [selectedMyListId, setSelectedMyListId] = useState<string | null>(null);
+  const [myListLikeCountById, setMyListLikeCountById] = useState<Record<string, number>>({});
+  const [myListLikeStateById, setMyListLikeStateById] = useState<Record<string, boolean>>({});
+  const [myListLikePendingIds, setMyListLikePendingIds] = useState<string[]>([]);
   const [selectedUserProfileId, setSelectedUserProfileId] = useState<string | null>(null);
   const [userProfileSource, setUserProfileSource] = useState<UserProfileSource>(null);
   const [userProfileHistory, setUserProfileHistory] = useState<UserProfileHistoryEntry[]>([]);
@@ -607,6 +614,7 @@ export function AppRoot() {
             : baseProfile?.followerCount,
         reviewCount:
           userReviews !== null ? String(userReviews.length) : baseProfile?.reviewCount,
+        representativeListId: baseProfile?.representativeListId,
         representativeListTitle: baseProfile?.representativeListTitle ?? '대표 리스트',
         representativeAccentColor:
           baseProfile?.representativeAccentColor ??
@@ -654,6 +662,163 @@ export function AppRoot() {
     searchResultUserProfiles,
     selectedUserProfileId,
     session?.accessToken,
+  ]);
+
+  useEffect(() => {
+    if (!session?.accessToken || !selectedMyListId || screen !== 'my-list-detail') {
+      return;
+    }
+
+    const parsedListId = Number(selectedMyListId);
+
+    if (Number.isNaN(parsedListId)) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateListLikeCount = async () => {
+      try {
+        const likeCount = await getListLikeCount(session.accessToken!, parsedListId);
+
+        if (cancelled) {
+          return;
+        }
+
+        setMyListLikeCountById((current) => ({
+          ...current,
+          [selectedMyListId]: likeCount,
+        }));
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setMyListLikeCountById((current) =>
+          current[selectedMyListId] === undefined
+            ? {
+                ...current,
+                [selectedMyListId]: 0,
+              }
+            : current,
+        );
+      }
+    };
+
+    void hydrateListLikeCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, selectedMyListId, session?.accessToken]);
+
+  useEffect(() => {
+    if (!session?.accessToken || activeTab !== 'my' || screen !== 'tabs') {
+      return;
+    }
+
+    const representativeListId =
+      myLists.find((item) => item.isRepresentative)?.id ?? myLists[0]?.id;
+
+    if (!representativeListId || myListLikeCountById[representativeListId] !== undefined) {
+      return;
+    }
+
+    const parsedListId = Number(representativeListId);
+
+    if (Number.isNaN(parsedListId)) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateRepresentativeListLikeCount = async () => {
+      try {
+        const likeCount = await getListLikeCount(session.accessToken!, parsedListId);
+
+        if (cancelled) {
+          return;
+        }
+
+        setMyListLikeCountById((current) => ({
+          ...current,
+          [representativeListId]: likeCount,
+        }));
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setMyListLikeCountById((current) => ({
+          ...current,
+          [representativeListId]: current[representativeListId] ?? 0,
+        }));
+      }
+    };
+
+    void hydrateRepresentativeListLikeCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, myListLikeCountById, myLists, screen, session?.accessToken]);
+
+  useEffect(() => {
+    if (!session?.accessToken || screen !== 'user-profile' || !selectedUserProfileId) {
+      return;
+    }
+
+    const selectedProfile =
+      visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ?? null;
+    const representativeListId = selectedProfile?.representativeListId;
+
+    if (!representativeListId || myListLikeCountById[representativeListId] !== undefined) {
+      return;
+    }
+
+    const parsedListId = Number(representativeListId);
+
+    if (Number.isNaN(parsedListId)) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateSelectedProfileRepresentativeListLikeCount = async () => {
+      try {
+        const likeCount = await getListLikeCount(session.accessToken!, parsedListId);
+
+        if (cancelled) {
+          return;
+        }
+
+        setMyListLikeCountById((current) => ({
+          ...current,
+          [representativeListId]: likeCount,
+        }));
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setMyListLikeCountById((current) => ({
+          ...current,
+          [representativeListId]: current[representativeListId] ?? 0,
+        }));
+      }
+    };
+
+    void hydrateSelectedProfileRepresentativeListLikeCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    myListLikeCountById,
+    screen,
+    selectedUserProfileId,
+    session?.accessToken,
+    visibleUserProfiles,
   ]);
 
   const handleToggleUserProfileFollow = async (userId: string, nextIsFollowing: boolean) => {
@@ -898,19 +1063,30 @@ export function AppRoot() {
         }
 
         if (listsResult.status === 'fulfilled') {
-          const listDetails = await Promise.all(
+          const listHydrationResults = await Promise.all(
             listsResult.value.map(async (summary, index) => {
               try {
                 const detail = await getListDetail(session.accessToken, summary.id);
-                return mapListDetailToMyList(detail, index);
+                return {
+                  isLiked: detail.isLiked ?? summary.isLiked ?? false,
+                  list: mapListDetailToMyList(detail, index),
+                };
               } catch {
-                return mapListSummaryToMyList(summary, index);
+                return {
+                  isLiked: summary.isLiked ?? false,
+                  list: mapListSummaryToMyList(summary, index),
+                };
               }
             }),
           );
 
           if (!cancelled) {
-            setMyLists(listDetails);
+            setMyLists(listHydrationResults.map((item) => item.list));
+            setMyListLikeStateById(
+              Object.fromEntries(
+                listHydrationResults.map((item) => [item.list.id, item.isLiked]),
+              ),
+            );
           }
         }
 
@@ -974,6 +1150,7 @@ export function AppRoot() {
                   profileImageUrl: item.owner.profileImageUrl,
                   representativeAccentColor:
                     HOME_PROFILE_ACCENT_COLORS[index % HOME_PROFILE_ACCENT_COLORS.length],
+                  representativeListId: String(item.listId),
                   representativeListTitle: item.title,
                   representativeRestaurants,
                 },
@@ -1044,19 +1221,28 @@ export function AppRoot() {
 
   const refreshMyLists = async (accessToken: string) => {
     const summaries = await getMyLists(accessToken);
-    const listDetails = await Promise.all(
+    const listHydrationResults = await Promise.all(
       summaries.map(async (summary, index) => {
         try {
           const detail = await getListDetail(accessToken, summary.id);
-          return mapListDetailToMyList(detail, index);
+          return {
+            isLiked: detail.isLiked ?? summary.isLiked ?? false,
+            list: mapListDetailToMyList(detail, index),
+          };
         } catch {
-          return mapListSummaryToMyList(summary, index);
+          return {
+            isLiked: summary.isLiked ?? false,
+            list: mapListSummaryToMyList(summary, index),
+          };
         }
       }),
     );
 
-    setMyLists(listDetails);
-    return listDetails;
+    setMyLists(listHydrationResults.map((item) => item.list));
+    setMyListLikeStateById(
+      Object.fromEntries(listHydrationResults.map((item) => [item.list.id, item.isLiked])),
+    );
+    return listHydrationResults.map((item) => item.list);
   };
 
   const buildNextListsAfterDelete = (lists: MyList[], targetId: string) => {
@@ -1443,6 +1629,94 @@ export function AppRoot() {
     } catch {
       Alert.alert('?덈궡', '媛寃??먯닔瑜??섏젙?섏? 紐삵뻽?듬땲??');
     }
+  };
+
+  const handleToggleMyListLike = async (listId: string) => {
+    if (!session?.accessToken) {
+      return;
+    }
+
+    const parsedListId = Number(listId);
+
+    if (Number.isNaN(parsedListId)) {
+      return;
+    }
+
+    const isCurrentlyLiked = myListLikeStateById[listId] ?? false;
+
+    setMyListLikePendingIds((current) =>
+      current.includes(listId) ? current : [...current, listId],
+    );
+
+    try {
+      if (isCurrentlyLiked) {
+        await unlikeList(session.accessToken, parsedListId);
+      } else {
+        await likeList(session.accessToken, parsedListId);
+      }
+
+      setMyListLikeStateById((current) => ({
+        ...current,
+        [listId]: !isCurrentlyLiked,
+      }));
+      setMyListLikeCountById((current) => ({
+        ...current,
+        [listId]: Math.max(0, (current[listId] ?? 0) + (isCurrentlyLiked ? -1 : 1)),
+      }));
+    } catch (error) {
+      if (error instanceof ApiError) {
+        if (!isCurrentlyLiked && (error.status === 400 || error.status === 409)) {
+          setMyListLikeStateById((current) => ({
+            ...current,
+            [listId]: true,
+          }));
+
+          try {
+            const likeCount = await getListLikeCount(session.accessToken, parsedListId);
+            setMyListLikeCountById((current) => ({
+              ...current,
+              [listId]: likeCount,
+            }));
+          } catch {
+            // Keep the previous count if refresh fails.
+          }
+
+          return;
+        }
+
+        if (isCurrentlyLiked && (error.status === 400 || error.status === 404)) {
+          setMyListLikeStateById((current) => ({
+            ...current,
+            [listId]: false,
+          }));
+
+          try {
+            const likeCount = await getListLikeCount(session.accessToken, parsedListId);
+            setMyListLikeCountById((current) => ({
+              ...current,
+              [listId]: likeCount,
+            }));
+          } catch {
+            // Keep the previous count if refresh fails.
+          }
+
+          return;
+        }
+      }
+
+      Alert.alert('?덈궡', '由ъ뒪??醫뗭븘?붿슂瑜??섏젙?섏? 紐삵뻽?듬땲??');
+    } finally {
+      setMyListLikePendingIds((current) => current.filter((id) => id !== listId));
+    }
+  };
+
+  const handleBlockedOwnListLike = () => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show('내 리스트는 좋아요를 누를 수 없어요.', ToastAndroid.SHORT);
+      return;
+    }
+
+    Alert.alert('안내', '내 리스트는 좋아요를 누를 수 없어요.');
   };
 
   const convertFiveStarToTenPoint = (value: number) => value * 2;
@@ -2308,6 +2582,9 @@ export function AppRoot() {
       ) : screen === 'my-list-detail' && selectedMyListId ? (
         <MyListDetailScreen
           list={myLists.find((item) => item.id === selectedMyListId) ?? myLists[0]}
+          isLiked={myListLikeStateById[selectedMyListId] ?? false}
+          isLikePending={myListLikePendingIds.includes(selectedMyListId)}
+          likeCount={myListLikeCountById[selectedMyListId] ?? 0}
           lists={myLists}
           onBack={() => setScreen('my-lists')}
           onChangeLists={setMyLists}
@@ -2318,6 +2595,7 @@ export function AppRoot() {
               listId: selectedMyListId,
             })
           }
+          onToggleLike={handleBlockedOwnListLike}
           onRenameList={handleRenameMyList}
           onRemoveRestaurants={handleRemoveRestaurantsFromMyList}
           onUpdateRestaurantRatings={handleUpdateRestaurantRatingsInMyList}
@@ -2376,6 +2654,37 @@ export function AppRoot() {
           profile={
             visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ??
             visibleUserProfiles[0]
+          }
+          onToggleRepresentativeLike={(listId) => void handleToggleMyListLike(listId)}
+          representativeLikeCount={
+            (() => {
+              const selectedProfile =
+                visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ?? null;
+              const representativeListId = selectedProfile?.representativeListId;
+              return representativeListId
+                ? myListLikeCountById[representativeListId] ?? 0
+                : undefined;
+            })()
+          }
+          representativeIsLikePending={
+            (() => {
+              const selectedProfile =
+                visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ?? null;
+              const representativeListId = selectedProfile?.representativeListId;
+              return representativeListId
+                ? myListLikePendingIds.includes(representativeListId)
+                : false;
+            })()
+          }
+          representativeIsLiked={
+            (() => {
+              const selectedProfile =
+                visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ?? null;
+              const representativeListId = selectedProfile?.representativeListId;
+              return representativeListId
+                ? myListLikeStateById[representativeListId] ?? false
+                : false;
+            })()
           }
           onBack={() => {
             if (userProfileSource?.type === 'search-result') {
@@ -2529,6 +2838,34 @@ export function AppRoot() {
             openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'my' })
           }
           onOpenMyReviews={() => setScreen('my-reviews')}
+          onToggleRepresentativeLike={handleBlockedOwnListLike}
+          representativeLikeCount={
+            (() => {
+              const representativeList =
+                myLists.find((item) => item.isRepresentative) ?? myLists[0];
+              return representativeList
+                ? myListLikeCountById[representativeList.id] ?? 0
+                : undefined;
+            })()
+          }
+          representativeIsLikePending={
+            (() => {
+              const representativeList =
+                myLists.find((item) => item.isRepresentative) ?? myLists[0];
+              return representativeList
+                ? myListLikePendingIds.includes(representativeList.id)
+                : false;
+            })()
+          }
+          representativeIsLiked={
+            (() => {
+              const representativeList =
+                myLists.find((item) => item.isRepresentative) ?? myLists[0];
+              return representativeList
+                ? myListLikeStateById[representativeList.id] ?? false
+                : false;
+            })()
+          }
           onScrollStateChange={(nextState) =>
             setMyPageScrollState((current) => ({ ...current, ...nextState }))
           }

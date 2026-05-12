@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import FollowIcon from '../../assets/icons/follow.svg';
+import HeartIcon from '../../assets/icons/heart.svg';
 import ListIcon from '../../assets/icons/list.svg';
 import ReviewIcon from '../../assets/icons/review.svg';
 import SettingIcon from '../../assets/icons/setting.svg';
@@ -39,9 +40,13 @@ type MyPageScreenProps = {
   onOpenRepresentativeList?: (listId: string) => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onOpenMyReviews?: () => void;
+  onToggleRepresentativeLike?: (listId: string) => Promise<void> | void;
   onScrollStateChange?: (state: Partial<MyPageScrollState>) => void;
   onOpenSettings: () => void;
   onSelectTab: (tab: AppTab) => void;
+  representativeLikeCount?: number;
+  representativeIsLikePending?: boolean;
+  representativeIsLiked?: boolean;
   reliabilityGrade?: string;
   restoreAnimated?: boolean;
   restoreScrollKey?: number;
@@ -77,9 +82,13 @@ export function MyPageScreen({
   onOpenRepresentativeList,
   onOpenRestaurantDetail,
   onOpenMyReviews,
+  onToggleRepresentativeLike,
   onScrollStateChange,
   onOpenSettings,
   onSelectTab,
+  representativeLikeCount,
+  representativeIsLikePending = false,
+  representativeIsLiked = false,
   reliabilityGrade,
   restoreAnimated = false,
   restoreScrollKey = 0,
@@ -126,7 +135,7 @@ export function MyPageScreen({
         animated: restoreAnimated,
       });
     });
-  }, [initialScrollState?.verticalY, restoreAnimated, restoreScrollKey]);
+  }, [restoreAnimated, restoreScrollKey]);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
@@ -205,13 +214,47 @@ export function MyPageScreen({
               }}
               disabled={!representativeList && !onOpenMyLists}
             >
-              <Text style={styles.sectionTitle}>
-                {representativeList?.title ?? '대표 리스트'}
-              </Text>
-              {representativeList ? (
-                <View style={styles.representativeBadge}>
-                  <Text style={styles.representativeBadgeLabel}>대표</Text>
-                </View>
+              <View style={styles.sectionTitleRow}>
+                <Text style={styles.sectionTitle}>
+                  {representativeList?.title ?? '대표 리스트'}
+                </Text>
+                {representativeList ? (
+                  <View style={styles.representativeBadge}>
+                    <Text style={styles.representativeBadgeLabel}>대표</Text>
+                  </View>
+                ) : null}
+              </View>
+              {representativeList && representativeLikeCount !== undefined ? (
+                <Pressable
+                  disabled={!onToggleRepresentativeLike || representativeIsLikePending}
+                  hitSlop={8}
+                  onPress={() => {
+                    if (!representativeList) {
+                      return;
+                    }
+
+                    void onToggleRepresentativeLike?.(representativeList.id);
+                  }}
+                  style={[
+                    styles.likeButton,
+                    representativeIsLiked && styles.likeButtonActive,
+                    representativeIsLikePending && styles.likeButtonPending,
+                  ]}
+                >
+                  <HeartIcon
+                    color={representativeIsLiked ? '#FF6B6B' : '#7A7A7A'}
+                    width={14}
+                    height={14}
+                  />
+                  <Text
+                    style={[
+                      styles.likeCountLabel,
+                      representativeIsLiked && styles.likeCountLabelActive,
+                    ]}
+                  >
+                    {representativeLikeCount}
+                  </Text>
+                </Pressable>
               ) : null}
             </Pressable>
 
@@ -251,7 +294,7 @@ export function MyPageScreen({
                   setVisibleCount((current) => Math.min(current + 10, representativeCards.length))
                 }
               >
-                <Text style={styles.moreButtonLabel}>더보기</Text>
+                  <Text style={styles.moreButtonLabel}>더보기</Text>
               </Pressable>
             ) : null}
           </View>
@@ -370,14 +413,50 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 12,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    alignSelf: 'flex-start',
+    flexShrink: 1,
   },
   sectionTitle: {
     fontSize: 20,
     lineHeight: 22,
     fontWeight: '600',
     color: '#000000',
+  },
+  likeButton: {
+    minWidth: 64,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E2E2',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  likeButtonActive: {
+    backgroundColor: '#FFF1F0',
+    borderColor: '#FFC9C5',
+  },
+  likeButtonPending: {
+    opacity: 0.5,
+  },
+  likeCountLabel: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '600',
+    color: '#7A7A7A',
+  },
+  likeCountLabelActive: {
+    color: '#FF6B6B',
   },
   representativeBadge: {
     minWidth: 37,
@@ -449,3 +528,5 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
 });
+
+

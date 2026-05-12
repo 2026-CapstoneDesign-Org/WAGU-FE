@@ -3,6 +3,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useEffect, useMemo, useState } from 'react';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
+import HeartIcon from '../../assets/icons/heart.svg';
 import { RatingStars } from '../components/RatingStars';
 import { MyList, MyListRestaurant } from '../data/myLists';
 import { restaurants as allRestaurants } from '../data/restaurants';
@@ -12,8 +13,12 @@ type MyListDetailScreenProps = {
   lists: MyList[];
   onBack: () => void;
   onChangeLists: (lists: MyList[]) => void;
+  isLiked?: boolean;
+  isLikePending?: boolean;
+  likeCount?: number;
   onOpenPlaceEdit: () => void;
   onOpenRestaurantDetail: (restaurantName: string) => void;
+  onToggleLike?: (listId: string) => Promise<void> | void;
   onRemoveRestaurants?: (listId: string, restaurantIds: string[]) => Promise<void> | void;
   onRenameList?: (listId: string, title: string) => Promise<void> | void;
   onUpdateRestaurantRatings?: (
@@ -52,8 +57,12 @@ export function MyListDetailScreen({
   lists,
   onBack,
   onChangeLists,
+  isLiked = false,
+  isLikePending = false,
+  likeCount = 0,
   onOpenPlaceEdit,
   onOpenRestaurantDetail,
+  onToggleLike,
   onRemoveRestaurants,
   onRenameList,
   onUpdateRestaurantRatings,
@@ -258,6 +267,26 @@ export function MyListDetailScreen({
         </View>
 
         <View style={styles.metaSection}>
+          <Pressable
+            disabled={!onToggleLike || isLikePending}
+            style={[
+              styles.likeButton,
+              isLiked && styles.likeButtonActive,
+              isLikePending && styles.likeButtonPending,
+            ]}
+            onPress={() => {
+              void onToggleLike?.(list.id);
+            }}
+          >
+            <HeartIcon
+              color={isLiked ? '#FF6B6B' : '#7A7A7A'}
+              width={16}
+              height={16}
+            />
+            <Text style={[styles.likeCountLabel, isLiked && styles.likeCountLabelActive]}>
+              {likeCount}
+            </Text>
+          </Pressable>
           <Pressable style={styles.editButton} onPress={() => setIsEditMenuVisible(true)}>
             <Text style={styles.editButtonLabel}>편집</Text>
           </Pressable>
@@ -584,6 +613,9 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
     paddingHorizontal: HORIZONTAL_PADDING,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 12,
   },
   metaText: {
@@ -595,8 +627,36 @@ const styles = StyleSheet.create({
   metaDot: {
     color: '#A0A0A0',
   },
+  likeButton: {
+    minWidth: 64,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E2E2',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  likeButtonActive: {
+    backgroundColor: '#FFF1F0',
+    borderColor: '#FFC9C5',
+  },
+  likeButtonPending: {
+    opacity: 0.5,
+  },
+  likeCountLabel: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '600',
+    color: '#7A7A7A',
+  },
+  likeCountLabelActive: {
+    color: '#FF6B6B',
+  },
   editButton: {
-    alignSelf: 'flex-end',
     minWidth: 66,
     height: 32,
     borderRadius: 16,

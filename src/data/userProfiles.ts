@@ -9,6 +9,7 @@ export type UserProfile = {
   honorTitle?: string;
   reliabilityGrade?: string;
   reviewCount?: string;
+  representativeListId?: string;
   representativeListTitle: string;
   representativeAccentColor: string;
   representativeRestaurants: MyListRestaurant[];

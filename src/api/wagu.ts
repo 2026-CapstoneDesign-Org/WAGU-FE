@@ -278,6 +278,7 @@ type ApiUserListSummary = {
   createdAt?: string;
   description?: string;
   id: number;
+  isLiked?: boolean;
   isPublic: boolean;
   isRepresentative: boolean;
   regionName: string;
@@ -586,6 +587,26 @@ export async function addRestaurantToList(
     method: 'POST',
     token,
     body,
+  });
+}
+
+export async function likeList(token: string, listId: number) {
+  return apiRequest<void>(`/lists/${listId}/like`, {
+    method: 'POST',
+    token,
+  });
+}
+
+export async function unlikeList(token: string, listId: number) {
+  return apiRequest<void>(`/lists/${listId}/like`, {
+    method: 'DELETE',
+    token,
+  });
+}
+
+export async function getListLikeCount(token: string, listId: number) {
+  return apiRequest<number>(`/lists/${listId}/like/count`, {
+    token,
   });
 }
 
