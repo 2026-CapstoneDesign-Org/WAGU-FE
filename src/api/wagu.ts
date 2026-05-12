@@ -260,6 +260,7 @@ export type ApiListRecommendationItem = {
   categorySummary?: string[];
   description?: string;
   fallbackRegion?: boolean;
+  isLiked?: boolean;
   listId: number;
   owner: ApiRecommendationOwner;
   rank: number;

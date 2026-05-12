@@ -23,6 +23,11 @@ type ReviewReaction = 'like' | 'dislike' | null;
 type UserReviewsScreenProps = {
   onBack: () => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
+  onToggleReaction?: (
+    reviewId: string,
+    nextReaction: ReviewReaction,
+  ) => Promise<boolean> | boolean;
+  pendingReactionIds?: string[];
   reviews: MyReview[];
   title: string;
 };
@@ -56,20 +61,27 @@ function ThumbDownIcon({ color }: { color: string }) {
 }
 
 function ReviewReactionButton({
+  active = false,
   count,
   icon,
-  active = false,
+  isPending = false,
   onPress,
 }: {
+  active?: boolean;
   count: number;
   icon: React.ReactNode;
-  active?: boolean;
+  isPending?: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable
+      disabled={isPending}
       onPress={onPress}
-      style={[styles.reviewReactionButton, active ? styles.reviewReactionButtonActive : null]}
+      style={[
+        styles.reviewReactionButton,
+        active ? styles.reviewReactionButtonActive : null,
+        isPending ? styles.reviewReactionButtonPending : null,
+      ]}
     >
       {icon}
       <Text
@@ -84,6 +96,8 @@ function ReviewReactionButton({
 export function UserReviewsScreen({
   onBack,
   onOpenRestaurantDetail,
+  onToggleReaction,
+  pendingReactionIds = [],
   reviews,
   title,
 }: UserReviewsScreenProps) {
@@ -107,16 +121,33 @@ export function UserReviewsScreen({
     [reviews],
   );
 
-  const handleToggleReaction = (reviewId: string, reaction: Exclude<ReviewReaction, null>) => {
-    setReviewReactions((current) => {
-      const baseReview = reviews.find((item) => item.id === reviewId);
-      const currentReaction = current[reviewId] ?? baseReview?.myReaction ?? null;
+  const handleToggleReaction = async (
+    reviewId: string,
+    reaction: Exclude<ReviewReaction, null>,
+  ) => {
+    const baseReview = reviews.find((item) => item.id === reviewId);
+    const currentReaction = reviewReactions[reviewId] ?? baseReview?.myReaction ?? null;
+    const nextReaction = currentReaction === reaction ? null : reaction;
 
-      return {
-        ...current,
-        [reviewId]: currentReaction === reaction ? null : reaction,
-      };
-    });
+    setReviewReactions((current) => ({
+      ...current,
+      [reviewId]: nextReaction,
+    }));
+
+    if (!onToggleReaction) {
+      return;
+    }
+
+    const didSucceed = await onToggleReaction(reviewId, nextReaction);
+
+    if (didSucceed) {
+      return;
+    }
+
+    setReviewReactions((current) => ({
+      ...current,
+      [reviewId]: currentReaction,
+    }));
   };
 
   const getReactionCounts = (review: MyReview) => {
@@ -133,21 +164,21 @@ export function UserReviewsScreen({
 
     if (currentReaction === 'like') {
       return {
-        likes: likes + 1,
         dislikes,
+        likes: likes + 1,
       };
     }
 
     if (currentReaction === 'dislike') {
       return {
-        likes,
         dislikes: dislikes + 1,
+        likes,
       };
     }
 
     return {
-      likes,
       dislikes,
+      likes,
     };
   };
 
@@ -158,8 +189,8 @@ export function UserReviewsScreen({
 
     requestAnimationFrame(() => {
       previewScrollRef.current?.scrollTo({
-        x: windowWidth * index,
         animated: false,
+        x: windowWidth * index,
       });
     });
   };
@@ -171,8 +202,8 @@ export function UserReviewsScreen({
 
     if (!imageSize) {
       return {
-        width: maxWidth,
         height: maxHeight,
+        width: maxWidth,
       };
     }
 
@@ -181,14 +212,14 @@ export function UserReviewsScreen({
 
     if (imageRatio > frameRatio) {
       return {
-        width: maxWidth,
         height: maxWidth / imageRatio,
+        width: maxWidth,
       };
     }
 
     return {
-      width: maxHeight * imageRatio,
       height: maxHeight,
+      width: maxHeight * imageRatio,
     };
   };
 
@@ -209,6 +240,7 @@ export function UserReviewsScreen({
           {sortedReviews.map((review, index) => {
             const currentReaction = reviewReactions[review.id] ?? review.myReaction ?? null;
             const reactionCounts = getReactionCounts(review);
+            const isPending = pendingReactionIds.includes(review.id);
 
             return (
               <View key={review.id} style={styles.reviewSection}>
@@ -258,20 +290,22 @@ export function UserReviewsScreen({
 
                 <View style={styles.reviewReactionRow}>
                   <ReviewReactionButton
-                    count={reactionCounts.likes}
                     active={currentReaction === 'like'}
-                    onPress={() => handleToggleReaction(review.id, 'like')}
+                    count={reactionCounts.likes}
                     icon={<ThumbUpIcon color={currentReaction === 'like' ? '#F92A1D' : '#666666'} />}
+                    isPending={isPending}
+                    onPress={() => void handleToggleReaction(review.id, 'like')}
                   />
                   <ReviewReactionButton
-                    count={reactionCounts.dislikes}
                     active={currentReaction === 'dislike'}
-                    onPress={() => handleToggleReaction(review.id, 'dislike')}
+                    count={reactionCounts.dislikes}
                     icon={
                       <ThumbDownIcon
                         color={currentReaction === 'dislike' ? '#F92A1D' : '#666666'}
                       />
                     }
+                    isPending={isPending}
+                    onPress={() => void handleToggleReaction(review.id, 'dislike')}
                   />
                 </View>
 
@@ -282,10 +316,10 @@ export function UserReviewsScreen({
         </ScrollView>
 
         <Modal
-          visible={selectedPhotoIndex !== null}
-          transparent
           animationType="none"
           onRequestClose={() => setSelectedPhotoIndex(null)}
+          transparent
+          visible={selectedPhotoIndex !== null}
         >
           <View style={styles.imageModalBackdrop}>
             <View style={styles.photoPreviewHeader}>
@@ -307,14 +341,14 @@ export function UserReviewsScreen({
 
             <ScrollView
               ref={previewScrollRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              style={styles.imagePreviewScroll}
               contentOffset={{
                 x: selectedPhotoIndex !== null ? windowWidth * selectedPhotoIndex : 0,
                 y: 0,
               }}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.imagePreviewScroll}
               onMomentumScrollEnd={(event) => {
                 const nextIndex = Math.round(event.nativeEvent.contentOffset.x / windowWidth);
                 setPreviewCurrentIndex(nextIndex);
@@ -333,8 +367,8 @@ export function UserReviewsScreen({
                       style={[
                         styles.imageModalImageWrap,
                         {
-                          width: imageFrame.width,
                           height: imageFrame.height,
+                          width: imageFrame.width,
                         },
                       ]}
                       onPress={(event) => event.stopPropagation()}
@@ -343,10 +377,10 @@ export function UserReviewsScreen({
                         source={{ uri: photoUri }}
                         style={styles.imageModalImage}
                         onLoad={(event) => {
-                          const { width, height } = event.nativeEvent.source;
+                          const { height, width } = event.nativeEvent.source;
                           setPreviewImageSizes((current) => ({
                             ...current,
-                            [photoUri]: { width, height },
+                            [photoUri]: { height, width },
                           }));
                         }}
                       />
@@ -499,6 +533,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF0EE',
     borderColor: '#FFC4BC',
   },
+  reviewReactionButtonPending: {
+    opacity: 0.5,
+  },
   reviewReactionCount: {
     fontSize: 13,
     lineHeight: 19.5,
@@ -512,31 +549,35 @@ const styles = StyleSheet.create({
   divider: {
     marginTop: 12,
     width: '100%',
-    height: 1,
-    backgroundColor: '#F5F5F5',
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#E6E6E6',
   },
   imageModalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.92)',
+    backgroundColor: 'rgba(17, 17, 17, 0.96)',
+    justifyContent: 'center',
   },
   photoPreviewHeader: {
     position: 'absolute',
-    top: 34,
-    right: 16,
+    top: 52,
+    left: 0,
+    right: 0,
     zIndex: 2,
+    alignItems: 'center',
+    pointerEvents: 'box-none',
   },
   imageIndexBadge: {
-    minWidth: 54,
-    height: 30,
-    paddingHorizontal: 12,
-    borderRadius: 15,
-    backgroundColor: 'rgba(17, 17, 17, 0.7)',
+    minWidth: 72,
+    height: 28,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   imageIndexBadgeText: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: '600',
     color: '#FFFFFF',
   },
@@ -544,7 +585,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   imageIndexBadgeTextMuted: {
-    color: 'rgba(255, 255, 255, 0.55)',
+    color: 'rgba(255,255,255,0.78)',
   },
   imagePreviewScroll: {
     flex: 1,
@@ -553,7 +594,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
   },
   imageModalImageWrap: {
     alignItems: 'center',
@@ -562,7 +602,6 @@ const styles = StyleSheet.create({
   imageModalImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 12,
     resizeMode: 'contain',
   },
 });

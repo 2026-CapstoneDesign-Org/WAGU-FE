@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -17,19 +17,20 @@ import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
-import { MOCK_DATA_ENABLED } from '../config/mockData';
 import TrashIcon from '../../assets/icons/trash.svg';
+import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { MyReview, myReviews } from '../data/myReviews';
 import { ReviewMediaItem } from '../types/reviews';
 
 const REVIEW_IMAGE_SIZE = 172;
 
 type MyReviewsScreenProps = {
+  isOwner?: boolean;
   onBack: () => void;
+  onDeleteReview?: (reviewId: string) => Promise<boolean> | boolean;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   reviewsData?: MyReview[];
   title?: string;
-  isOwner?: boolean;
 };
 
 function ThumbUpIcon({ color }: { color: string }) {
@@ -77,7 +78,7 @@ function ReactionButton({
   );
 }
 
-function getReviewMediaItems(review: Pick<MyReview, 'media' | 'imageUris'>): ReviewMediaItem[] {
+function getReviewMediaItems(review: Pick<MyReview, 'imageUris' | 'media'>): ReviewMediaItem[] {
   if (review.media?.length) {
     return review.media;
   }
@@ -90,19 +91,20 @@ function getReviewMediaItems(review: Pick<MyReview, 'media' | 'imageUris'>): Rev
 }
 
 export function MyReviewsScreen({
+  isOwner = true,
   onBack,
+  onDeleteReview,
   onOpenRestaurantDetail,
   reviewsData = MOCK_DATA_ENABLED ? myReviews : [],
   title = '내 리뷰',
-  isOwner = true,
 }: MyReviewsScreenProps) {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const [reviews, setReviews] = useState(reviewsData);
   const previewScrollRef = useRef<ScrollView>(null);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [previewImageSizes, setPreviewImageSizes] = useState<
-    Record<string, { width: number; height: number }>
+    Record<string, { height: number; width: number }>
   >({});
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [previewCurrentIndex, setPreviewCurrentIndex] = useState(0);
@@ -135,13 +137,13 @@ export function MyReviewsScreen({
         (width, height) => {
           setPreviewImageSizes((current) => ({
             ...current,
-            [imageUri]: { width, height },
+            [imageUri]: { height, width },
           }));
         },
         () => {
           setPreviewImageSizes((current) => ({
             ...current,
-            [imageUri]: { width: 1, height: 1 },
+            [imageUri]: { height: 1, width: 1 },
           }));
         },
       );
@@ -150,11 +152,11 @@ export function MyReviewsScreen({
 
   const showSelfReactionToast = () => {
     if (Platform.OS === 'android') {
-      ToastAndroid.show('자신의 리뷰에는 반응할 수 없습니다!', ToastAndroid.SHORT);
+      ToastAndroid.show('자신의 리뷰에는 반응할 수 없어요.', ToastAndroid.SHORT);
       return;
     }
 
-    setToastMessage('자신의 리뷰에는 반응할 수 없습니다!');
+    setToastMessage('자신의 리뷰에는 반응할 수 없어요.');
     setIsToastVisible(true);
 
     if (toastTimerRef.current) {
@@ -163,13 +165,13 @@ export function MyReviewsScreen({
 
     Animated.parallel([
       Animated.timing(toastOpacity, {
-        toValue: 1,
         duration: 180,
+        toValue: 1,
         useNativeDriver: true,
       }),
       Animated.timing(toastTranslateY, {
-        toValue: 0,
         duration: 180,
+        toValue: 0,
         useNativeDriver: true,
       }),
     ]).start();
@@ -177,13 +179,13 @@ export function MyReviewsScreen({
     toastTimerRef.current = setTimeout(() => {
       Animated.parallel([
         Animated.timing(toastOpacity, {
-          toValue: 0,
           duration: 180,
+          toValue: 0,
           useNativeDriver: true,
         }),
         Animated.timing(toastTranslateY, {
-          toValue: 18,
           duration: 180,
+          toValue: 18,
           useNativeDriver: true,
         }),
       ]).start(({ finished }) => {
@@ -197,13 +199,21 @@ export function MyReviewsScreen({
   const handleDeleteReview = (reviewId: string) => {
     Alert.alert('리뷰를 삭제하시겠습니까?', '', [
       {
-        text: '취소',
         style: 'cancel',
+        text: '취소',
       },
       {
-        text: '삭제',
         style: 'destructive',
-        onPress: () => {
+        text: '삭제',
+        onPress: async () => {
+          if (onDeleteReview) {
+            const didSucceed = await onDeleteReview(reviewId);
+
+            if (!didSucceed) {
+              return;
+            }
+          }
+
           setReviews((current) => current.filter((review) => review.id !== reviewId));
         },
       },
@@ -216,18 +226,22 @@ export function MyReviewsScreen({
     setPreviewCurrentIndex(index);
     requestAnimationFrame(() => {
       previewScrollRef.current?.scrollTo({
-        x: windowWidth * index,
         animated: false,
+        x: windowWidth * index,
       });
     });
   };
 
-  const sortedReviews = [...reviews].sort((left, right) => {
-    const leftDate = Number(left.date.replaceAll('.', ''));
-    const rightDate = Number(right.date.replaceAll('.', ''));
+  const sortedReviews = useMemo(
+    () =>
+      [...reviews].sort((left, right) => {
+        const leftDate = Number(left.date.replaceAll('.', ''));
+        const rightDate = Number(right.date.replaceAll('.', ''));
 
-    return rightDate - leftDate;
-  });
+        return rightDate - leftDate;
+      }),
+    [reviews],
+  );
 
   const getPreviewImageFrame = (imageUri: string) => {
     const maxWidth = windowWidth - 32;
@@ -236,8 +250,8 @@ export function MyReviewsScreen({
 
     if (!imageSize) {
       return {
-        width: maxWidth,
         height: maxHeight,
+        width: maxWidth,
       };
     }
 
@@ -246,14 +260,14 @@ export function MyReviewsScreen({
 
     if (imageRatio > frameRatio) {
       return {
-        width: maxWidth,
         height: maxWidth / imageRatio,
+        width: maxWidth,
       };
     }
 
     return {
-      width: maxHeight * imageRatio,
       height: maxHeight,
+      width: maxHeight * imageRatio,
     };
   };
 
@@ -264,130 +278,175 @@ export function MyReviewsScreen({
           <Pressable style={styles.backButton} onPress={onBack}>
             <ArrowLeftIcon width={24} height={24} />
           </Pressable>
-          <Text style={styles.headerTitle}>내 리뷰</Text>
+          <Text style={styles.headerTitle}>{title}</Text>
         </View>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: 34 + insets.bottom },
-          ]}
+          contentContainerStyle={[styles.content, { paddingBottom: 34 + insets.bottom }]}
         >
-          {sortedReviews.map((review, index) => (
-            <View key={review.id} style={styles.reviewSection}>
-              {(() => {
-                const reviewMedia = getReviewMediaItems(review);
-                const imageUris = reviewMedia
-                  .filter((item) => item.type === 'image')
-                  .map((item) => item.uri);
+          {sortedReviews.map((review, index) => {
+            const reviewMedia = getReviewMediaItems(review);
 
-                return (
-                  <>
-              <View style={styles.reviewBody}>
-                <View style={styles.reviewHeader}>
-                  <View style={styles.reviewMeta}>
-                    <Pressable
-                      style={styles.restaurantLinkRow}
-                      onPress={() => onOpenRestaurantDetail?.(review.restaurantName)}
-                    >
-                      <Text style={styles.restaurantName}>{review.restaurantName}</Text>
-                      <Text style={styles.restaurantChevron}>›</Text>
-                    </Pressable>
-                    <View style={styles.metaRow}>
-                      <Text style={styles.metaText}>{review.category}</Text>
-                      <Text style={styles.dot}>·</Text>
-                      <Text style={styles.metaText}>{review.date}</Text>
+            return (
+              <View key={review.id} style={styles.reviewSection}>
+                <View style={styles.reviewBody}>
+                  <View style={styles.reviewHeader}>
+                    <View style={styles.reviewMeta}>
+                      <Pressable
+                        style={styles.restaurantLinkRow}
+                        onPress={() => onOpenRestaurantDetail?.(review.restaurantName)}
+                      >
+                        <Text style={styles.restaurantName}>{review.restaurantName}</Text>
+                        <Text style={styles.restaurantChevron}>›</Text>
+                      </Pressable>
+                      <View style={styles.metaRow}>
+                        <Text style={styles.metaText}>{review.category}</Text>
+                        <Text style={styles.dot}>·</Text>
+                        <Text style={styles.metaText}>{review.date}</Text>
+                      </View>
                     </View>
+
+                    {isOwner ? (
+                      <View style={styles.actionRow}>
+                        <Pressable
+                          style={styles.deleteButton}
+                          onPress={() => handleDeleteReview(review.id)}
+                        >
+                          <TrashIcon width={18} height={18} color="#9A9A9A" />
+                        </Pressable>
+                      </View>
+                    ) : null}
                   </View>
 
-                  <View style={styles.actionRow}>
-                    <Pressable
-                      style={styles.deleteButton}
-                      onPress={() => handleDeleteReview(review.id)}
-                    >
-                      <TrashIcon width={18} height={18} color="#9A9A9A" />
-                    </Pressable>
-                  </View>
+                  <Text style={styles.reviewContent}>{review.content}</Text>
                 </View>
 
-                <Text style={styles.reviewContent}>{review.content}</Text>
-              </View>
-
-              {reviewMedia.length ? (
-                <View
-                  style={[
-                    styles.reviewImagesCarousel,
-                    { width: windowWidth },
-                  ]}
-                >
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.reviewImagesRow}
-                  >
-                    {reviewMedia.slice(0, 5).map((item, mediaIndex, items) =>
-                      item.type === 'image' ? (
+                {reviewMedia.length ? (
+                  <View style={styles.reviewImagesCarousel}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.reviewImagesRow}
+                    >
+                      {reviewMedia.slice(0, 5).map((media, mediaIndex, mediaItems) => (
                         <Pressable
-                          key={item.id}
+                          key={media.id}
                           style={[
                             styles.reviewImage,
-                            mediaIndex < items.length - 1 ? styles.reviewImageSpacing : null,
+                            mediaIndex < mediaItems.length - 1 ? styles.reviewImageSpacing : null,
                           ]}
                           onPress={() =>
                             openImagePreview(
-                              imageUris,
-                              imageUris.findIndex((uri) => uri === item.uri),
+                              mediaItems
+                                .filter((item) => item.type === 'image')
+                                .map((item) => item.uri),
+                              mediaItems
+                                .filter((item) => item.type === 'image')
+                                .findIndex((item) => item.id === media.id),
                             )
                           }
                         >
-                          <Image source={{ uri: item.uri }} style={styles.reviewImageFill} />
+                          <Image source={{ uri: media.uri }} style={styles.reviewImageFill} />
                         </Pressable>
-                      ) : (
-                        <View
-                          key={item.id}
-                          style={[
-                            styles.reviewImage,
-                            styles.videoReviewCard,
-                            mediaIndex < items.length - 1 ? styles.reviewImageSpacing : null,
-                          ]}
-                        >
-                          <Text style={styles.videoReviewBadge}>VIDEO</Text>
-                        </View>
-                      ),
-                    )}
-                  </ScrollView>
+                      ))}
+                    </ScrollView>
+                  </View>
+                ) : null}
+
+                <View style={styles.reviewReactionRow}>
+                  <ReactionButton
+                    count={review.likes}
+                    icon={<ThumbUpIcon color="#666666" />}
+                    onPress={showSelfReactionToast}
+                  />
+                  <ReactionButton
+                    count={review.dislikes}
+                    icon={<ThumbDownIcon color="#666666" />}
+                    onPress={showSelfReactionToast}
+                  />
                 </View>
-              ) : null}
 
-              <View style={styles.reviewReactionRow}>
-                <ReactionButton
-                  count={review.likes}
-                  icon={<ThumbUpIcon color="#9A9A9A" />}
-                  onPress={showSelfReactionToast}
-                />
-                <ReactionButton
-                  count={review.dislikes}
-                  icon={<ThumbDownIcon color="#9A9A9A" />}
-                  onPress={showSelfReactionToast}
-                />
+                {index < sortedReviews.length - 1 ? <View style={styles.divider} /> : null}
               </View>
-
-              {index < sortedReviews.length - 1 ? <View style={styles.divider} /> : null}
-                  </>
-                );
-              })()}
-            </View>
-          ))}
+            );
+          })}
         </ScrollView>
 
-        {isToastVisible ? (
+        <Modal
+          animationType="none"
+          onRequestClose={() => setSelectedImageIndex(null)}
+          transparent
+          visible={selectedImageIndex !== null}
+        >
+          <View style={styles.imageModalBackdrop}>
+            <View style={styles.photoPreviewHeader}>
+              <View style={styles.imageIndexBadge}>
+                <Text style={styles.imageIndexBadgeText}>
+                  {previewImages.length ? (
+                    <>
+                      <Text style={styles.imageIndexBadgeTextCurrent}>
+                        {previewCurrentIndex + 1}
+                      </Text>
+                      <Text style={styles.imageIndexBadgeTextMuted}>/{previewImages.length}</Text>
+                    </>
+                  ) : (
+                    ''
+                  )}
+                </Text>
+              </View>
+            </View>
+
+            <ScrollView
+              ref={previewScrollRef}
+              contentOffset={{
+                x: selectedImageIndex !== null ? windowWidth * selectedImageIndex : 0,
+                y: 0,
+              }}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.imagePreviewScroll}
+              onMomentumScrollEnd={(event) => {
+                const nextIndex = Math.round(event.nativeEvent.contentOffset.x / windowWidth);
+                setPreviewCurrentIndex(nextIndex);
+              }}
+            >
+              {previewImages.map((photoUri, index) => {
+                const imageFrame = getPreviewImageFrame(photoUri);
+
+                return (
+                  <Pressable
+                    key={`${photoUri}-${index}`}
+                    style={[styles.imagePreviewPage, { width: windowWidth }]}
+                    onPress={() => setSelectedImageIndex(null)}
+                  >
+                    <Pressable
+                      style={[
+                        styles.imageModalImageWrap,
+                        {
+                          height: imageFrame.height,
+                          width: imageFrame.width,
+                        },
+                      ]}
+                      onPress={(event) => event.stopPropagation()}
+                    >
+                      <Image source={{ uri: photoUri }} style={styles.imageModalImage} />
+                    </Pressable>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </Modal>
+
+        {Platform.OS === 'ios' && isToastVisible ? (
           <Animated.View
             pointerEvents="none"
             style={[
-              styles.toast,
+              styles.toastContainer,
               {
-                bottom: 20 + insets.bottom,
+                bottom: 24 + insets.bottom,
                 opacity: toastOpacity,
                 transform: [{ translateY: toastTranslateY }],
               },
@@ -396,74 +455,6 @@ export function MyReviewsScreen({
             <Text style={styles.toastText}>{toastMessage}</Text>
           </Animated.View>
         ) : null}
-
-        <Modal
-          visible={selectedImageIndex !== null}
-          transparent
-          animationType="none"
-          onRequestClose={() => setSelectedImageIndex(null)}
-        >
-          <View style={styles.imageModalBackdrop}>
-            <View style={[styles.imageIndexBadge, { top: 18 + insets.top }]}>
-              <Text style={styles.imageIndexBadgeText}>
-                {previewImages.length ? (
-                  <>
-                    <Text style={styles.imageIndexBadgeTextCurrent}>
-                      {previewCurrentIndex + 1}
-                    </Text>
-                    <Text style={styles.imageIndexBadgeTextMuted}>
-                      /{previewImages.length}
-                    </Text>
-                  </>
-                ) : (
-                  ''
-                )}
-              </Text>
-            </View>
-            <ScrollView
-              ref={previewScrollRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              style={styles.imagePreviewScroll}
-              contentOffset={{
-                x: selectedImageIndex !== null ? windowWidth * selectedImageIndex : 0,
-                y: 0,
-              }}
-              onMomentumScrollEnd={(event) => {
-                const nextIndex = Math.round(
-                  event.nativeEvent.contentOffset.x / windowWidth,
-                );
-                setPreviewCurrentIndex(nextIndex);
-              }}
-            >
-              {previewImages.map((imageUri, imageIndex) => {
-                const imageFrame = getPreviewImageFrame(imageUri);
-
-                return (
-                  <Pressable
-                    key={`${imageUri}-${imageIndex}`}
-                    style={[styles.imagePreviewPage, { width: windowWidth }]}
-                    onPress={() => setSelectedImageIndex(null)}
-                  >
-                    <Pressable
-                      style={[
-                        styles.imageModalImageWrap,
-                        {
-                          width: imageFrame.width,
-                          height: imageFrame.height,
-                        },
-                      ]}
-                      onPress={(event) => event.stopPropagation()}
-                    >
-                      <Image source={{ uri: imageUri }} style={styles.imageModalImage} />
-                    </Pressable>
-                  </Pressable>
-                );
-              })}
-              </ScrollView>
-          </View>
-        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -522,7 +513,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    gap: 4,
+    gap: 2,
   },
   restaurantName: {
     fontSize: 17,
@@ -558,24 +549,6 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
-  reactionButton: {
-    minWidth: 46,
-    height: 28,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: '#F5F5F5',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  reactionCount: {
-    fontSize: 13,
-    lineHeight: 19.5,
-    fontWeight: '500',
-    color: '#666666',
   },
   deleteButton: {
     width: 32,
@@ -590,18 +563,13 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: '#000000',
   },
-  reviewReactionRow: {
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   reviewImagesCarousel: {
     overflow: 'hidden',
   },
   reviewImagesRow: {
     flexDirection: 'row',
     paddingLeft: 16,
+    paddingRight: 16,
   },
   reviewImage: {
     width: REVIEW_IMAGE_SIZE,
@@ -614,67 +582,66 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  videoReviewCard: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1F1F1F',
-  },
-  videoReviewBadge: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.8,
-  },
   reviewImageSpacing: {
     marginRight: 4,
+  },
+  reviewReactionRow: {
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  reactionButton: {
+    minWidth: 44,
+    height: 27.5,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#F5F5F5',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  reactionCount: {
+    fontSize: 13,
+    lineHeight: 19.5,
+    fontWeight: '500',
+    color: '#666666',
   },
   divider: {
     marginTop: 12,
     width: '100%',
-    height: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  toast: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    borderRadius: 14,
-    backgroundColor: 'rgba(17, 17, 17, 0.92)',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toastText: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    textAlign: 'center',
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#E6E6E6',
   },
   imageModalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.92)',
+    backgroundColor: 'rgba(17, 17, 17, 0.96)',
+    justifyContent: 'center',
   },
-  imagePreviewScroll: {
-    flex: 1,
+  photoPreviewHeader: {
+    position: 'absolute',
+    top: 52,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+    alignItems: 'center',
+    pointerEvents: 'box-none',
   },
   imageIndexBadge: {
-    position: 'absolute',
-    right: 16,
-    zIndex: 2,
-    minWidth: 54,
-    height: 30,
-    paddingHorizontal: 12,
-    borderRadius: 15,
-    backgroundColor: 'rgba(17, 17, 17, 0.7)',
+    minWidth: 72,
+    height: 28,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   imageIndexBadgeText: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: '600',
     color: '#FFFFFF',
   },
@@ -682,13 +649,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   imageIndexBadgeTextMuted: {
-    color: 'rgba(255, 255, 255, 0.55)',
+    color: 'rgba(255,255,255,0.78)',
+  },
+  imagePreviewScroll: {
+    flex: 1,
   },
   imagePreviewPage: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
   },
   imageModalImageWrap: {
     alignItems: 'center',
@@ -697,7 +666,22 @@ const styles = StyleSheet.create({
   imageModalImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 12,
     resizeMode: 'contain',
+  },
+  toastContainer: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(20, 20, 20, 0.92)',
+  },
+  toastText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 });

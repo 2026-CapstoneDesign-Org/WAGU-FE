@@ -5,8 +5,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import {
   addRestaurantToList,
+  cancelReviewVote,
   createRestaurantReview,
   createList,
+  deleteReview,
   deleteList,
   formatBirthDate,
   formatGenderLabel,
@@ -42,6 +44,7 @@ import {
   updateRestaurantInList,
   updateList,
   updateMyUser,
+  voteReview,
 } from '../api/wagu';
 import { ApiError, isAuthError, setAuthRefreshHandler } from '../api/client';
 import { uploadImageWithPresignedUrl } from '../api/upload';
@@ -255,6 +258,7 @@ function createSearchResultUserProfile(user: {
     nickname: user.nickname,
     profileImageUrl: user.profileImageUrl,
     representativeAccentColor: accentColor,
+    representativeListIsLiked: false,
     representativeListId: undefined,
     representativeListTitle: '대표 리스트',
     representativeRestaurants: [],
@@ -439,6 +443,7 @@ export function AppRoot() {
   const [remoteUserReviewsByUserId, setRemoteUserReviewsByUserId] = useState<
     Record<string, MyReview[]>
   >({});
+  const [reviewReactionPendingIds, setReviewReactionPendingIds] = useState<string[]>([]);
   const [remoteUserFriendConnectionsByUserId, setRemoteUserFriendConnectionsByUserId] =
     useState<
       Record<
@@ -531,6 +536,7 @@ export function AppRoot() {
           HOME_PROFILE_ACCENT_COLORS[
             Math.abs(Number(selectedUserProfileId) || 0) % HOME_PROFILE_ACCENT_COLORS.length
           ],
+        representativeListIsLiked: false,
         representativeListTitle: '대표 리스트',
         representativeRestaurants: [],
       }
@@ -733,6 +739,8 @@ export function AppRoot() {
             : baseProfile?.followingCount,
         reviewCount:
           userReviews !== null ? String(userReviews.length) : baseProfile?.reviewCount,
+        representativeListIsLiked:
+          representativeList?.isLiked ?? baseProfile?.representativeListIsLiked ?? false,
         representativeListId: representativeList
           ? String(representativeList.id)
           : baseProfile?.representativeListId,
@@ -793,6 +801,7 @@ export function AppRoot() {
           existing.followerCount === nextProfile.followerCount &&
           existing.followingCount === nextProfile.followingCount &&
           existing.reviewCount === nextProfile.reviewCount &&
+          existing.representativeListIsLiked === nextProfile.representativeListIsLiked &&
           existing.representativeListId === nextProfile.representativeListId &&
           existing.representativeListTitle === nextProfile.representativeListTitle &&
           existing.representativeRestaurants.length === nextProfile.representativeRestaurants.length
@@ -1138,6 +1147,119 @@ export function AppRoot() {
     setMyReviewItems(reviews.map(mapApiReviewToMyReview));
   };
 
+  const applyStoredReviewReaction = (
+    items: MyReview[],
+    reviewId: string,
+    nextReaction: 'dislike' | 'like' | null,
+  ) =>
+    items.map((review) => {
+      if (review.id !== reviewId) {
+        return review;
+      }
+
+      const previousReaction = review.myReaction ?? null;
+      let likes = review.likes;
+      let dislikes = review.dislikes;
+
+      if (previousReaction === 'like') {
+        likes = Math.max(0, likes - 1);
+      } else if (previousReaction === 'dislike') {
+        dislikes = Math.max(0, dislikes - 1);
+      }
+
+      if (nextReaction === 'like') {
+        likes += 1;
+      } else if (nextReaction === 'dislike') {
+        dislikes += 1;
+      }
+
+      return {
+        ...review,
+        dislikes,
+        likes,
+        myReaction: nextReaction,
+      };
+    });
+
+  const handleToggleUserReviewReaction = async (
+    reviewId: string,
+    nextReaction: 'dislike' | 'like' | null,
+  ) => {
+    if (!session?.accessToken) {
+      return false;
+    }
+
+    const parsedReviewId = Number(reviewId);
+
+    if (Number.isNaN(parsedReviewId)) {
+      Alert.alert('안내', '리뷰 반응을 변경하지 못했습니다.');
+      return false;
+    }
+
+    setReviewReactionPendingIds((current) =>
+      current.includes(reviewId) ? current : [...current, reviewId],
+    );
+
+    try {
+      if (nextReaction === null) {
+        await cancelReviewVote(session.accessToken, parsedReviewId);
+      } else {
+        await voteReview(session.accessToken, parsedReviewId, {
+          voteType: nextReaction === 'like' ? 'LIKE' : 'DISLIKE',
+        });
+      }
+
+      setMyReviewItems((current) => applyStoredReviewReaction(current, reviewId, nextReaction));
+      setRemoteUserReviewsByUserId((current) =>
+        Object.fromEntries(
+          Object.entries(current).map(([userId, reviews]) => [
+            userId,
+            applyStoredReviewReaction(reviews, reviewId, nextReaction),
+          ]),
+        ),
+      );
+
+      return true;
+    } catch {
+      Alert.alert('안내', '리뷰 반응을 변경하지 못했습니다.');
+      return false;
+    } finally {
+      setReviewReactionPendingIds((current) => current.filter((id) => id !== reviewId));
+    }
+  };
+
+  const handleDeleteMyReview = async (reviewId: string) => {
+    if (!session?.accessToken) {
+      return false;
+    }
+
+    const parsedReviewId = Number(reviewId);
+
+    if (Number.isNaN(parsedReviewId)) {
+      Alert.alert('안내', '리뷰를 삭제하지 못했습니다.');
+      return false;
+    }
+
+    try {
+      await deleteReview(session.accessToken, parsedReviewId);
+      setMyReviewItems((current) => current.filter((review) => review.id !== reviewId));
+
+      if (myUserId !== null) {
+        setRemoteUserReviewsByUserId((current) => ({
+          ...current,
+          [String(myUserId)]: (current[String(myUserId)] ?? []).filter(
+            (review) => review.id !== reviewId,
+          ),
+        }));
+      }
+
+      return true;
+    } catch {
+      Alert.alert('안내', '리뷰를 삭제하지 못했습니다.');
+      return false;
+    }
+  };
+
   useEffect(() => {
     if (!session?.accessToken) {
       setRecommendedRestaurantItems([]);
@@ -1335,6 +1457,7 @@ export function AppRoot() {
                   profileImageUrl: item.owner.profileImageUrl,
                   representativeAccentColor:
                     HOME_PROFILE_ACCENT_COLORS[index % HOME_PROFILE_ACCENT_COLORS.length],
+                  representativeListIsLiked: item.isLiked ?? false,
                   representativeListId: String(item.listId),
                   representativeListTitle: item.title,
                   representativeRestaurants,
@@ -2890,6 +3013,7 @@ export function AppRoot() {
       ) : screen === 'my-reviews' ? (
         <MyReviewsScreen
           onBack={() => setScreen('tabs')}
+          onDeleteReview={handleDeleteMyReview}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, { type: 'my-reviews' })
           }
@@ -2899,9 +3023,10 @@ export function AppRoot() {
       ) : screen === 'user-reviews' && selectedUserProfileId ? (
         <UserReviewsScreen
           title={
-            (selectedVisibleUserProfile?.nickname ?? '') + '님의 리뷰'
+              (selectedVisibleUserProfile?.nickname ?? '') + '님의 리뷰'
           }
           reviews={userReviewsById[selectedUserProfileId] ?? []}
+          pendingReactionIds={reviewReactionPendingIds}
           onBack={() => setScreen('user-profile')}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, {
@@ -2909,6 +3034,7 @@ export function AppRoot() {
               userId: selectedUserProfileId,
             })
           }
+          onToggleReaction={handleToggleUserReviewReaction}
         />
       ) : screen === 'edit-nickname' ? (
         <EditNicknameScreen
@@ -2949,15 +3075,17 @@ export function AppRoot() {
                 : false;
             })()
           }
-          representativeIsLiked={
-            (() => {
-              const selectedProfile = selectedVisibleUserProfile;
-              const representativeListId = selectedProfile?.representativeListId;
-              return representativeListId
-                ? myListLikeStateById[representativeListId] ?? false
-                : false;
-            })()
-          }
+            representativeIsLiked={
+              (() => {
+                const selectedProfile = selectedVisibleUserProfile;
+                const representativeListId = selectedProfile?.representativeListId;
+                return representativeListId
+                  ? myListLikeStateById[representativeListId] ??
+                      selectedProfile?.representativeListIsLiked ??
+                      false
+                  : selectedProfile?.representativeListIsLiked ?? false;
+              })()
+            }
           onBack={() => {
             if (userProfileSource?.type === 'search-result') {
               setScreen('search-result');

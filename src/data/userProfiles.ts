@@ -10,6 +10,7 @@ export type UserProfile = {
   honorTitle?: string;
   reliabilityGrade?: string;
   reviewCount?: string;
+  representativeListIsLiked?: boolean;
   representativeListId?: string;
   representativeListTitle: string;
   representativeAccentColor: string;
