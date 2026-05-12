@@ -5,6 +5,7 @@ export type RestaurantReview = {
   authorUserId?: number;
   restaurantName: string;
   authorName: string;
+  myReaction?: 'dislike' | 'like' | null;
   isFollowing?: boolean;
   isOwner?: boolean;
   date: string;

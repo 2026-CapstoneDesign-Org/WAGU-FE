@@ -5,6 +5,7 @@ export type UserProfile = {
   nickname: string;
   profileImageUrl?: string;
   followerCount?: string;
+  followingCount?: string;
   honorPeriod?: string;
   honorTitle?: string;
   reliabilityGrade?: string;

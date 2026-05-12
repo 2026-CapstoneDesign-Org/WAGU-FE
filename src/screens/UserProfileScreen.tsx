@@ -17,6 +17,7 @@ type UserProfileScreenProps = {
   isFollowing?: boolean;
   isOwnProfile?: boolean;
   onBack: () => void;
+  onOpenFollowing?: () => void;
   onFollowToggle?: (nextIsFollowing: boolean) => void;
   onOpenFollowers?: () => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
@@ -33,6 +34,7 @@ export function UserProfileScreen({
   isFollowing = false,
   isOwnProfile = false,
   onBack,
+  onOpenFollowing,
   onFollowToggle,
   onOpenFollowers,
   onOpenRestaurantDetail,
@@ -57,7 +59,7 @@ export function UserProfileScreen({
     [],
   );
 
-  const hasMetrics = Boolean(profile.reviewCount || profile.followerCount);
+  const hasMetrics = Boolean(profile.reviewCount || profile.followingCount || profile.followerCount);
   const hasRepresentativeRestaurants = profile.representativeRestaurants.length > 0;
   const hasReliability = Boolean(profile.reliabilityGrade);
 
@@ -112,6 +114,14 @@ export function UserProfileScreen({
                     <View style={styles.metricGroup}>
                       <Text style={styles.metricLabel}>리뷰</Text>
                       <Text style={styles.metricValue}>{profile.reviewCount}</Text>
+                    </View>
+                  </Pressable>
+                ) : null}
+                {profile.followingCount ? (
+                  <Pressable hitSlop={8} onPress={onOpenFollowing} style={styles.metricPressable}>
+                    <View style={styles.metricGroup}>
+                      <Text style={styles.metricLabel}>팔로잉</Text>
+                      <Text style={styles.metricValue}>{profile.followingCount}</Text>
                     </View>
                   </Pressable>
                 ) : null}

@@ -700,6 +700,12 @@ function mapApiReviewToDisplayReview(
     imageUris: review.imageUrls,
     isOwner: review.userId === currentUserId,
     likes: review.likeCount,
+    myReaction:
+      review.myVoteType === 'LIKE'
+        ? 'like'
+        : review.myVoteType === 'DISLIKE'
+          ? 'dislike'
+          : null,
     restaurantName,
   };
 }
@@ -1778,7 +1784,7 @@ export function RestaurantDetailScreen({
         review.isFollowing ??
         false,
       isFollowPending: reviewFollowPendingIds[review.id] ?? false,
-      currentReaction: reviewReactionStates[review.id] ?? null,
+      currentReaction: reviewReactionStates[review.id] ?? review.myReaction ?? null,
       likes: review.likes,
       dislikes: review.dislikes,
       isVotePending: reviewVotePendingIds[review.id] ?? false,

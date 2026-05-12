@@ -109,7 +109,8 @@ export function UserReviewsScreen({
 
   const handleToggleReaction = (reviewId: string, reaction: Exclude<ReviewReaction, null>) => {
     setReviewReactions((current) => {
-      const currentReaction = current[reviewId] ?? null;
+      const baseReview = reviews.find((item) => item.id === reviewId);
+      const currentReaction = current[reviewId] ?? baseReview?.myReaction ?? null;
 
       return {
         ...current,
@@ -119,25 +120,34 @@ export function UserReviewsScreen({
   };
 
   const getReactionCounts = (review: MyReview) => {
-    const currentReaction = reviewReactions[review.id] ?? null;
+    const initialReaction = review.myReaction ?? null;
+    const currentReaction = reviewReactions[review.id] ?? initialReaction;
+    let likes = review.likes;
+    let dislikes = review.dislikes;
+
+    if (initialReaction === 'like') {
+      likes = Math.max(0, likes - 1);
+    } else if (initialReaction === 'dislike') {
+      dislikes = Math.max(0, dislikes - 1);
+    }
 
     if (currentReaction === 'like') {
       return {
-        likes: review.likes + 1,
-        dislikes: review.dislikes,
+        likes: likes + 1,
+        dislikes,
       };
     }
 
     if (currentReaction === 'dislike') {
       return {
-        likes: review.likes,
-        dislikes: review.dislikes + 1,
+        likes,
+        dislikes: dislikes + 1,
       };
     }
 
     return {
-      likes: review.likes,
-      dislikes: review.dislikes,
+      likes,
+      dislikes,
     };
   };
 
@@ -197,7 +207,7 @@ export function UserReviewsScreen({
           contentContainerStyle={[styles.content, { paddingBottom: 34 + insets.bottom }]}
         >
           {sortedReviews.map((review, index) => {
-            const currentReaction = reviewReactions[review.id] ?? null;
+            const currentReaction = reviewReactions[review.id] ?? review.myReaction ?? null;
             const reactionCounts = getReactionCounts(review);
 
             return (

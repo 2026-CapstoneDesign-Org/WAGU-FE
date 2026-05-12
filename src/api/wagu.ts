@@ -179,7 +179,15 @@ export type ApiReview = {
   id: number;
   imageUrls?: string[];
   likeCount: number;
+  myVoteType?: 'DISLIKE' | 'LIKE';
   nickname: string;
+  restaurant?: {
+    address?: string;
+    id: number;
+    imageUrl?: string;
+    name: string;
+    regionName?: string;
+  };
   restaurantName?: string;
   userId: number;
 };
@@ -529,6 +537,12 @@ export async function setRepresentativeList(token: string, listId: number) {
 
 export async function getListDetail(token: string, listId: number) {
   return apiRequest<ApiUserListDetail>(`/lists/${listId}`, {
+    token,
+  });
+}
+
+export async function getUserRepresentativeList(token: string, userId: number) {
+  return apiRequest<ApiUserListDetail>(`/lists/users/${userId}/representative`, {
     token,
   });
 }

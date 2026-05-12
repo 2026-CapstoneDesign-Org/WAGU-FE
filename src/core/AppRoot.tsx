@@ -18,6 +18,7 @@ import {
   getListDetail,
   getListLikeCount,
   getListRecommendations,
+  getUserRepresentativeList,
   getMyInfo,
   getMyLists,
   getReliabilityScore,
@@ -305,13 +306,28 @@ function mapApiReviewToMyReview(review: {
   dislikeCount: number;
   imageUrls?: string[];
   likeCount: number;
+  myVoteType?: 'DISLIKE' | 'LIKE';
+  restaurant?: {
+    id: number;
+    imageUrl?: string;
+    name: string;
+    regionName?: string;
+  };
   restaurantName?: string;
   categoryName?: string;
 }): MyReview {
   return {
     id: String(review.id),
-    restaurantName: review.restaurantName ?? '식당 정보 없음',
-    category: review.categoryName ?? '',
+    myReaction:
+      review.myVoteType === 'LIKE'
+        ? 'like'
+        : review.myVoteType === 'DISLIKE'
+          ? 'dislike'
+          : null,
+    restaurantId: review.restaurant ? String(review.restaurant.id) : undefined,
+    restaurantImageUri: review.restaurant?.imageUrl,
+    restaurantName: review.restaurant?.name ?? review.restaurantName ?? '식당 정보 없음',
+    category: review.categoryName ?? review.restaurant?.regionName ?? '',
     date: formatApiReviewDate(review.createdAt),
     content: review.content,
     likes: review.likeCount,
@@ -394,6 +410,19 @@ export function AppRoot() {
   const [myFollowerUsers, setMyFollowerUsers] =
     useState<FriendUser[]>(sortFollowersForInitialView(fallbackFollowerUsers));
   const [myReviewItems, setMyReviewItems] = useState<MyReview[]>(MOCK_DATA_ENABLED ? myReviews : []);
+  const [remoteUserReviewsByUserId, setRemoteUserReviewsByUserId] = useState<
+    Record<string, MyReview[]>
+  >({});
+  const [remoteUserFriendConnectionsByUserId, setRemoteUserFriendConnectionsByUserId] =
+    useState<
+      Record<
+        string,
+        {
+          followers: FriendUser[];
+          following: FriendUser[];
+        }
+      >
+    >({});
   const [myUserId, setMyUserId] = useState<number | null>(null);
   const [myReliabilityGrade, setMyReliabilityGrade] = useState<string | null>(null);
   const [myHonorTitle, setMyHonorTitle] = useState<string | null>(null);
@@ -456,6 +485,30 @@ export function AppRoot() {
     ),
     fallbackUserProfiles,
   );
+  const userReviewsById = {
+    ...visibleUserReviewsByUserId,
+    ...remoteUserReviewsByUserId,
+  };
+  const userFriendConnectionsById = {
+    ...visibleUserFriendConnectionsByUserId,
+    ...remoteUserFriendConnectionsByUserId,
+  };
+  const selectedVisibleUserProfile =
+    selectedUserProfileId
+      ? visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ?? null
+      : null;
+  const fallbackSelectedUserProfile: UserProfile | null = selectedUserProfileId
+    ? {
+        id: selectedUserProfileId,
+        nickname: '',
+        representativeAccentColor:
+          HOME_PROFILE_ACCENT_COLORS[
+            Math.abs(Number(selectedUserProfileId) || 0) % HOME_PROFILE_ACCENT_COLORS.length
+          ],
+        representativeListTitle: '대표 리스트',
+        representativeRestaurants: [],
+      }
+    : null;
 
   const applyStoredSession = async (
     provider: LoginProvider,
@@ -577,6 +630,9 @@ export function AppRoot() {
         reliabilityResult,
         userReviewsResult,
         followStatusResult,
+        representativeListResult,
+        followingsResult,
+        followersResult,
       ] =
         await Promise.allSettled([
           getUserInfo(session.accessToken, userId),
@@ -584,6 +640,9 @@ export function AppRoot() {
           getReliabilityScore(session.accessToken, userId),
           getUserReviews(session.accessToken, userId),
           getFollowStatus(session.accessToken, userId),
+          getUserRepresentativeList(session.accessToken, userId),
+          getFollowings(session.accessToken, userId),
+          getFollowers(session.accessToken, userId),
         ]);
 
       if (cancelled) {
@@ -598,6 +657,36 @@ export function AppRoot() {
         userReviewsResult.status === 'fulfilled' ? userReviewsResult.value : null;
       const followStatus =
         followStatusResult.status === 'fulfilled' ? followStatusResult.value : null;
+      const representativeList =
+        representativeListResult.status === 'fulfilled'
+          ? representativeListResult.value
+          : null;
+      const followings = followingsResult.status === 'fulfilled' ? followingsResult.value : null;
+      const followers = followersResult.status === 'fulfilled' ? followersResult.value : null;
+
+      const representativeAccentColor =
+        baseProfile?.representativeAccentColor ??
+        HOME_PROFILE_ACCENT_COLORS[userId % HOME_PROFILE_ACCENT_COLORS.length];
+
+      const representativeRestaurants = representativeList
+        ? representativeList.restaurants.slice(0, 5).map((restaurantItem) => ({
+            address: restaurantItem.restaurant.address,
+            id: String(restaurantItem.restaurant.id),
+            imageUri: restaurantItem.restaurant.imageUrl,
+            listItemId: String(restaurantItem.id),
+            name: restaurantItem.restaurant.name,
+            ratings:
+              restaurantItem.tasteScore !== undefined &&
+              restaurantItem.valueScore !== undefined &&
+              restaurantItem.moodScore !== undefined
+                ? {
+                    taste: restaurantItem.tasteScore / 2,
+                    service: restaurantItem.moodScore / 2,
+                    value: restaurantItem.valueScore / 2,
+                  }
+                : undefined,
+          }))
+        : (baseProfile?.representativeRestaurants ?? []);
 
       const nextProfile: UserProfile = {
         id: selectedUserProfileId,
@@ -612,15 +701,58 @@ export function AppRoot() {
           followCount?.followerCount !== undefined
             ? String(followCount.followerCount)
             : baseProfile?.followerCount,
+        followingCount:
+          followCount?.followingCount !== undefined
+            ? String(followCount.followingCount)
+            : baseProfile?.followingCount,
         reviewCount:
           userReviews !== null ? String(userReviews.length) : baseProfile?.reviewCount,
-        representativeListId: baseProfile?.representativeListId,
-        representativeListTitle: baseProfile?.representativeListTitle ?? '대표 리스트',
-        representativeAccentColor:
-          baseProfile?.representativeAccentColor ??
-          HOME_PROFILE_ACCENT_COLORS[userId % HOME_PROFILE_ACCENT_COLORS.length],
-        representativeRestaurants: baseProfile?.representativeRestaurants ?? [],
+        representativeListId: representativeList
+          ? String(representativeList.id)
+          : baseProfile?.representativeListId,
+        representativeListTitle:
+          representativeList?.title ?? baseProfile?.representativeListTitle ?? '대표 리스트',
+        representativeAccentColor,
+        representativeRestaurants,
       };
+
+      if (representativeList) {
+        const representativeListId = String(representativeList.id);
+        setMyListLikeStateById((current) => ({
+          ...current,
+          [representativeListId]:
+            representativeList.isLiked ?? current[representativeListId] ?? false,
+        }));
+      }
+
+      if (userReviews !== null) {
+        setRemoteUserReviewsByUserId((current) => ({
+          ...current,
+          [selectedUserProfileId]: userReviews.map(mapApiReviewToMyReview),
+        }));
+      }
+
+      if (followings !== null || followers !== null) {
+        const myFollowingIdSet = new Set(
+          myFollowingUsers
+            .map((user) => Number(user.id))
+            .filter((followedUserId) => Number.isFinite(followedUserId)),
+        );
+
+        setRemoteUserFriendConnectionsByUserId((current) => ({
+          ...current,
+          [selectedUserProfileId]: {
+            following:
+              followings !== null
+                ? mapFollowUsersToFriendUsers(followings, myFollowingIdSet)
+                : current[selectedUserProfileId]?.following ?? [],
+            followers:
+              followers !== null
+                ? mapFollowUsersToFriendUsers(followers, myFollowingIdSet)
+                : current[selectedUserProfileId]?.followers ?? [],
+          },
+        }));
+      }
 
       setRemoteUserProfiles((current) => {
         const existing = current.find((item) => item.id === selectedUserProfileId);
@@ -633,7 +765,11 @@ export function AppRoot() {
           existing.honorTitle === nextProfile.honorTitle &&
           existing.honorPeriod === nextProfile.honorPeriod &&
           existing.followerCount === nextProfile.followerCount &&
-          existing.reviewCount === nextProfile.reviewCount
+          existing.followingCount === nextProfile.followingCount &&
+          existing.reviewCount === nextProfile.reviewCount &&
+          existing.representativeListId === nextProfile.representativeListId &&
+          existing.representativeListTitle === nextProfile.representativeListTitle &&
+          existing.representativeRestaurants.length === nextProfile.representativeRestaurants.length
         ) {
           return current;
         }
@@ -657,6 +793,7 @@ export function AppRoot() {
     };
   }, [
     fallbackUserProfiles,
+    myFollowingUsers,
     recommendedUserProfiles,
     remoteUserProfiles,
     searchResultUserProfiles,
@@ -2544,10 +2681,10 @@ export function AppRoot() {
               '') + '님의 밥친구'
           }
           followingUsersData={
-            visibleUserFriendConnectionsByUserId[selectedUserProfileId]?.following ?? []
+            userFriendConnectionsById[selectedUserProfileId]?.following ?? []
           }
           followerUsersData={
-            visibleUserFriendConnectionsByUserId[selectedUserProfileId]?.followers ?? []
+            userFriendConnectionsById[selectedUserProfileId]?.followers ?? []
           }
             onBack={() => setScreen('user-profile')}
             onChangeTab={setMyFriendsInitialTab}
@@ -2620,10 +2757,9 @@ export function AppRoot() {
       ) : screen === 'user-reviews' && selectedUserProfileId ? (
         <UserReviewsScreen
           title={
-            (visibleUserProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ??
-              '') + '님의 리뷰'
+            (selectedVisibleUserProfile?.nickname ?? '') + '님의 리뷰'
           }
-          reviews={visibleUserReviewsByUserId[selectedUserProfileId] ?? []}
+          reviews={userReviewsById[selectedUserProfileId] ?? []}
           onBack={() => setScreen('user-profile')}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, {
@@ -2651,15 +2787,11 @@ export function AppRoot() {
           onFollowToggle={(nextIsFollowing) =>
             void handleToggleUserProfileFollow(selectedUserProfileId, nextIsFollowing)
           }
-          profile={
-            visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ??
-            visibleUserProfiles[0]
-          }
+          profile={selectedVisibleUserProfile ?? fallbackSelectedUserProfile!}
           onToggleRepresentativeLike={(listId) => void handleToggleMyListLike(listId)}
           representativeLikeCount={
             (() => {
-              const selectedProfile =
-                visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ?? null;
+              const selectedProfile = selectedVisibleUserProfile;
               const representativeListId = selectedProfile?.representativeListId;
               return representativeListId
                 ? myListLikeCountById[representativeListId] ?? 0
@@ -2668,8 +2800,7 @@ export function AppRoot() {
           }
           representativeIsLikePending={
             (() => {
-              const selectedProfile =
-                visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ?? null;
+              const selectedProfile = selectedVisibleUserProfile;
               const representativeListId = selectedProfile?.representativeListId;
               return representativeListId
                 ? myListLikePendingIds.includes(representativeListId)
@@ -2678,8 +2809,7 @@ export function AppRoot() {
           }
           representativeIsLiked={
             (() => {
-              const selectedProfile =
-                visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ?? null;
+              const selectedProfile = selectedVisibleUserProfile;
               const representativeListId = selectedProfile?.representativeListId;
               return representativeListId
                 ? myListLikeStateById[representativeListId] ?? false
@@ -2725,6 +2855,10 @@ export function AppRoot() {
           }}
           onOpenFollowers={() => {
             setMyFriendsInitialTab('followers');
+            setScreen('user-friends');
+          }}
+          onOpenFollowing={() => {
+            setMyFriendsInitialTab('following');
             setScreen('user-friends');
           }}
           onOpenReviews={() => setScreen('user-reviews')}
