@@ -71,6 +71,13 @@ export type HomeProfileCardItem = {
   name: string;
 };
 
+export type HomeRestaurantCardItem = {
+  id: string;
+  imageUri?: string;
+  name: string;
+  restaurantName: string;
+};
+
 type RankingSectionProps = {
   accentTitle?: string;
   initialScrollX?: number;
@@ -92,6 +99,7 @@ type HorizontalProfileSectionProps = {
 };
 
 type MainHomeScreenProps = {
+  featuredRestaurantItems?: HomeRestaurantCardItem[];
   initialScrollState?: HomeScrollState;
   localRankingItems?: RankingEntry[];
   mealFriendItems?: HomeProfileCardItem[];
@@ -206,11 +214,28 @@ function HorizontalProfileSection({
 }: HorizontalProfileSectionProps) {
   const scrollRef = useRef<ScrollView | null>(null);
 
+  if (title.includes('WAGU')) {
+    return null;
+  }
+
   useEffect(() => {
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({ x: initialScrollX, animated: false });
     });
   }, [restoreScrollKey]);
+
+  if (items.length === 0) {
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <View style={styles.emptySectionCard}>
+          <Text style={styles.emptySectionText}>
+            조금 더 활동하면 WAGU 인플루언서를 추천해드릴게요.
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.section}>
@@ -252,7 +277,83 @@ function HorizontalProfileSection({
   );
 }
 
+function HorizontalRestaurantSection({
+  initialScrollX = 0,
+  items,
+  onPressItem,
+  onScrollPositionChange,
+  restoreScrollKey = 0,
+  title,
+}: {
+  initialScrollX?: number;
+  items: HomeRestaurantCardItem[];
+  onPressItem?: (restaurantName: string) => void;
+  onScrollPositionChange?: (x: number) => void;
+  restoreScrollKey?: number;
+  title: string;
+}) {
+  const scrollRef = useRef<ScrollView | null>(null);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ x: initialScrollX, animated: false });
+    });
+  }, [restoreScrollKey]);
+
+  if (items.length === 0) {
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <View style={styles.emptySectionCard}>
+          <Text style={styles.emptySectionText}>
+            조금 더 활동하면 취향에 맞는 맛집을 추천해드릴게요.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+
+      <View style={styles.profileCarousel}>
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.profileScrollContent}
+          onScroll={(event) => onScrollPositionChange?.(event.nativeEvent.contentOffset.x)}
+          scrollEventThrottle={16}
+        >
+          {items.map((item) => (
+            <Pressable
+              key={item.id}
+              style={styles.profileCard}
+              onPress={() => onPressItem?.(item.restaurantName)}
+            >
+              {item.imageUri ? (
+                <Image
+                  source={{ uri: item.imageUri }}
+                  style={styles.profileImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.profileImage} />
+              )}
+              <View style={styles.profileCopy}>
+                <Text style={styles.profileName}>{item.name}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+    </View>
+  );
+}
+
 export function MainHomeScreen({
+  featuredRestaurantItems,
   initialScrollState,
   localRankingItems,
   mealFriendItems,
@@ -277,6 +378,7 @@ export function MainHomeScreen({
   const autoSlideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const indicatorPosition = useRef(new Animated.Value(1)).current;
 
+  const featuredRestaurants = featuredRestaurantItems ?? [];
   const localRanking = (localRankingItems ?? localRankingEntries).slice(0, 20);
   const mealFriendProfiles = mealFriendItems ?? (MOCK_DATA_ENABLED ? mealFriends : []);
   const nationalRanking = (nationalRankingItems ?? nationalRankingEntries).slice(0, 20);
@@ -460,6 +562,14 @@ export function MainHomeScreen({
               onScrollPositionChange={(x) => onScrollStateChange?.({ nationalRankingX: x })}
               onPressItem={onOpenRestaurantDetail}
               onPressMore={onPressNationalRanking}
+              restoreScrollKey={restoreScrollKey}
+            />
+            <HorizontalRestaurantSection
+              title="이런 맛집은 어떠세요?"
+              initialScrollX={initialScrollState?.influencersX ?? 0}
+              items={featuredRestaurants}
+              onPressItem={onOpenRestaurantDetail}
+              onScrollPositionChange={(x) => onScrollStateChange?.({ influencersX: x })}
               restoreScrollKey={restoreScrollKey}
             />
             <HorizontalProfileSection
@@ -669,6 +779,17 @@ const styles = StyleSheet.create({
   },
   profileCarousel: {
     marginRight: -16,
+  },
+  emptySectionCard: {
+    borderRadius: 10,
+    backgroundColor: '#F4F4F4',
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+  },
+  emptySectionText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#8A8A8A',
   },
   profileScrollContent: {
     paddingRight: 16,

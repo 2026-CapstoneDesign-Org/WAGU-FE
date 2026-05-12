@@ -20,6 +20,7 @@ import {
   getMyInfo,
   getMyLists,
   getReliabilityScore,
+  getRestaurantRecommendations,
   getRestaurantRankings,
   getUserInfo,
   getUserReviews,
@@ -52,7 +53,12 @@ import { AddRestaurantToListSelectScreen } from '../screens/AddRestaurantToListS
 import { AiChatScreen } from '../screens/AiChatScreen';
 import { DeleteAccountScreen } from '../screens/DeleteAccountScreen';
 import { EditNicknameScreen } from '../screens/EditNicknameScreen';
-import { HomeProfileCardItem, HomeScrollState, MainHomeScreen } from '../screens/MainHomeScreen';
+import {
+  HomeProfileCardItem,
+  HomeRestaurantCardItem,
+  HomeScrollState,
+  MainHomeScreen,
+} from '../screens/MainHomeScreen';
 import { MapScreen } from '../screens/MapScreen';
 import { MapSearchScreen } from '../screens/MapSearchScreen';
 import { LoginProvider, MyInfoScreen } from '../screens/MyInfoScreen';
@@ -383,6 +389,9 @@ export function AppRoot() {
   const [recommendedMealFriendItems, setRecommendedMealFriendItems] = useState<
     HomeProfileCardItem[]
   >([]);
+  const [recommendedRestaurantItems, setRecommendedRestaurantItems] = useState<
+    HomeRestaurantCardItem[]
+  >([]);
   const [recommendedUserProfiles, setRecommendedUserProfiles] = useState<UserProfile[]>([]);
   const [remoteUserProfiles, setRemoteUserProfiles] = useState<UserProfile[]>([]);
   const [searchResultUserProfiles, setSearchResultUserProfiles] = useState<UserProfile[]>([]);
@@ -634,6 +643,7 @@ export function AppRoot() {
 
   useEffect(() => {
     if (!session?.accessToken) {
+      setRecommendedRestaurantItems([]);
       setRecommendedMealFriendItems([]);
       setRecommendedUserProfiles([]);
       return;
@@ -655,28 +665,47 @@ export function AppRoot() {
         setGenderLabel(formatGenderLabel(me.gender));
         setMyUserId(me.id);
 
-        const [
-          followCountResult,
-          listsResult,
-          localRankingResult,
-          nationalRankingResult,
-          followingsResult,
-          followersResult,
-          reliabilityResult,
-          myReviewsResult,
-          recommendationsResult,
-        ] =
-          await Promise.allSettled([
-            getFollowCount(session.accessToken, me.id),
-            getMyLists(session.accessToken),
-            getRestaurantRankings(session.accessToken, { regionName: '?⑹씤', limit: 40 }),
-            getRestaurantRankings(session.accessToken, { limit: 40 }),
-            getFollowings(session.accessToken, me.id),
-            getFollowers(session.accessToken, me.id),
-            getReliabilityScore(session.accessToken, me.id),
-            getUserReviews(session.accessToken, me.id),
-            getListRecommendations(session.accessToken),
-          ]);
+        const fetchPreferredLocalRanking = async () => {
+          const regionCandidates = ['용인', '용인시', '처인구', '기흥구', '수지구'];
+
+          for (const regionName of regionCandidates) {
+            const result = await getRestaurantRankings(session.accessToken, {
+              regionName,
+              limit: 40,
+            });
+
+            if (result.items.length > 0) {
+              return result;
+            }
+          }
+
+          return getRestaurantRankings(session.accessToken, { regionName: '용인', limit: 40 });
+        };
+
+          const [
+            followCountResult,
+            listsResult,
+            localRankingResult,
+            nationalRankingResult,
+            followingsResult,
+            followersResult,
+            reliabilityResult,
+            myReviewsResult,
+            restaurantRecommendationsResult,
+            recommendationsResult,
+          ] =
+            await Promise.allSettled([
+              getFollowCount(session.accessToken, me.id),
+              getMyLists(session.accessToken),
+              fetchPreferredLocalRanking(),
+              getRestaurantRankings(session.accessToken, { limit: 40 }),
+              getFollowings(session.accessToken, me.id),
+              getFollowers(session.accessToken, me.id),
+              getReliabilityScore(session.accessToken, me.id),
+              getUserReviews(session.accessToken, me.id),
+              getRestaurantRecommendations(session.accessToken),
+              getListRecommendations(session.accessToken),
+            ]);
 
         if (cancelled) {
           return;
@@ -736,6 +765,21 @@ export function AppRoot() {
           if (!cancelled) {
             setMyLists(listDetails);
           }
+        }
+
+        if (restaurantRecommendationsResult.status === 'fulfilled') {
+          if (!cancelled) {
+            setRecommendedRestaurantItems(
+              restaurantRecommendationsResult.value.items.map((item) => ({
+                id: `recommended-restaurant-${item.restaurantId}`,
+                imageUri: item.imageUrl,
+                name: item.restaurantName,
+                restaurantName: item.restaurantName,
+              })),
+            );
+          }
+        } else if (!cancelled) {
+          setRecommendedRestaurantItems([]);
         }
 
         if (recommendationsResult.status === 'fulfilled') {
@@ -804,6 +848,7 @@ export function AppRoot() {
           setMyUserId(null);
           setMyFollowingUsers([]);
           setMyFollowerUsers([]);
+          setRecommendedRestaurantItems([]);
           setRecommendedMealFriendItems([]);
           setRecommendedUserProfiles([]);
           setRankingEntries({
@@ -2238,6 +2283,7 @@ export function AppRoot() {
         />
       ) : activeTab === 'home' ? (
         <MainHomeScreen
+          featuredRestaurantItems={recommendedRestaurantItems}
           initialScrollState={homeScrollState}
           localRankingItems={rankingEntries.local}
           mealFriendItems={recommendedMealFriendItems}

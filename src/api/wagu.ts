@@ -155,6 +155,22 @@ export type ApiRecommendationOwner = {
   profileImageUrl?: string;
 };
 
+export type ApiRestaurantRecommendationItem = {
+  categories?: string[];
+  categoryFitScore?: number;
+  collaborativeScore?: number;
+  fallbackRegion?: boolean;
+  finalScore?: number;
+  imageUrl?: string;
+  rank: number;
+  rankingAdjustmentScore?: number;
+  regionName: string;
+  regionScore?: number;
+  restaurantId: number;
+  restaurantName: string;
+  userPreferenceScore?: number;
+};
+
 export type ApiReview = {
   categoryName?: string;
   content: string;
@@ -249,6 +265,10 @@ type ApiListRecommendationResponse = {
   items: ApiListRecommendationItem[];
 };
 
+type ApiRestaurantRecommendationResponse = {
+  items: ApiRestaurantRecommendationItem[];
+};
+
 type ApiUserListSummary = {
   createdAt?: string;
   description?: string;
@@ -331,6 +351,12 @@ export async function getRestaurant(token: string, restaurantId: number) {
 
 export async function getListRecommendations(token: string) {
   return apiRequest<ApiListRecommendationResponse>('/recommendations/lists', {
+    token,
+  });
+}
+
+export async function getRestaurantRecommendations(token: string) {
+  return apiRequest<ApiRestaurantRecommendationResponse>('/recommendations/restaurants', {
     token,
   });
 }
