@@ -2021,7 +2021,7 @@ export function RestaurantDetailScreen({
       return;
     }
 
-    const currentValue = reviewReactionStates[reviewId] ?? null;
+    const currentValue = reviewReactionStates[reviewId] ?? targetReview?.myReaction ?? null;
     const nextValue = currentValue === reaction ? null : reaction;
 
     setReviewVotePendingIds((current) => ({

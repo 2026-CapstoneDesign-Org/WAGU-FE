@@ -32,6 +32,11 @@ type MyReviewsScreenProps = {
   title?: string;
 };
 
+type ReviewMenuAnchor = {
+  x: number;
+  y: number;
+} | null;
+
 function ThumbUpIcon({ color }: { color: string }) {
   return (
     <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
@@ -118,6 +123,7 @@ export function MyReviewsScreen({
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [previewCurrentIndex, setPreviewCurrentIndex] = useState(0);
   const [openMenuReviewId, setOpenMenuReviewId] = useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<ReviewMenuAnchor>(null);
   const [toastMessage, setToastMessage] = useState('');
   const [isToastVisible, setIsToastVisible] = useState(false);
   const toastOpacity = useRef(new Animated.Value(0)).current;
@@ -208,6 +214,7 @@ export function MyReviewsScreen({
 
   const handleDeleteReview = (reviewId: string) => {
     setOpenMenuReviewId(null);
+    setMenuAnchor(null);
     Alert.alert('리뷰를 삭제하시겠습니까?', '', [
       {
         style: 'cancel',
@@ -292,7 +299,7 @@ export function MyReviewsScreen({
           <Text style={styles.headerTitle}>{title}</Text>
         </View>
 
-        {openMenuReviewId ? (
+        {false ? (
           <Pressable
             style={styles.menuBackdrop}
             onPress={() => setOpenMenuReviewId(null)}
@@ -326,19 +333,32 @@ export function MyReviewsScreen({
                     </View>
 
                     {isOwner ? (
-                      <View style={styles.actionRow}>
+                      <View
+                        style={[
+                          styles.actionRow,
+                          openMenuReviewId === review.id ? styles.actionRowOpen : null,
+                        ]}
+                      >
                         <Pressable
                           hitSlop={14}
                           style={styles.moreButton}
-                          onPress={() =>
-                            setOpenMenuReviewId((current) =>
-                              current === review.id ? null : review.id,
-                            )
-                          }
+                          onPress={(event) => {
+                            const { pageX, pageY } = event.nativeEvent;
+                            const willOpen = openMenuReviewId !== review.id;
+                            setOpenMenuReviewId(willOpen ? review.id : null);
+                            setMenuAnchor(
+                              willOpen
+                                ? {
+                                    x: pageX,
+                                    y: pageY,
+                                  }
+                                : null,
+                            );
+                          }}
                         >
                           <MoreDotsIcon />
                         </Pressable>
-                        {openMenuReviewId === review.id ? (
+                        {false ? (
                           <View style={styles.moreMenu}>
                             <Pressable
                               onPress={() => handleDeleteReview(review.id)}
@@ -407,6 +427,45 @@ export function MyReviewsScreen({
             );
           })}
         </ScrollView>
+
+        <Modal
+          animationType="fade"
+          onRequestClose={() => {
+            setOpenMenuReviewId(null);
+            setMenuAnchor(null);
+          }}
+          transparent
+          visible={openMenuReviewId !== null && menuAnchor !== null}
+        >
+          <Pressable
+            style={styles.menuBackdrop}
+            onPress={() => {
+              setOpenMenuReviewId(null);
+              setMenuAnchor(null);
+            }}
+          >
+            {openMenuReviewId && menuAnchor ? (
+              <View
+                style={[
+                  styles.moreMenu,
+                  {
+                    left: Math.max(12, Math.min(menuAnchor.x - 98, windowWidth - 122)),
+                    top: menuAnchor.y + 14,
+                  },
+                ]}
+              >
+                <Pressable
+                  onPress={() => handleDeleteReview(openMenuReviewId)}
+                  style={styles.moreMenuItem}
+                >
+                  <Text style={[styles.moreMenuLabel, styles.moreMenuLabelDanger]}>
+                    삭제하기
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </Pressable>
+        </Modal>
 
         <Modal
           animationType="none"
@@ -589,6 +648,10 @@ const styles = StyleSheet.create({
     position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  actionRowOpen: {
+    elevation: 30,
+    zIndex: 30,
   },
   moreButton: {
     width: 40,

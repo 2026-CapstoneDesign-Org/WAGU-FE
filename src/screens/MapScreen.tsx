@@ -22,155 +22,58 @@ import FilterIcon from '../../assets/icons/filter.svg';
 import MyLocationIcon from '../../assets/icons/mylocation.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import StarIcon from '../../assets/icons/star.svg';
-import {
-  getHiddenGemRestaurants,
-  getRestaurant,
-  getRestaurantPhotoUris,
-  searchRestaurants,
-} from '../api/wagu';
+import { getRestaurant, getRestaurantPhotoUris } from '../api/wagu';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar';
-import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { Restaurant } from '../data/restaurants';
 
 const { height: screenHeight } = Dimensions.get('window');
 
-const FILTER_OPTIONS = ['영업 중', '영업 전', '한식', '양식', '중식'] as const;
 const REVIEW_CARD_WIDTH = 292;
 const DEFAULT_CAMERA = {
   latitude: 37.2369,
   longitude: 127.1902,
   zoom: 15.2,
 };
-const DEFAULT_HIDDEN_GEM_REGION_TOWN = '용인시 처인구';
-const DEFAULT_MAP_SEARCH_KEYWORDS = ['용인', '처인구', '기흥구', '수지구'] as const;
 
 type SheetStage = 'collapsed' | 'medium' | 'expanded';
 
 type MapRestaurant = {
   address?: string;
-  id: string;
-  imageUri?: string;
-  isHiddenGem?: boolean;
-  name: string;
   category: string;
-  photoUris?: string[];
-  status: string;
-  reviews: string[];
   fallbackX: number;
   fallbackY: number;
+  id: string;
+  imageUri?: string;
   latitude: number;
   longitude: number;
+  name: string;
+  photoUris?: string[];
+  reviews: string[];
+  status: string;
 };
-
-const mapRestaurants: MapRestaurant[] = MOCK_DATA_ENABLED ? [
-  {
-    id: 'map-1',
-    name: '와이앤웍',
-    category: '중식',
-    status: '영업 중',
-    fallbackX: 0.2,
-    fallbackY: 0.72,
-    latitude: 37.3234,
-    longitude: 127.1008,
-    reviews: [
-      '중식 기본 메뉴부터 탕수육, 짜장면, 짬뽕 조합이 좋아요. 양도 넉넉해서 만족도가 높았어요.',
-      '매장 분위기도 좋고 식사 속도도 빨라서 점심 모임으로 가기 좋았어요.',
-    ],
-  },
-  {
-    id: 'map-2',
-    name: '와이키키',
-    category: '양식',
-    status: '영업 중',
-    fallbackX: 0.64,
-    fallbackY: 0.47,
-    latitude: 37.3248,
-    longitude: 127.0959,
-    reviews: [
-      '브런치부터 파스타까지 안정적으로 맛있고 사진도 예쁘게 나와요.',
-      '데이트 코스로 가기 좋은 분위기라서 재방문하고 싶은 곳이에요.',
-    ],
-  },
-  {
-    id: 'map-2b',
-    name: '미식담옥',
-    category: '양식',
-    status: '영업 중',
-    fallbackX: 0.47,
-    fallbackY: 0.62,
-    latitude: 37.3261,
-    longitude: 127.0972,
-    reviews: [
-      '브런치부터 파스타까지 안정적으로 맛있고 사진도 예쁘게 나와요.',
-      '데이트 코스로 가기 좋은 분위기라서 재방문하고 싶은 곳이에요.',
-    ],
-  },
-  {
-    id: 'map-3',
-    name: '짬뽕관',
-    category: '중식',
-    status: '영업 전',
-    fallbackX: 0.75,
-    fallbackY: 0.8,
-    latitude: 37.3209,
-    longitude: 127.1081,
-    reviews: [
-      '국물 맛이 진하고 불향이 살아 있어서 매운 음식 좋아하면 만족해요.',
-      '해장하러 가기에도 좋아서 근처 오면 자주 찾게 되는 곳이에요.',
-    ],
-  },
-  {
-    id: 'map-4',
-    name: '수지국수 용인점',
-    category: '한식',
-    status: '영업 중',
-    fallbackX: 0.34,
-    fallbackY: 0.34,
-    latitude: 37.3182,
-    longitude: 127.1036,
-    reviews: [
-      '김치말이국수랑 만두 조합이 시원하고 깔끔해서 더운 날 특히 좋아요.',
-      '가성비가 좋고 부담 없이 한 끼 먹기 편해서 자주 생각나는 집이에요.',
-    ],
-  },
-  {
-    id: 'map-5',
-    name: '식용유정',
-    category: '중식',
-    status: '영업 전',
-    fallbackX: 0.86,
-    fallbackY: 0.2,
-    latitude: 37.3271,
-    longitude: 127.0986,
-    reviews: [
-      '볶음밥이 고슬고슬하고 짜장 소스가 진해서 계속 생각나는 맛이에요.',
-      '매장도 깔끔하고 메뉴 구성이 좋아서 여러 명이 가도 만족도가 높아요.',
-    ],
-  },
-]: [];
-
-const fallbackMapRestaurants: MapRestaurant[] = [];
 
 type MapScreenProps = {
   accessToken?: string;
-  onOpenRestaurantDetail?: (restaurantName: string) => void;
-  onAddToList?: (restaurant: Restaurant) => void;
   getFavoriteColor?: (restaurantName: string) => string;
-  onPressSearchBar?: () => void;
-  searchQuery?: string;
+  mapRestaurantsData?: Restaurant[];
+  onAddToList?: (restaurant: Restaurant) => void;
   onClearSearch?: () => void;
+  onOpenRestaurantDetail?: (restaurantName: string) => void;
+  onPressSearchBar?: () => void;
   onSelectTab: (tab: AppTab) => void;
+  searchQuery?: string;
 };
 
 export function MapScreen({
   accessToken,
-  onOpenRestaurantDetail,
-  onAddToList,
   getFavoriteColor,
-  onPressSearchBar,
-  searchQuery = '',
+  mapRestaurantsData = [],
+  onAddToList,
   onClearSearch,
+  onOpenRestaurantDetail,
+  onPressSearchBar,
   onSelectTab,
+  searchQuery = '',
 }: MapScreenProps) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<NaverMapViewRef>(null);
@@ -190,7 +93,6 @@ export function MapScreen({
   );
 
   const sheetTop = useRef(new Animated.Value(snapTops.medium)).current;
-  const autoOpenTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [sheetStage, setSheetStage] = useState<SheetStage>('medium');
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [focusedRestaurantId, setFocusedRestaurantId] = useState<string | null>(null);
@@ -211,13 +113,6 @@ export function MapScreen({
     }).start();
   };
 
-  const clearPendingAutoOpen = () => {
-    if (autoOpenTimeoutRef.current) {
-      clearTimeout(autoOpenTimeoutRef.current);
-      autoOpenTimeoutRef.current = null;
-    }
-  };
-
   const animateMapToRestaurant = (restaurant: MapRestaurant | null) => {
     mapRef.current?.animateCameraTo({
       latitude: restaurant?.latitude ?? DEFAULT_CAMERA.latitude,
@@ -229,7 +124,7 @@ export function MapScreen({
   };
 
   useEffect(() => {
-    if (!accessToken) {
+    if (!accessToken || mapRestaurantsData.length === 0) {
       setMapDataRestaurants([]);
       return;
     }
@@ -238,100 +133,58 @@ export function MapScreen({
 
     const loadMapRestaurants = async () => {
       try {
-        const keywords = trimmedSearchQuery
-          ? [trimmedSearchQuery]
-          : ['용인', '처인구', '기흥구', '수지구'];
-
-        const [results, hiddenGemResult] = await Promise.all([
-          Promise.all(keywords.map((keyword) => searchRestaurants(accessToken, keyword))),
-          getHiddenGemRestaurants(accessToken, {
-            regionTownName: DEFAULT_HIDDEN_GEM_REGION_TOWN,
-          }).catch(() => null),
-        ]);
-
-        const dedupedRestaurants = new Map<number, (typeof results)[number][number]>();
-
-        results.flat().forEach((restaurant) => {
-          if (
-            !dedupedRestaurants.has(restaurant.id) &&
-            typeof restaurant.lat === 'number' &&
-            typeof restaurant.lng === 'number'
-          ) {
-            dedupedRestaurants.set(restaurant.id, restaurant);
-          }
-        });
-
-        const hiddenGemIds = (hiddenGemResult?.items ?? [])
-          .map((item) => item.restaurantId)
-          .filter((id): id is number => Number.isFinite(id));
-
-        const hiddenGemDetails = await Promise.allSettled(
-          hiddenGemIds.map((restaurantId) => getRestaurant(accessToken, restaurantId)),
-        );
-
-        hiddenGemDetails.forEach((result) => {
-          if (
-            result.status === 'fulfilled' &&
-            typeof result.value.lat === 'number' &&
-            typeof result.value.lng === 'number'
-          ) {
-            dedupedRestaurants.set(result.value.id, result.value);
-          }
-        });
-
-        const nextRestaurants = Array.from(dedupedRestaurants.values()).map(
-          (restaurant, index) => ({
-            address: restaurant.address,
-            id: String(restaurant.id),
-            imageUri: restaurant.imageUrl,
-            name: restaurant.name,
-            photoUris: getRestaurantPhotoUris(restaurant),
-            category: restaurant.categories?.[0] ?? restaurant.regionName ?? '맛집',
-            status: restaurant.regionName ?? '용인',
-            reviews: [],
-            fallbackX: 0.18 + (index % 4) * 0.18,
-            fallbackY: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
-            latitude: restaurant.lat ?? DEFAULT_CAMERA.latitude,
-            longitude: restaurant.lng ?? DEFAULT_CAMERA.longitude,
-            isHiddenGem: hiddenGemIds.includes(restaurant.id),
-          }),
-        );
-
-        if (!cancelled) {
-          setMapDataRestaurants(nextRestaurants);
-        }
-        return;
-/*
-        const ranking = await getRestaurantRankings(accessToken, {
-          regionName: '용인',
-          limit: 30,
-        });
-
-        const details = await Promise.all(
-          ranking.items.map((item) => getRestaurant(accessToken, item.restaurantId)),
-        );
-
-        const nextRestaurants = details
-          .filter(
-            (restaurant) =>
-              typeof restaurant.lat === 'number' && typeof restaurant.lng === 'number',
-          )
+        const candidates = mapRestaurantsData
           .map((restaurant, index) => ({
-            id: String(restaurant.id),
-            name: restaurant.name,
-            category: restaurant.categories?.[0] ?? restaurant.regionName ?? '맛집',
-            status: restaurant.regionName ?? '용인',
-            reviews: [],
-            fallbackX: 0.18 + (index % 4) * 0.18,
-            fallbackY: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
-            latitude: restaurant.lat ?? DEFAULT_CAMERA.latitude,
-            longitude: restaurant.lng ?? DEFAULT_CAMERA.longitude,
-          }));
+            source: restaurant,
+            index,
+            numericId: Number(restaurant.id),
+          }))
+          .filter((item) => Number.isFinite(item.numericId));
+
+        const results = await Promise.allSettled(
+          candidates.map((item) => getRestaurant(accessToken, item.numericId)),
+        );
+
+        const nextRestaurants = results.flatMap((result, index) => {
+          if (result.status !== 'fulfilled') {
+            return [];
+          }
+
+          const detail = result.value;
+          const sourceRestaurant = candidates[index]?.source;
+
+          if (typeof detail.lat !== 'number' || typeof detail.lng !== 'number') {
+            return [];
+          }
+
+          return [
+            {
+              address: detail.roadAddress ?? detail.address ?? sourceRestaurant?.address,
+              category:
+                detail.primaryCategoryName ??
+                detail.categories?.[0] ??
+                sourceRestaurant?.category ??
+                '맛집',
+              fallbackX: 0.18 + (index % 4) * 0.18,
+              fallbackY: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
+              id: String(detail.id),
+              imageUri: sourceRestaurant?.imageUri ?? detail.imageUrl,
+              latitude: detail.lat,
+              longitude: detail.lng,
+              name: detail.name,
+              photoUris:
+                sourceRestaurant?.photoUris?.length
+                  ? sourceRestaurant.photoUris
+                  : getRestaurantPhotoUris(detail),
+              reviews: [],
+              status: detail.regionName ?? '내 리스트',
+            },
+          ];
+        });
 
         if (!cancelled) {
           setMapDataRestaurants(nextRestaurants);
         }
-*/
       } catch {
         if (!cancelled) {
           setMapDataRestaurants([]);
@@ -344,7 +197,7 @@ export function MapScreen({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, trimmedSearchQuery]);
+  }, [accessToken, mapRestaurantsData]);
 
   const filterOptions = useMemo(
     () =>
@@ -358,8 +211,6 @@ export function MapScreen({
 
   const baseFilteredRestaurants = useMemo(() => {
     let results = mapDataRestaurants;
-    const hiddenGemOnly = activeFilters.includes('숨은 맛집');
-    const categoryFilters = activeFilters.filter((filter) => filter !== '숨은 맛집');
 
     if (trimmedSearchQuery) {
       const query = trimmedSearchQuery.toLowerCase();
@@ -370,15 +221,11 @@ export function MapScreen({
       );
     }
 
-    if (hiddenGemOnly) {
-      results = results.filter((restaurant) => restaurant.isHiddenGem);
-    }
-
-    if (categoryFilters.length === 0) {
+    if (activeFilters.length === 0) {
       return results;
     }
 
-    return results.filter((restaurant) => categoryFilters.includes(restaurant.category));
+    return results.filter((restaurant) => activeFilters.includes(restaurant.category));
   }, [activeFilters, mapDataRestaurants, trimmedSearchQuery]);
 
   const visibleRestaurants = useMemo(() => {
@@ -386,7 +233,9 @@ export function MapScreen({
       return baseFilteredRestaurants;
     }
 
-    return baseFilteredRestaurants.filter((restaurant) => restaurant.id === selectedMarkerRestaurantId);
+    return baseFilteredRestaurants.filter(
+      (restaurant) => restaurant.id === selectedMarkerRestaurantId,
+    );
   }, [baseFilteredRestaurants, selectedMarkerRestaurantId]);
 
   useEffect(() => {
@@ -399,12 +248,9 @@ export function MapScreen({
   }, [baseFilteredRestaurants, selectedMarkerRestaurantId]);
 
   useEffect(() => {
-    clearPendingAutoOpen();
-
     if (!trimmedSearchQuery) {
       if (!selectedMarkerRestaurantId) {
         setFocusedRestaurantId(null);
-        animateMapToRestaurant(null);
       }
       return;
     }
@@ -413,7 +259,6 @@ export function MapScreen({
       setFocusedRestaurantId(null);
       setSelectedMarkerRestaurantId(null);
       animateSheetTo('medium');
-      animateMapToRestaurant(null);
       return;
     }
 
@@ -431,8 +276,6 @@ export function MapScreen({
     animateMapToRestaurant(baseFilteredRestaurants[0]);
   }, [baseFilteredRestaurants, selectedMarkerRestaurantId, trimmedSearchQuery]);
 
-  useEffect(() => () => clearPendingAutoOpen(), []);
-
   const toggleFilter = (filter: string) => {
     setSelectedMarkerRestaurantId(null);
     setActiveFilters((current) =>
@@ -443,14 +286,12 @@ export function MapScreen({
   };
 
   const handlePressMarker = (restaurant: MapRestaurant) => {
-    clearPendingAutoOpen();
     setFocusedRestaurantId(restaurant.id);
     setSelectedMarkerRestaurantId(restaurant.id);
     animateSheetTo('medium');
   };
 
   const handlePressRestaurant = (restaurant: MapRestaurant) => {
-    clearPendingAutoOpen();
     setFocusedRestaurantId(restaurant.id);
     setSelectedMarkerRestaurantId(restaurant.id);
     animateMapToRestaurant(restaurant);
@@ -458,22 +299,18 @@ export function MapScreen({
   };
 
   const handlePressClear = () => {
-    clearPendingAutoOpen();
     setSelectedMarkerRestaurantId(null);
     setFocusedRestaurantId(null);
     animateSheetTo('medium');
-    animateMapToRestaurant(null);
     onClearSearch?.();
   };
 
   const handlePressMapBackground = () => {
-    clearPendingAutoOpen();
     setSelectedMarkerRestaurantId(null);
     setFocusedRestaurantId(null);
   };
 
   const handlePressLocationButton = () => {
-    clearPendingAutoOpen();
     setSelectedMarkerRestaurantId(null);
     setFocusedRestaurantId(null);
     animateMapToRestaurant(null);
@@ -624,11 +461,7 @@ export function MapScreen({
               >
                 {baseFilteredRestaurants.map((restaurant) => {
                   const active = restaurant.id === focusedRestaurantId;
-                  const markerColor = restaurant.isHiddenGem
-                    ? '#161616'
-                    : active
-                      ? '#F24E46'
-                      : '#F5655E';
+                  const markerColor = active ? '#F24E46' : '#F5655E';
 
                   return (
                     <NaverMapMarkerOverlay
@@ -651,16 +484,12 @@ export function MapScreen({
             <Pressable style={styles.mapFallback} onPress={handlePressMapBackground}>
               {baseFilteredRestaurants.map((restaurant) => {
                 const active = restaurant.id === focusedRestaurantId;
-                const markerStemStyle = restaurant.isHiddenGem
-                  ? styles.fallbackHiddenGemMarkerStem
-                  : active
-                    ? styles.fallbackMarkerStemActive
-                    : styles.fallbackMarkerStem;
-                const markerHeadStyle = restaurant.isHiddenGem
-                  ? styles.fallbackHiddenGemMarkerHead
-                  : active
-                    ? styles.fallbackMarkerHeadActive
-                    : styles.fallbackMarkerHead;
+                const markerStemStyle = active
+                  ? styles.fallbackMarkerStemActive
+                  : styles.fallbackMarkerStem;
+                const markerHeadStyle = active
+                  ? styles.fallbackMarkerHeadActive
+                  : styles.fallbackMarkerHead;
 
                 return (
                   <Pressable
@@ -707,7 +536,7 @@ export function MapScreen({
             numberOfLines={1}
             style={[styles.searchText, !trimmedSearchQuery && styles.searchPlaceholder]}
           >
-            {trimmedSearchQuery || '어떤 맛집을 찾으시나요?'}
+            {trimmedSearchQuery || '내 리스트 맛집을 검색해보세요'}
           </Text>
           {trimmedSearchQuery ? (
             <Pressable
@@ -783,22 +612,6 @@ export function MapScreen({
                     color={hasActiveFilters ? '#FF5A52' : '#9B9B9B'}
                   />
                 </Pressable>
-                <Pressable
-                  style={[
-                    styles.filterChip,
-                    activeFilters.includes('숨은 맛집') && styles.filterChipActive,
-                  ]}
-                  onPress={() => toggleFilter('숨은 맛집')}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipLabel,
-                      activeFilters.includes('숨은 맛집') && styles.filterChipLabelActive,
-                    ]}
-                  >
-                    숨은 맛집
-                  </Text>
-                </Pressable>
                 {filterOptions.map((filter) => {
                   const active = activeFilters.includes(filter);
                   return (
@@ -829,7 +642,12 @@ export function MapScreen({
                         onPress={() => handlePressRestaurant(restaurant)}
                       >
                         <View style={styles.restaurantCopy}>
-                          <Text style={[styles.restaurantName, active && styles.restaurantNameActive]}>
+                          <Text
+                            style={[
+                              styles.restaurantName,
+                              active && styles.restaurantNameActive,
+                            ]}
+                          >
                             {restaurant.name}
                           </Text>
                           <Text style={styles.restaurantMeta}>
@@ -865,7 +683,10 @@ export function MapScreen({
                         >
                           {restaurant.reviews.length > 0 ? (
                             restaurant.reviews.map((review, index) => (
-                              <View key={`${restaurant.id}-review-${index}`} style={styles.reviewBox}>
+                              <View
+                                key={`${restaurant.id}-review-${index}`}
+                                style={styles.reviewBox}
+                              >
                                 <Text numberOfLines={2} style={styles.reviewText}>
                                   {review}
                                 </Text>
@@ -888,9 +709,9 @@ export function MapScreen({
 
                 {visibleRestaurants.length === 0 ? (
                   <View style={styles.emptyResult}>
-                    <Text style={styles.emptyResultTitle}>검색 결과가 없어요</Text>
+                    <Text style={styles.emptyResultTitle}>내 리스트 식당이 없어요</Text>
                     <Text style={styles.emptyResultBody}>
-                      다른 지역이나 음식 이름으로 다시 찾아보세요.
+                      리스트에 맛집을 담으면 지도에서 바로 확인할 수 있어요.
                     </Text>
                   </View>
                 ) : null}
@@ -952,10 +773,6 @@ const styles = StyleSheet.create({
     height: 32,
     backgroundColor: '#F24E46',
   },
-  fallbackHiddenGemMarkerStem: {
-    height: 32,
-    backgroundColor: '#161616',
-  },
   fallbackMarkerHead: {
     width: 22,
     height: 22,
@@ -969,12 +786,6 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: 13,
     backgroundColor: '#F24E46',
-  },
-  fallbackHiddenGemMarkerHead: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#161616',
   },
   topBackdrop: {
     position: 'absolute',

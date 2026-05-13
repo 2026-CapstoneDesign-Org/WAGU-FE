@@ -583,6 +583,7 @@ export async function createList(
   token: string,
   body: {
     description?: string;
+    isPublic?: boolean;
     regionName: string;
     restaurants: Array<{
       moodScore: number;

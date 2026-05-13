@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { Alert, Platform, ToastAndroid } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -545,6 +546,33 @@ export function AppRoot() {
         representativeRestaurants: [],
       }
     : null;
+  const mapListRestaurants = useMemo(() => {
+    const restaurantsById = new Map<string, Restaurant>();
+
+    myLists.forEach((list) => {
+      list.restaurants.forEach((restaurant) => {
+        if (restaurantsById.has(restaurant.id)) {
+          return;
+        }
+
+        const fallbackRestaurant = initialRestaurantPool.find(
+          (item) => item.id === restaurant.id,
+        );
+
+        restaurantsById.set(restaurant.id, {
+          address: restaurant.address,
+          category: fallbackRestaurant?.category ?? '맛집',
+          id: restaurant.id,
+          imageUri: restaurant.imageUri ?? fallbackRestaurant?.imageUri,
+          name: restaurant.name,
+          photoUris: fallbackRestaurant?.photoUris,
+          shortName: fallbackRestaurant?.shortName ?? restaurant.name,
+        });
+      });
+    });
+
+    return Array.from(restaurantsById.values());
+  }, [myLists]);
 
   const applyStoredSession = async (
     provider: LoginProvider,
@@ -1292,21 +1320,46 @@ export function AppRoot() {
       return false;
     }
 
+    const syncMyReviewsFromServer = async () => {
+      if (myUserId === null) {
+        setMyReviewItems((current) => current.filter((review) => review.id !== reviewId));
+        return false;
+      }
+
+      const reviews = await getUserReviews(session.accessToken, myUserId);
+      const mappedReviews = reviews.map(mapApiReviewToMyReview);
+      const stillExists = mappedReviews.some((review) => review.id === reviewId);
+
+      setMyReviewItems(mappedReviews);
+      setRemoteUserReviewsByUserId((current) => ({
+        ...current,
+        [String(myUserId)]: mappedReviews,
+      }));
+
+      return stillExists;
+    };
+
     try {
       await deleteReview(session.accessToken, parsedReviewId);
-      setMyReviewItems((current) => current.filter((review) => review.id !== reviewId));
+      const stillExists = await syncMyReviewsFromServer();
 
-      if (myUserId !== null) {
-        setRemoteUserReviewsByUserId((current) => ({
-          ...current,
-          [String(myUserId)]: (current[String(myUserId)] ?? []).filter(
-            (review) => review.id !== reviewId,
-          ),
-        }));
+      if (stillExists) {
+        Alert.alert('안내', '리뷰를 삭제하지 못했습니다.');
+        return false;
       }
 
       return true;
     } catch {
+      try {
+        const stillExists = await syncMyReviewsFromServer();
+
+        if (!stillExists) {
+          return true;
+        }
+      } catch {
+        // Ignore sync fallback failures and surface the original delete failure below.
+      }
+
       Alert.alert('안내', '리뷰를 삭제하지 못했습니다.');
       return false;
     }
@@ -1450,6 +1503,10 @@ export function AppRoot() {
         }
 
         if (restaurantRecommendationsResult.status === 'fulfilled') {
+          console.log('[home recommendations][restaurants] success', {
+            count: restaurantRecommendationsResult.value.items.length,
+            ids: restaurantRecommendationsResult.value.items.map((item) => item.restaurantId),
+          });
           if (!cancelled) {
             setRecommendedRestaurantItems(
               restaurantRecommendationsResult.value.items.map((item) => ({
@@ -1461,10 +1518,19 @@ export function AppRoot() {
             );
           }
         } else if (!cancelled) {
+          console.log(
+            '[home recommendations][restaurants] failed',
+            restaurantRecommendationsResult.reason,
+          );
           setRecommendedRestaurantItems([]);
         }
 
         if (recommendationsResult.status === 'fulfilled') {
+          console.log('[home recommendations][lists] success', {
+            count: recommendationsResult.value.items.length,
+            listIds: recommendationsResult.value.items.map((item) => item.listId),
+            ownerIds: recommendationsResult.value.items.map((item) => item.owner.ownerId),
+          });
           const uniqueRecommendations = recommendationsResult.value.items.reduce<
             typeof recommendationsResult.value.items
           >((accumulator, item) => {
@@ -1482,6 +1548,21 @@ export function AppRoot() {
                 getListDetail(session.accessToken, item.listId),
                 getFollowCount(session.accessToken, item.owner.ownerId),
               ]);
+
+              if (detailResult.status !== 'fulfilled') {
+                console.log('[home recommendations][lists] detail failed', {
+                  listId: item.listId,
+                  ownerId: item.owner.ownerId,
+                  reason: detailResult.reason,
+                });
+              }
+
+              if (followCountForOwnerResult.status !== 'fulfilled') {
+                console.log('[home recommendations][lists] follow count failed', {
+                  ownerId: item.owner.ownerId,
+                  reason: followCountForOwnerResult.reason,
+                });
+              }
 
               const representativeRestaurants =
                 detailResult.status === 'fulfilled'
@@ -1519,10 +1600,17 @@ export function AppRoot() {
           );
 
           if (!cancelled) {
+            console.log('[home recommendations][lists] hydrated', {
+              count: recommendedProfiles.length,
+              withRepresentativeRestaurants: recommendedProfiles.filter(
+                (item) => item.profile.representativeRestaurants.length > 0,
+              ).length,
+            });
             setRecommendedMealFriendItems(recommendedProfiles.map((item) => item.card));
             setRecommendedUserProfiles(recommendedProfiles.map((item) => item.profile));
           }
         } else if (!cancelled) {
+          console.log('[home recommendations][lists] failed', recommendationsResult.reason);
           setRecommendedMealFriendItems([]);
           setRecommendedUserProfiles([]);
         }
@@ -2218,6 +2306,7 @@ export function AppRoot() {
 
     const existingListCount = myLists.length;
     const createdList = await createList(session.accessToken, {
+      isPublic: true,
       title: title.trim(),
       regionName,
       restaurants: internalRestaurants.map((restaurant, index) => {
@@ -2232,6 +2321,10 @@ export function AppRoot() {
         };
       }),
     });
+
+    if (!createdList.isPublic) {
+      await toggleListVisibility(session.accessToken, createdList.id);
+    }
 
     await Promise.all(
       externalRestaurants.map((restaurant) => {
@@ -3313,6 +3406,7 @@ export function AppRoot() {
       ) : activeTab === 'map' ? (
         <MapScreen
           accessToken={session?.accessToken}
+          mapRestaurantsData={mapListRestaurants}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'map' })
           }

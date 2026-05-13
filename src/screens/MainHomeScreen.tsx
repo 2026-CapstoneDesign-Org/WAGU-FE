@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import HeartIcon from '../../assets/icons/heart.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
@@ -360,8 +359,6 @@ export function MainHomeScreen({
   nationalRankingItems,
   onOpenUserProfile,
   onOpenRestaurantDetail,
-  onPressAi,
-  onPressNews,
   onPressLocalRanking,
   onPressNationalRanking,
   onPressSearch,
@@ -456,14 +453,8 @@ export function MainHomeScreen({
             <Text style={styles.logo}>WAGU</Text>
 
             <View style={styles.headerIcons}>
-              <Pressable style={styles.aiButton} onPress={onPressAi}>
-                <Text style={styles.aiLabel}>AI</Text>
-              </Pressable>
               <Pressable style={styles.iconButton} onPress={onPressSearch}>
                 <SearchIcon width={24} height={24} color="#000000" />
-              </Pressable>
-              <Pressable style={styles.iconButton} onPress={onPressNews}>
-                <HeartIcon width={24} height={24} />
               </Pressable>
             </View>
           </View>
