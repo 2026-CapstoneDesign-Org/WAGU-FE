@@ -206,10 +206,12 @@ export function UserProfileScreen({
                     onPress={() => onOpenRestaurantDetail?.(item.name)}
                     style={styles.card}
                   >
-                    {restaurantMetaMap.get(item.id)?.imageUri ? (
+                    {item.imageUri || restaurantMetaMap.get(item.id)?.imageUri ? (
                       <Image
                         resizeMode="cover"
-                        source={{ uri: restaurantMetaMap.get(item.id)?.imageUri ?? undefined }}
+                        source={{
+                          uri: item.imageUri || restaurantMetaMap.get(item.id)?.imageUri || undefined,
+                        }}
                         style={styles.cardImage}
                       />
                     ) : (

@@ -551,6 +551,13 @@ export async function updateMyUser(
   });
 }
 
+export async function deleteMyUser(token: string) {
+  return apiRequest<void>('/users/me', {
+    method: 'DELETE',
+    token,
+  });
+}
+
 export async function getUserInfo(token: string, userId: number) {
   return apiRequest<ApiUser>(`/users/${userId}`, {
     token,

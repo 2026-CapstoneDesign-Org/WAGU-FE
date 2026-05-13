@@ -1,10 +1,5 @@
 import { useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
@@ -14,10 +9,7 @@ type DeleteAccountScreenProps = {
   onSubmit?: () => void;
 };
 
-export function DeleteAccountScreen({
-  onBack,
-  onSubmit,
-}: DeleteAccountScreenProps) {
+export function DeleteAccountScreen({ onBack, onSubmit }: DeleteAccountScreenProps) {
   const [agreed, setAgreed] = useState(false);
 
   return (
@@ -39,8 +31,8 @@ export function DeleteAccountScreen({
           </Text>
 
           <View style={styles.warningBox}>
-            <Text style={styles.warningItem}>• 리뷰, 프로필 등 모든 정보가 삭제됩니다.</Text>
-            <Text style={styles.warningItem}>• 재가입 시에도 복구되지 않습니다.</Text>
+            <Text style={styles.warningItem}>내 리뷰, 프로필 등 모든 정보가 삭제됩니다.</Text>
+            <Text style={styles.warningItem}>삭제된 계정은 다시 복구할 수 없습니다.</Text>
           </View>
 
           <Pressable
@@ -51,17 +43,14 @@ export function DeleteAccountScreen({
               {agreed ? <Text style={styles.checkboxMark}>✓</Text> : null}
             </View>
             <Text style={[styles.checkboxLabel, agreed && styles.checkboxLabelChecked]}>
-              안내사항을 모두 확인하였으며, 이에 동의합니다.
+              안내사항을 모두 확인했으며, 이에 동의합니다.
             </Text>
           </Pressable>
 
           <View style={styles.divider} />
 
           <Pressable
-            style={[
-              styles.submitButton,
-              agreed && styles.submitButtonEnabled,
-            ]}
+            style={[styles.submitButton, agreed && styles.submitButtonEnabled]}
             disabled={!agreed}
             onPress={onSubmit}
           >

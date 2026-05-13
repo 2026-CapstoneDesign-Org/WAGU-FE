@@ -10,6 +10,7 @@ import {
   createReport,
   createRestaurantReview,
   createList,
+  deleteMyUser,
   deleteReview,
   deleteList,
   formatBirthDate,
@@ -2766,6 +2767,24 @@ export function AppRoot() {
     await clearAuthSession();
   };
 
+  const handleDeleteAccount = async () => {
+    if (!session?.accessToken) {
+      Alert.alert('안내', '로그인 상태를 확인해 주세요.');
+      return;
+    }
+
+    try {
+      await deleteMyUser(session.accessToken);
+      await clearAuthSession();
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message || '회원탈퇴를 진행하지 못했습니다.'
+          : '회원탈퇴를 진행하지 못했습니다.';
+      Alert.alert('안내', message);
+    }
+  };
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" backgroundColor="#FFFFFF" />
@@ -3125,7 +3144,10 @@ export function AppRoot() {
           }}
         />
       ) : screen === 'delete-account' ? (
-        <DeleteAccountScreen onBack={() => setScreen('settings')} />
+        <DeleteAccountScreen
+          onBack={() => setScreen('settings')}
+          onSubmit={() => void handleDeleteAccount()}
+        />
       ) : screen === 'user-profile' && selectedUserProfileId ? (
         <UserProfileScreen
           isFollowLoading={userProfileFollowPendingIds.includes(selectedUserProfileId)}
