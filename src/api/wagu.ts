@@ -666,6 +666,24 @@ export async function addRestaurantToList(
   });
 }
 
+export async function addExternalRestaurantToListFallback(
+  token: string,
+  listId: number,
+  body: {
+    externalPlaceId: string;
+    moodScore: number;
+    searchQuery: string;
+    tasteScore: number;
+    valueScore: number;
+  },
+) {
+  return apiRequest<void>(`/lists/${listId}/restaurants/external-fallback`, {
+    method: 'POST',
+    token,
+    body,
+  });
+}
+
 export async function likeList(token: string, listId: number) {
   return apiRequest<void>(`/lists/${listId}/like`, {
     method: 'POST',

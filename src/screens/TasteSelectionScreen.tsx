@@ -19,6 +19,7 @@ import {
   getRestaurantPrimaryImageUri,
   getRestaurant,
   getRestaurantRankings,
+  searchAll,
   searchRestaurants,
 } from '../api/wagu';
 import SearchIcon from '../../assets/icons/search.svg';
@@ -61,20 +62,24 @@ export function TasteSelectionScreen({
 }: TasteSelectionScreenProps) {
   const [query, setQuery] = useState('');
   const [selectedRestaurants, setSelectedRestaurants] = useState<string[]>([]);
-  const [displayRestaurants, setDisplayRestaurants] = useState<Restaurant[]>(FALLBACK_RESTAURANTS);
-  const [defaultRemoteRestaurants, setDefaultRemoteRestaurants] =
-    useState<Restaurant[]>(FALLBACK_RESTAURANTS);
-  const [restaurantCatalog, setRestaurantCatalog] = useState<Record<string, Restaurant>>(
-    Object.fromEntries(FALLBACK_RESTAURANTS.map((restaurant) => [restaurant.id, restaurant])),
+  const [displayRestaurants, setDisplayRestaurants] = useState<Restaurant[]>(
+    accessToken ? [] : FALLBACK_RESTAURANTS,
   );
-  const [isLoadingRestaurants, setIsLoadingRestaurants] = useState(false);
+  const [externalFallbackRestaurants, setExternalFallbackRestaurants] = useState<Restaurant[]>([]);
+  const [defaultRemoteRestaurants, setDefaultRemoteRestaurants] =
+    useState<Restaurant[]>(accessToken ? [] : FALLBACK_RESTAURANTS);
+  const [restaurantCatalog, setRestaurantCatalog] = useState<Record<string, Restaurant>>(
+    accessToken
+      ? {}
+      : Object.fromEntries(FALLBACK_RESTAURANTS.map((restaurant) => [restaurant.id, restaurant])),
+  );
+  const [isLoadingRestaurants, setIsLoadingRestaurants] = useState(Boolean(accessToken));
   const [hasScrolledAwayFromTop, setHasScrolledAwayFromTop] = useState(false);
   const searchAnimation = useRef(new Animated.Value(1)).current;
   const lastOffsetRef = useRef(0);
   const isDraggingRef = useRef(false);
   const searchVisibleRef = useRef(true);
-  const baseRestaurants =
-    defaultRemoteRestaurants.length > 0 ? defaultRemoteRestaurants : FALLBACK_RESTAURANTS;
+  const baseRestaurants = accessToken ? defaultRemoteRestaurants : FALLBACK_RESTAURANTS;
 
   const matchLocalRestaurant = (restaurant: Pick<Restaurant, 'id' | 'name' | 'shortName'>) =>
     restaurants.find(
@@ -173,7 +178,7 @@ export function TasteSelectionScreen({
     const loadInitialRestaurants = async () => {
       try {
         const rankingResponse = await getRestaurantRankings(accessToken, {
-          regionName: '용인',
+          regionName: '용인시 처인구',
           limit: DEFAULT_REMOTE_LIMIT,
         });
 
@@ -191,17 +196,15 @@ export function TasteSelectionScreen({
           details.map(mapApiRestaurantToCard),
           DEFAULT_VISIBLE_COUNT,
         );
-        const nextRestaurants =
-          mappedRestaurants.length > 0 ? mappedRestaurants : FALLBACK_RESTAURANTS;
+        const nextRestaurants = mappedRestaurants;
 
         setDefaultRemoteRestaurants(nextRestaurants);
         setDisplayRestaurants(nextRestaurants);
         mergeRestaurantsIntoCatalog(nextRestaurants);
       } catch {
         if (!cancelled) {
-          setDefaultRemoteRestaurants(FALLBACK_RESTAURANTS);
-          setDisplayRestaurants(FALLBACK_RESTAURANTS);
-          mergeRestaurantsIntoCatalog(FALLBACK_RESTAURANTS);
+          setDefaultRemoteRestaurants([]);
+          setDisplayRestaurants([]);
         }
       } finally {
         if (!cancelled) {
@@ -226,6 +229,7 @@ export function TasteSelectionScreen({
 
     if (!normalizedQuery) {
       setDisplayRestaurants(baseRestaurants);
+      setExternalFallbackRestaurants([]);
       return;
     }
 
@@ -234,7 +238,10 @@ export function TasteSelectionScreen({
     const timeout = setTimeout(() => {
       const loadSearchResults = async () => {
         try {
-          const results = await searchRestaurants(accessToken, normalizedQuery);
+          const [results, unifiedSearch] = await Promise.all([
+            searchRestaurants(accessToken, normalizedQuery),
+            searchAll(accessToken, normalizedQuery),
+          ]);
 
           if (cancelled) {
             return;
@@ -244,7 +251,6 @@ export function TasteSelectionScreen({
           const fallbackMatches = [
             ...defaultRemoteRestaurants,
             ...Object.values(restaurantCatalog),
-            ...restaurants,
           ].filter((restaurant) => matchesQuery(restaurant, normalizedQuery));
           const dedupedRestaurants = new Map<string, Restaurant>();
 
@@ -256,19 +262,44 @@ export function TasteSelectionScreen({
             Array.from(dedupedRestaurants.values()),
             normalizedQuery,
           ).slice(0, MAX_SEARCH_RESULTS);
+          const existingNames = new Set(
+            mappedRestaurants.map((restaurant) => restaurant.name.trim()),
+          );
+          const mappedExternalFallbackRestaurants = (unifiedSearch.restaurants ?? [])
+            .filter((restaurant) => restaurant.externalPlaceId)
+            .map((restaurant) => ({
+              id: `external:${restaurant.externalPlaceId}`,
+              name: restaurant.restaurantName,
+              shortName: restaurant.restaurantName,
+              category:
+                restaurant.primaryCategoryName ??
+                restaurant.categories?.[0] ??
+                restaurant.regionName ??
+                '외부 장소',
+              imageUri: restaurant.imageUrl,
+              address: restaurant.address,
+              externalPlaceId: restaurant.externalPlaceId,
+              isExternalFallback: true,
+              source: restaurant.source,
+            }))
+            .filter((restaurant) => !existingNames.has(restaurant.name.trim()))
+            .slice(0, 5);
 
           setDisplayRestaurants(mappedRestaurants);
+          setExternalFallbackRestaurants(mappedExternalFallbackRestaurants);
           mergeRestaurantsIntoCatalog(mappedRestaurants);
+          mergeRestaurantsIntoCatalog(mappedExternalFallbackRestaurants);
         } catch {
           if (!cancelled) {
             const fallbackMatches = sortByRelevance(
-              [...defaultRemoteRestaurants, ...restaurants].filter((restaurant) =>
-                matchesQuery(restaurant, normalizedQuery),
+              [...defaultRemoteRestaurants, ...Object.values(restaurantCatalog)].filter(
+                (restaurant) => matchesQuery(restaurant, normalizedQuery),
               ),
               normalizedQuery,
             );
 
             setDisplayRestaurants(fallbackMatches);
+            setExternalFallbackRestaurants([]);
             mergeRestaurantsIntoCatalog(fallbackMatches);
           }
         } finally {
@@ -371,6 +402,8 @@ export function TasteSelectionScreen({
     onConfirm(chosenRestaurants);
   };
 
+  const hasExternalFallbackPrompt = Boolean(accessToken) && query.trim().length > 0;
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.container}>
@@ -415,32 +448,91 @@ export function TasteSelectionScreen({
               <Text style={styles.loadingLabel}>가게 정보를 불러오는 중이에요.</Text>
             </View>
           ) : (
-            <View style={styles.grid}>
-              {filteredRestaurants.map((restaurant) => {
-                const selected = selectedRestaurants.includes(restaurant.id);
+            <View style={styles.resultsSection}>
+              <View style={styles.grid}>
+                {filteredRestaurants.map((restaurant) => {
+                  const selected = selectedRestaurants.includes(restaurant.id);
 
-                return (
-                  <Pressable
-                    key={restaurant.id}
-                    onPress={() => toggleRestaurant(restaurant.id)}
-                    style={[styles.card, selected && styles.cardSelected]}
-                  >
-                    {restaurant.imageUri ? (
-                      <Image
-                        source={{ uri: restaurant.imageUri }}
-                        style={styles.cardImage}
-                        resizeMode="cover"
-                      />
-                    ) : null}
-                    <View style={styles.cardOverlay}>
-                      <Text style={styles.cardLabel}>{restaurant.name}</Text>
-                      <Text ellipsizeMode="tail" numberOfLines={1} style={styles.cardAddress}>
-                        {restaurant.address ?? ''}
+                  return (
+                    <Pressable
+                      key={restaurant.id}
+                      onPress={() => toggleRestaurant(restaurant.id)}
+                      style={[styles.card, selected && styles.cardSelected]}
+                    >
+                      {restaurant.imageUri ? (
+                        <Image
+                          source={{ uri: restaurant.imageUri }}
+                          style={styles.cardImage}
+                          resizeMode="cover"
+                        />
+                      ) : null}
+                      <View style={styles.cardOverlay}>
+                        <Text style={styles.cardLabel}>{restaurant.name}</Text>
+                        <Text ellipsizeMode="tail" numberOfLines={1} style={styles.cardAddress}>
+                          {restaurant.address ?? ''}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {hasExternalFallbackPrompt ? (
+                <View style={styles.externalFallbackSection}>
+                  <View style={styles.externalFallbackHeader}>
+                    <Text style={styles.externalFallbackTitle}>이 음식점을 찾으시나요?</Text>
+                  </View>
+                  {externalFallbackRestaurants.length > 0 ? (
+                    <View style={styles.grid}>
+                      {externalFallbackRestaurants.map((restaurant) => {
+                        const selected = selectedRestaurants.includes(restaurant.id);
+
+                        return (
+                          <Pressable
+                            key={restaurant.id}
+                            onPress={() => toggleRestaurant(restaurant.id)}
+                            style={[
+                              styles.card,
+                              styles.externalCard,
+                              selected && styles.cardSelected,
+                            ]}
+                          >
+                            {restaurant.imageUri ? (
+                              <Image
+                                source={{ uri: restaurant.imageUri }}
+                                style={styles.cardImage}
+                                resizeMode="cover"
+                              />
+                            ) : null}
+                            <View style={styles.cardOverlay}>
+                              <View style={styles.externalBadge}>
+                              <Text style={styles.externalBadgeLabel}>직접 추가</Text>
+                              </View>
+                              <Text style={styles.cardLabel}>{restaurant.name}</Text>
+                              <Text
+                                ellipsizeMode="tail"
+                                numberOfLines={1}
+                                style={styles.cardAddress}
+                              >
+                                {restaurant.address ?? ''}
+                              </Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <View style={styles.externalEmptyCard}>
+                      <Text style={styles.externalEmptyTitle}>
+                        아직 보여드릴 음식점 후보가 없어요.
+                      </Text>
+                      <Text style={styles.externalEmptyDescription}>
+                        다른 검색어로 다시 찾아보면 관련 음식점 후보가 여기에 표시됩니다.
                       </Text>
                     </View>
-                  </Pressable>
-                );
-              })}
+                  )}
+                </View>
+              ) : null}
             </View>
           )}
         </Animated.ScrollView>
@@ -517,11 +609,45 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 110,
   },
+  resultsSection: {
+    gap: 24,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
     justifyContent: 'flex-start',
+  },
+  externalFallbackSection: {
+    gap: 12,
+  },
+  externalFallbackHeader: {
+    gap: 4,
+  },
+  externalFallbackTitle: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  externalEmptyCard: {
+    borderRadius: 16,
+    backgroundColor: '#F7F7F8',
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    gap: 6,
+  },
+  externalEmptyTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  externalEmptyDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+    color: '#7A7A7A',
   },
   card: {
     width: CARD_WIDTH,
@@ -532,6 +658,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'transparent',
+  },
+  externalCard: {
+    borderColor: '#E6E6E6',
+    borderStyle: 'dashed',
   },
   cardImage: {
     ...StyleSheet.absoluteFillObject,
@@ -554,6 +684,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingBottom: 10,
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  externalBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    marginBottom: 8,
+  },
+  externalBadgeLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+    color: '#111111',
   },
   cardLabel: {
     fontSize: 17,

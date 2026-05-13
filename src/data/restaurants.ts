@@ -18,6 +18,9 @@ export type Restaurant = {
   phone?: string;
   features?: string;
   menuItems?: RestaurantMenuItem[];
+  externalPlaceId?: string;
+  isExternalFallback?: boolean;
+  source?: string;
 };
 
 const chineseMenuItems: RestaurantMenuItem[] = [

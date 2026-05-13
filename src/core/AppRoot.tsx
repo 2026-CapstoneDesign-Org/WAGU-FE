@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import {
+  addExternalRestaurantToListFallback,
   addRestaurantToList,
   cancelReviewVote,
   createReport,
@@ -2182,8 +2183,18 @@ export function AppRoot() {
       return;
     }
 
+    const internalRestaurants = selected.filter((restaurant) => !restaurant.externalPlaceId);
+    const externalRestaurants = selected.filter(
+      (restaurant): restaurant is Restaurant & { externalPlaceId: string } =>
+        Boolean(restaurant.externalPlaceId),
+    );
+
+    if (internalRestaurants.length === 0) {
+      throw new Error('리스트를 만들려면 검색된 가게를 한 곳 이상 선택해 주세요.');
+    }
+
     const resolvedRestaurants = await Promise.all(
-      selected.map(async (restaurant) => {
+      internalRestaurants.map(async (restaurant) => {
         const candidates = await searchRestaurants(session.accessToken, restaurant.name);
         const matched =
           candidates.find((item) => item.name === restaurant.name) ??
@@ -2207,7 +2218,7 @@ export function AppRoot() {
     const createdList = await createList(session.accessToken, {
       title: title.trim(),
       regionName,
-      restaurants: selected.map((restaurant, index) => {
+      restaurants: internalRestaurants.map((restaurant, index) => {
         const rating = ratings[restaurant.id];
         const resolvedRestaurant = resolvedRestaurants[index];
 
@@ -2219,6 +2230,20 @@ export function AppRoot() {
         };
       }),
     });
+
+    await Promise.all(
+      externalRestaurants.map((restaurant) => {
+        const rating = ratings[restaurant.id];
+
+        return addExternalRestaurantToListFallback(session.accessToken!, createdList.id, {
+          externalPlaceId: restaurant.externalPlaceId,
+          searchQuery: restaurant.name,
+          tasteScore: convertFiveStarToTenPoint(rating['맛']),
+          valueScore: convertFiveStarToTenPoint(rating['가성비']),
+          moodScore: convertFiveStarToTenPoint(rating['서비스']),
+        });
+      }),
+    );
 
     if (existingListCount === 0) {
       await setRepresentativeList(session.accessToken, createdList.id);
@@ -2366,6 +2391,12 @@ export function AppRoot() {
 
     if (session?.accessToken) {
       try {
+        const parsedListIds = addToListTargetListIds.map((listId) => Number(listId));
+
+        if (parsedListIds.some((listId) => Number.isNaN(listId))) {
+          throw new Error('invalid_list_id');
+        }
+
         const candidates = await searchRestaurants(session.accessToken, restaurant.name);
         const matchedRestaurant =
           candidates.find((item) => item.name === restaurant.name) ??
@@ -2379,12 +2410,6 @@ export function AppRoot() {
         nextRestaurantId = String(matchedRestaurant.id);
         nextRestaurantName = matchedRestaurant.name;
         nextRestaurantAddress = matchedRestaurant.address ?? restaurant.address ?? '';
-
-        const parsedListIds = addToListTargetListIds.map((listId) => Number(listId));
-
-        if (parsedListIds.some((listId) => Number.isNaN(listId))) {
-          throw new Error('invalid_list_id');
-        }
 
         await Promise.all(
           parsedListIds.map((listId) =>
@@ -2766,26 +2791,28 @@ export function AppRoot() {
         <OnboardingIntroScreen
           onPressNext={() => {
             setTasteFlowSource('onboarding');
-            setScreen('taste');
-          }}
-          userName={nickname}
-        />
-      ) : screen === 'taste' ? (
-        <TasteSelectionScreen
-          accessToken={session?.accessToken}
-          onBack={() => setScreen(tasteFlowSource === 'my-lists' ? 'my-lists' : 'intro')}
-          onConfirm={(restaurants) => {
-            setSelectedRestaurants(restaurants);
+            setTasteListName('');
+            setSelectedRestaurants([]);
             setScreen('taste-list-name');
           }}
+          userName={nickname}
         />
       ) : screen === 'taste-list-name' ? (
         <TasteListNameScreen
           nickname={nickname}
           mode={tasteFlowSource === 'my-lists' ? 'new-list' : 'first-list'}
-          onBack={() => setScreen('taste')}
+          onBack={() => setScreen(tasteFlowSource === 'my-lists' ? 'my-lists' : 'intro')}
           onSubmit={(name) => {
             setTasteListName(name);
+            setScreen('taste');
+          }}
+        />
+      ) : screen === 'taste' ? (
+        <TasteSelectionScreen
+          accessToken={session?.accessToken}
+          onBack={() => setScreen('taste-list-name')}
+          onConfirm={(restaurants) => {
+            setSelectedRestaurants(restaurants);
             setScreen('rating');
           }}
         />
@@ -2793,7 +2820,7 @@ export function AppRoot() {
         <TasteRatingScreen
           listName={tasteListName}
           restaurants={selectedRestaurants}
-          onBack={() => setScreen('taste-list-name')}
+          onBack={() => setScreen('taste')}
           onSubmit={async (ratings) => {
             if (tasteListName.trim()) {
               await createTasteList(tasteListName.trim(), selectedRestaurants, ratings);
@@ -2815,25 +2842,27 @@ export function AppRoot() {
             setActiveTab('map');
             setScreen('tabs');
           }}
-            onSelectLists={(listIds) => {
-              setAddToListTargetListIds(listIds);
-              setScreen('add-to-list-rating');
-            }}
-          />
-        ) : screen === 'add-to-list-rating' ? (
-          <AddRestaurantToListRatingScreen
-            restaurant={getAddToListRestaurant() ?? initialRestaurantPool[0]}
-            lists={myLists.filter((item) => addToListTargetListIds.includes(item.id))}
-            onBack={() => setScreen('add-to-list-select')}
-            onSubmit={handleAddRestaurantToListComplete}
-          />
+          onSelectLists={(listIds) => {
+            setAddToListTargetListIds(listIds);
+            setScreen('add-to-list-rating');
+          }}
+        />
+      ) : screen === 'add-to-list-rating' ? (
+        <AddRestaurantToListRatingScreen
+          restaurant={getAddToListRestaurant() ?? initialRestaurantPool[0]}
+          lists={myLists.filter((item) => addToListTargetListIds.includes(item.id))}
+          onBack={() => setScreen('add-to-list-select')}
+          onSubmit={handleAddRestaurantToListComplete}
+        />
       ) : screen === 'complete' ? (
         <RegistrationCompleteScreen
           onComplete={() => {
             if (completionSource === 'add-to-list') {
               const nextSource = addToListSource;
               setAddToListSource(null);
+              setAddToListRestaurantSnapshot(null);
               setAddToListRestaurantId(null);
+              setAddToListRestaurantName(null);
               setAddToListTargetListIds([]);
               setCompletionSource('taste-flow');
 
@@ -3020,7 +3049,7 @@ export function AppRoot() {
             setTasteFlowSource('my-lists');
             setSelectedRestaurants([]);
             setTasteListName('');
-            setScreen('taste');
+            setScreen('taste-list-name');
           }}
           onOpenList={(listId) => {
             setSelectedMyListId(listId);
@@ -3229,7 +3258,7 @@ export function AppRoot() {
           onPressNews={() => setScreen('news')}
           onPressLocalRanking={() => openRankingDetail('local')}
           onPressNationalRanking={() => openRankingDetail('national')}
-            onPressSearch={() => {
+          onPressSearch={() => {
               setSearchScreenInitialQuery('');
               setScreen('search');
             }}

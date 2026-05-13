@@ -43,11 +43,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 14,
     width: '100%',
+    overflow: 'visible',
   },
   starSlot: {
     width: 36,
-    height: 36,
+    height: 42,
     position: 'relative',
+    overflow: 'visible',
   },
   starLayer: {
     position: 'absolute',
@@ -57,8 +59,9 @@ const styles = StyleSheet.create({
   },
   starBase: {
     fontSize: 42,
-    lineHeight: 42,
+    lineHeight: 46,
     color: '#D9D9D9',
+    includeFontPadding: false,
   },
   fillClip: {
     position: 'absolute',
@@ -69,8 +72,9 @@ const styles = StyleSheet.create({
   },
   starFill: {
     fontSize: 42,
-    lineHeight: 42,
+    lineHeight: 46,
     color: '#FFC107',
+    includeFontPadding: false,
   },
   leftTapZone: {
     position: 'absolute',
