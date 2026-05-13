@@ -35,6 +35,7 @@ type OnboardingLoginScreenProps = {
     provider: LoginProvider,
     session: {
       accessToken: string;
+      needsProfile?: boolean | null;
       refreshToken: string | null;
     },
   ) => void;
@@ -132,6 +133,7 @@ export function OnboardingLoginScreen({ onLoginSuccess }: OnboardingLoginScreenP
                     closeLoginModal();
                     onLoginSuccess(activeProvider, {
                       accessToken: tokens.accessToken,
+                      needsProfile: tokens.needsProfile,
                       refreshToken: tokens.refreshToken ?? null,
                     });
                   }}

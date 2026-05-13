@@ -371,6 +371,7 @@ function mapApiReviewToMyReview(review: {
 
 type AuthSession = {
   accessToken: string;
+  needsProfile?: boolean | null;
   refreshToken: string | null;
 };
 
@@ -2695,8 +2696,9 @@ export function AppRoot() {
       setBirthDateLabel(formatBirthDate(me));
       setGenderLabel(formatGenderLabel(me.gender));
 
-      const needsSignupProfile =
+      const derivedNeedsProfile =
         !me.birthYear || !me.birthMonth || !me.birthDay || !me.gender;
+      const needsSignupProfile = nextSession.needsProfile ?? derivedNeedsProfile;
 
       setRequiresProfileSetup(needsSignupProfile);
 
@@ -2713,7 +2715,7 @@ export function AppRoot() {
 
       setScreen('tabs');
     } catch {
-      setRequiresProfileSetup(true);
+      setRequiresProfileSetup(nextSession.needsProfile ?? true);
       setTasteFlowSource('onboarding');
       setScreen('signup-nickname');
     }

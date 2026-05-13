@@ -340,6 +340,7 @@ export function extractAuthTokens(url: string) {
     const parsedUrl = new URL(url);
     const accessToken = parsedUrl.searchParams.get('accessToken');
     const refreshToken = parsedUrl.searchParams.get('refreshToken');
+    const needsProfileParam = parsedUrl.searchParams.get('needsProfile');
 
     if (!accessToken) {
       return null;
@@ -347,6 +348,8 @@ export function extractAuthTokens(url: string) {
 
     return {
       accessToken,
+      needsProfile:
+        needsProfileParam === null ? null : needsProfileParam.toLowerCase() === 'true',
       refreshToken,
     };
   } catch {
