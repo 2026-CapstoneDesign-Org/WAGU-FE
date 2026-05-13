@@ -17,7 +17,6 @@ import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
-import TrashIcon from '../../assets/icons/trash.svg';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { MyReview, myReviews } from '../data/myReviews';
 import { ReviewMediaItem } from '../types/reviews';
@@ -58,6 +57,16 @@ function ThumbDownIcon({ color }: { color: string }) {
         strokeLinejoin="round"
       />
     </Svg>
+  );
+}
+
+function MoreDotsIcon() {
+  return (
+    <View style={styles.moreDots}>
+      <View style={styles.moreDot} />
+      <View style={styles.moreDot} />
+      <View style={styles.moreDot} />
+    </View>
   );
 }
 
@@ -108,6 +117,7 @@ export function MyReviewsScreen({
   >({});
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [previewCurrentIndex, setPreviewCurrentIndex] = useState(0);
+  const [openMenuReviewId, setOpenMenuReviewId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState('');
   const [isToastVisible, setIsToastVisible] = useState(false);
   const toastOpacity = useRef(new Animated.Value(0)).current;
@@ -197,6 +207,7 @@ export function MyReviewsScreen({
   };
 
   const handleDeleteReview = (reviewId: string) => {
+    setOpenMenuReviewId(null);
     Alert.alert('리뷰를 삭제하시겠습니까?', '', [
       {
         style: 'cancel',
@@ -281,6 +292,13 @@ export function MyReviewsScreen({
           <Text style={styles.headerTitle}>{title}</Text>
         </View>
 
+        {openMenuReviewId ? (
+          <Pressable
+            style={styles.menuBackdrop}
+            onPress={() => setOpenMenuReviewId(null)}
+          />
+        ) : null}
+
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.content, { paddingBottom: 34 + insets.bottom }]}
@@ -310,11 +328,28 @@ export function MyReviewsScreen({
                     {isOwner ? (
                       <View style={styles.actionRow}>
                         <Pressable
-                          style={styles.deleteButton}
-                          onPress={() => handleDeleteReview(review.id)}
+                          hitSlop={14}
+                          style={styles.moreButton}
+                          onPress={() =>
+                            setOpenMenuReviewId((current) =>
+                              current === review.id ? null : review.id,
+                            )
+                          }
                         >
-                          <TrashIcon width={18} height={18} color="#9A9A9A" />
+                          <MoreDotsIcon />
                         </Pressable>
+                        {openMenuReviewId === review.id ? (
+                          <View style={styles.moreMenu}>
+                            <Pressable
+                              onPress={() => handleDeleteReview(review.id)}
+                              style={styles.moreMenuItem}
+                            >
+                              <Text style={[styles.moreMenuLabel, styles.moreMenuLabelDanger]}>
+                                삭제하기
+                              </Text>
+                            </Pressable>
+                          </View>
+                        ) : null}
                       </View>
                     ) : null}
                   </View>
@@ -470,6 +505,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingTop: 25,
   },
+  menuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -547,15 +586,57 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   actionRow: {
+    position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
   },
-  deleteButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  moreButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  moreDots: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 3,
+  },
+  moreDot: {
+    width: 3.5,
+    height: 3.5,
+    borderRadius: 999,
+    backgroundColor: '#9A9A9A',
+  },
+  moreMenu: {
+    position: 'absolute',
+    top: 34,
+    right: 0,
+    minWidth: 110,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+    zIndex: 20,
+  },
+  moreMenuItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  moreMenuLabel: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    color: '#222222',
+  },
+  moreMenuLabelDanger: {
+    color: '#F92A1D',
   },
   reviewContent: {
     fontSize: 15,

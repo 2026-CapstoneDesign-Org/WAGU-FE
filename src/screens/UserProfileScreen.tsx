@@ -1,5 +1,5 @@
-﻿import { useMemo } from 'react';
-import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+﻿import { useMemo, useState } from 'react';
+import { Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
@@ -21,6 +21,7 @@ type UserProfileScreenProps = {
   onFollowToggle?: (nextIsFollowing: boolean) => void;
   onOpenFollowers?: () => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
+  onReportUser?: (reason: string) => void;
   onOpenReviews?: () => void;
   onToggleRepresentativeLike?: (listId: string) => Promise<void> | void;
   profile: UserProfile;
@@ -38,6 +39,7 @@ export function UserProfileScreen({
   onFollowToggle,
   onOpenFollowers,
   onOpenRestaurantDetail,
+  onReportUser,
   onOpenReviews,
   onToggleRepresentativeLike,
   profile,
@@ -45,6 +47,7 @@ export function UserProfileScreen({
   representativeIsLikePending = false,
   representativeIsLiked = false,
 }: UserProfileScreenProps) {
+  const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   const restaurantMetaMap = useMemo(
     () =>
       new Map(
@@ -62,6 +65,18 @@ export function UserProfileScreen({
   const hasMetrics = Boolean(profile.reviewCount || profile.followingCount || profile.followerCount);
   const hasReliability = Boolean(profile.reliabilityGrade);
 
+  const handlePressMore = () => {
+    if (!onReportUser) {
+      return;
+    }
+    setIsReportSheetOpen(true);
+  };
+
+  const handleSelectReportReason = (reason: string) => {
+    setIsReportSheetOpen(false);
+    onReportUser?.(reason);
+  };
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.screen}>
@@ -70,6 +85,17 @@ export function UserProfileScreen({
             <Pressable hitSlop={10} onPress={onBack} style={styles.backButton}>
               <ArrowLeftIcon height={24} width={24} />
             </Pressable>
+            {!isOwnProfile && onReportUser ? (
+              <Pressable hitSlop={14} onPress={handlePressMore} style={styles.moreButton}>
+                <View style={styles.moreDots}>
+                  <View style={styles.moreDot} />
+                  <View style={styles.moreDot} />
+                  <View style={styles.moreDot} />
+                </View>
+              </Pressable>
+            ) : (
+              <View style={styles.moreButtonPlaceholder} />
+            )}
           </View>
 
           <View style={styles.profileSection}>
@@ -206,6 +232,49 @@ export function UserProfileScreen({
             )}
           </View>
         </ScrollView>
+
+        <Modal
+          animationType="fade"
+          transparent
+          visible={isReportSheetOpen}
+          onRequestClose={() => setIsReportSheetOpen(false)}
+        >
+          <View style={styles.reportSheetOverlay}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => setIsReportSheetOpen(false)}
+            />
+            <View style={styles.reportSheet}>
+              <Text style={styles.reportSheetTitle}>신고 사유를 선택해 주세요</Text>
+              <Pressable
+                onPress={() => handleSelectReportReason('스팸/광고')}
+                style={styles.reportSheetItem}
+              >
+                <Text style={styles.reportSheetItemLabel}>스팸/광고</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleSelectReportReason('욕설/비방')}
+                style={styles.reportSheetItem}
+              >
+                <Text style={styles.reportSheetItemLabel}>욕설/비방</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleSelectReportReason('허위 정보')}
+                style={styles.reportSheetItem}
+              >
+                <Text style={styles.reportSheetItemLabel}>허위 정보</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleSelectReportReason('기타')}
+                style={styles.reportSheetItem}
+              >
+                <Text style={[styles.reportSheetItemLabel, styles.reportSheetItemLabelDanger]}>
+                  기타
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -229,12 +298,76 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   backButton: {
     width: 24,
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  moreButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreButtonPlaceholder: {
+    width: 40,
+    height: 40,
+  },
+  moreDots: {
+    width: 16,
+    height: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  moreDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#7A7A7A',
+  },
+  reportSheetOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(17, 17, 17, 0.28)',
+  },
+  reportSheet: {
+    width: '84%',
+    maxWidth: 340,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    paddingTop: 24,
+    paddingBottom: 18,
+    paddingHorizontal: 20,
+  },
+  reportSheetTitle: {
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: '600',
+    color: '#111111',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  reportSheetItem: {
+    minHeight: 52,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#EFEFEF',
+  },
+  reportSheetItemLabel: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '500',
+    color: '#222222',
+  },
+  reportSheetItemLabelDanger: {
+    color: '#F92A1D',
   },
   profileSection: {
     gap: 12,
@@ -438,4 +571,5 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.92)',
   },
 });
+
 

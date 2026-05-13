@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -65,6 +65,7 @@ type RestaurantDetailScreenProps = {
   onAddToList?: (restaurant: Restaurant) => void;
   onEditReview?: (reviewId: number, restaurantName: string, restaurantId?: number, content?: string) => void;
   onOpenUserProfile?: (authorName: string) => void;
+  onReportReview?: (reviewId: string, reason: string) => void;
   onReviewAuthorFollowChange?: (userId: string, nextIsFollowing: boolean) => void;
   onOpenWriteReview?: (restaurantName: string, restaurantId?: number) => void;
   favoriteColor?: string;
@@ -95,8 +96,11 @@ type TabScrollProps = {
 
 type RestaurantReviewDisplay = RestaurantReview & {
   isFollowPending?: boolean;
+  isMenuOpen?: boolean;
   currentReaction?: ReviewReaction;
   isVotePending?: boolean;
+  onCloseMenu?: () => void;
+  onToggleMenu?: (reviewId: string) => void;
 };
 
 type RestaurantReviewSummaryDisplay = {
@@ -607,6 +611,16 @@ function PenIcon({ color }: { color: string }) {
   );
 }
 
+function MoreDotsIcon() {
+  return (
+    <View style={styles.reviewMoreDots}>
+      <View style={styles.reviewMoreDot} />
+      <View style={styles.reviewMoreDot} />
+      <View style={styles.reviewMoreDot} />
+    </View>
+  );
+}
+
 function ReviewReactionButton({
   count,
   icon,
@@ -713,6 +727,7 @@ function mapApiReviewToDisplayReview(
 function ReviewCard({
   review,
   onEditReview,
+  onReportReview,
   onToggleFollow,
   onToggleReaction,
   onDeleteReview,
@@ -721,6 +736,7 @@ function ReviewCard({
 }: {
   review: RestaurantReviewDisplay;
   onEditReview: (reviewId: string, content: string) => void;
+  onReportReview?: (reviewId: string, reason: string) => void;
   onToggleFollow: (reviewId: string) => void;
   onToggleReaction: (reviewId: string, reaction: Exclude<ReviewReaction, null>) => void;
   onDeleteReview: (reviewId: string) => void;
@@ -729,6 +745,36 @@ function ReviewCard({
 }) {
   const reviewMedia = getReviewMediaItems(review);
   const imageUris = reviewMedia.filter((item) => item.type === 'image').map((item) => item.uri);
+  const isMenuOpen = review.isMenuOpen ?? false;
+  const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
+
+  const handlePressMore = () => {
+    review.onToggleMenu?.(review.id);
+  };
+
+  const handlePressEdit = () => {
+    review.onCloseMenu?.();
+    onEditReview(review.id, review.content);
+  };
+
+  const handlePressDelete = () => {
+    review.onCloseMenu?.();
+    onDeleteReview(review.id);
+  };
+
+  const handlePressReport = () => {
+    if (!onReportReview) {
+      return;
+    }
+
+    review.onCloseMenu?.();
+    setIsReportSheetOpen(true);
+  };
+
+  const handleSelectReportReason = (reason: string) => {
+    setIsReportSheetOpen(false);
+    onReportReview?.(review.id, reason);
+  };
 
   return (
     <View style={styles.reviewCard}>
@@ -745,30 +791,57 @@ function ReviewCard({
           </View>
         </Pressable>
 
-        {review.isOwner ? (
-          <View style={styles.reviewOwnerBadge}>
-            <Text style={styles.reviewOwnerBadgeLabel}>내 리뷰</Text>
-          </View>
-        ) : (
-          <Pressable
-            onPress={() => onToggleFollow(review.id)}
-            disabled={review.isFollowPending}
-            style={[
-              styles.reviewFollowButton,
-              review.isFollowPending ? styles.reviewActionPending : null,
-              review.isFollowing ? styles.reviewFollowingButton : null,
-            ]}
-          >
-            <Text
+        <View style={styles.reviewHeaderActions}>
+          {review.isOwner ? (
+            <View style={styles.reviewOwnerBadge}>
+              <Text style={styles.reviewOwnerBadgeLabel}>내 리뷰</Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => onToggleFollow(review.id)}
+              disabled={review.isFollowPending}
               style={[
-                styles.reviewFollowButtonLabel,
-                review.isFollowing ? styles.reviewFollowingButtonLabel : null,
+                styles.reviewFollowButton,
+                review.isFollowPending ? styles.reviewActionPending : null,
+                review.isFollowing ? styles.reviewFollowingButton : null,
               ]}
             >
-              {review.isFollowing ? '팔로잉' : '팔로우'}
-            </Text>
+              <Text
+                style={[
+                  styles.reviewFollowButtonLabel,
+                  review.isFollowing ? styles.reviewFollowingButtonLabel : null,
+                ]}
+              >
+                {review.isFollowing ? '팔로잉' : '팔로우'}
+              </Text>
+            </Pressable>
+          )}
+          <Pressable hitSlop={14} onPress={handlePressMore} style={styles.reviewMoreButton}>
+            <MoreDotsIcon />
           </Pressable>
-        )}
+          {isMenuOpen ? (
+            <View style={styles.reviewMoreMenu}>
+              {review.isOwner ? (
+                <>
+                  <Pressable onPress={handlePressEdit} style={styles.reviewMoreMenuItem}>
+                    <Text style={styles.reviewMoreMenuLabel}>수정하기</Text>
+                  </Pressable>
+                  <Pressable onPress={handlePressDelete} style={styles.reviewMoreMenuItem}>
+                    <Text style={[styles.reviewMoreMenuLabel, styles.reviewMoreMenuLabelDanger]}>
+                      삭제하기
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
+                <Pressable onPress={handlePressReport} style={styles.reviewMoreMenuItem}>
+                  <Text style={[styles.reviewMoreMenuLabel, styles.reviewMoreMenuLabelDanger]}>
+                    신고하기
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          ) : null}
+        </View>
       </View>
 
       <Text style={styles.reviewText}>{review.content}</Text>
@@ -846,20 +919,50 @@ function ReviewCard({
           }
         />
 
-        {review.isOwner ? (
-          <View style={styles.reviewOwnerActions}>
+      </View>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={isReportSheetOpen}
+        onRequestClose={() => setIsReportSheetOpen(false)}
+      >
+        <View style={styles.reportSheetOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setIsReportSheetOpen(false)}
+          />
+          <View style={styles.reportSheet}>
+            <Text style={styles.reportSheetTitle}>신고 사유를 선택해 주세요</Text>
             <Pressable
-              style={styles.reviewEditButton}
-              onPress={() => onEditReview(review.id, review.content)}
+              onPress={() => handleSelectReportReason('스팸/광고')}
+              style={styles.reportSheetItem}
             >
-              <PenIcon color="#7A7A7A" />
+              <Text style={styles.reportSheetItemLabel}>스팸/광고</Text>
             </Pressable>
-            <Pressable style={styles.reviewDeleteButton} onPress={() => onDeleteReview(review.id)}>
-              <TrashIcon width={16} height={16} color="#7A7A7A" />
+            <Pressable
+              onPress={() => handleSelectReportReason('욕설/비방')}
+              style={styles.reportSheetItem}
+            >
+              <Text style={styles.reportSheetItemLabel}>욕설/비방</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => handleSelectReportReason('허위 정보')}
+              style={styles.reportSheetItem}
+            >
+              <Text style={styles.reportSheetItemLabel}>허위 정보</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => handleSelectReportReason('기타')}
+              style={styles.reportSheetItem}
+            >
+              <Text style={[styles.reportSheetItemLabel, styles.reportSheetItemLabelDanger]}>
+                기타
+              </Text>
             </Pressable>
           </View>
-        ) : null}
-      </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1279,6 +1382,7 @@ function ReviewTabContent({
   reviewSort,
   onChangeSort,
   onEditReview,
+  onReportReview,
   onToggleFollow,
   onToggleReaction,
   onDeleteReview,
@@ -1293,6 +1397,7 @@ function ReviewTabContent({
   reviewSort: ReviewSort;
   onChangeSort: (sort: ReviewSort) => void;
   onEditReview: (reviewId: string, content: string) => void;
+  onReportReview?: (reviewId: string, reason: string) => void;
   onToggleFollow: (reviewId: string) => void;
   onToggleReaction: (reviewId: string, reaction: Exclude<ReviewReaction, null>) => void;
   onDeleteReview: (reviewId: string) => void;
@@ -1300,9 +1405,17 @@ function ReviewTabContent({
   onOpenUserProfile?: (authorName: string) => void;
   onPressWriteReview: () => void;
 } & TabScrollProps) {
+  const [openMenuReviewId, setOpenMenuReviewId] = useState<string | null>(null);
+
   return (
     <BaseTabScroll scrollEnabled={scrollEnabled} onScroll={onScroll}>
       <View style={styles.reviewTabInner}>
+        {openMenuReviewId ? (
+          <Pressable
+            style={styles.reviewMenuBackdrop}
+            onPress={() => setOpenMenuReviewId(null)}
+          />
+        ) : null}
         {reviewSummary &&
         (reviewSummary.summary ||
           reviewSummary.positives.length > 0 ||
@@ -1381,8 +1494,15 @@ function ReviewTabContent({
             reviews.map((review, index) => (
               <View key={review.id}>
                 <ReviewCard
-                  review={review}
+                  review={{
+                    ...review,
+                    isMenuOpen: openMenuReviewId === review.id,
+                    onCloseMenu: () => setOpenMenuReviewId(null),
+                    onToggleMenu: (reviewId) =>
+                      setOpenMenuReviewId((current) => (current === reviewId ? null : reviewId)),
+                  }}
                   onEditReview={onEditReview}
+                  onReportReview={onReportReview}
                   onToggleFollow={onToggleFollow}
                   onToggleReaction={onToggleReaction}
                   onDeleteReview={onDeleteReview}
@@ -1429,6 +1549,7 @@ export function RestaurantDetailScreen({
   onAddToList,
   onEditReview,
   onOpenUserProfile,
+  onReportReview,
   onReviewAuthorFollowChange,
   onOpenWriteReview,
   favoriteColor = '#D9D9D9',
@@ -2401,6 +2522,7 @@ export function RestaurantDetailScreen({
             reviewSort={reviewSort}
             onChangeSort={setReviewSort}
               onEditReview={handleEditReview}
+              onReportReview={onReportReview}
               onToggleFollow={handleToggleReviewFollow}
               onToggleReaction={handleToggleReviewReaction}
               onDeleteReview={handleDeleteReview}
@@ -2797,8 +2919,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   reviewTabInner: {
+    position: 'relative',
     paddingHorizontal: HORIZONTAL_PADDING,
     gap: 20,
+  },
+  reviewMenuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
   },
   reviewSummaryCard: {
     padding: 18,
@@ -2948,6 +3075,100 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  reviewHeaderActions: {
+    marginLeft: 'auto',
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  reviewMoreButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewMoreDots: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 3,
+  },
+  reviewMoreDot: {
+    width: 3.5,
+    height: 3.5,
+    borderRadius: 999,
+    backgroundColor: '#999999',
+  },
+  reviewMoreMenu: {
+    position: 'absolute',
+    top: 34,
+    right: 0,
+    minWidth: 110,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+    zIndex: 20,
+  },
+  reviewMoreMenuItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  reviewMoreMenuLabel: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    color: '#222222',
+  },
+  reviewMoreMenuLabelDanger: {
+    color: '#F92A1D',
+  },
+  reportSheetOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(17, 17, 17, 0.28)',
+  },
+  reportSheet: {
+    width: '84%',
+    maxWidth: 340,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    paddingTop: 24,
+    paddingBottom: 18,
+    paddingHorizontal: 20,
+  },
+  reportSheetTitle: {
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: '600',
+    color: '#111111',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  reportSheetItem: {
+    minHeight: 52,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#EFEFEF',
+  },
+  reportSheetItemLabel: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '500',
+    color: '#222222',
+  },
+  reportSheetItemLabelDanger: {
+    color: '#F92A1D',
   },
   reviewAvatar: {
     width: 40,

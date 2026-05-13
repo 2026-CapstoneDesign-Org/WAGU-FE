@@ -269,6 +269,12 @@ type ApiReviewVoteRequest = {
   voteType: 'DISLIKE' | 'LIKE';
 };
 
+type ApiCreateReportRequest = {
+  reason: string;
+  targetId: number;
+  targetType: 'LIST' | 'REVIEW' | 'USER';
+};
+
 export type ApiListRecommendationItem = {
   categorySummary?: string[];
   description?: string;
@@ -382,6 +388,20 @@ export async function getRestaurant(token: string, restaurantId: number) {
   });
 }
 
+export async function getRestaurantParkingLots(
+  token: string,
+  restaurantId: number,
+  query?: {
+    limit?: number;
+    parkingLotDivision?: string;
+  },
+) {
+  return apiRequest<ApiParkingLot[]>(`/restaurants/${restaurantId}/parking-lots`, {
+    token,
+    query,
+  });
+}
+
 export async function getListRecommendations(token: string) {
   return apiRequest<ApiListRecommendationResponse>('/recommendations/lists', {
     token,
@@ -469,6 +489,17 @@ export async function updateReview(
 ) {
   return apiRequest<void>(`/reviews/${reviewId}`, {
     method: 'PATCH',
+    token,
+    body,
+  });
+}
+
+export async function createReport(
+  token: string,
+  body: ApiCreateReportRequest,
+) {
+  return apiRequest<void>('/reports', {
+    method: 'POST',
     token,
     body,
   });

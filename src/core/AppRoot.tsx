@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   addRestaurantToList,
   cancelReviewVote,
+  createReport,
   createRestaurantReview,
   createList,
   deleteReview,
@@ -1074,6 +1075,54 @@ export function AppRoot() {
     } finally {
       setUserProfileFollowPendingIds((current) => current.filter((id) => id !== userId));
     }
+  };
+
+  const handleCreateReport = async (
+    targetType: 'REVIEW' | 'USER',
+    targetId: number,
+    reason: string,
+  ) => {
+    if (!session?.accessToken) {
+      Alert.alert('안내', '로그인 후 이용해 주세요.');
+      return;
+    }
+
+    try {
+      await createReport(session.accessToken, {
+        targetType,
+        targetId,
+        reason,
+      });
+      Alert.alert('안내', '신고가 접수되었습니다.');
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? `[${error.status}] ${error.message || '신고를 접수하지 못했습니다.'}`
+          : '신고를 접수하지 못했습니다.';
+      Alert.alert('안내', message);
+    }
+  };
+
+  const handleReportReview = (reviewId: string, reason: string) => {
+    const parsedReviewId = Number(reviewId);
+
+    if (Number.isNaN(parsedReviewId)) {
+      Alert.alert('안내', '신고 대상을 확인하지 못했습니다.');
+      return;
+    }
+
+    void handleCreateReport('REVIEW', parsedReviewId, reason);
+  };
+
+  const handleReportUser = (userId: string, reason: string) => {
+    const parsedUserId = Number(userId);
+
+    if (Number.isNaN(parsedUserId)) {
+      Alert.alert('안내', '신고 대상을 확인하지 못했습니다.');
+      return;
+    }
+
+    void handleCreateReport('USER', parsedUserId, reason);
   };
 
   const syncFollowStateAcrossScreens = (userId: string, nextIsFollowing: boolean) => {
@@ -2889,6 +2938,7 @@ export function AppRoot() {
           }
           onEditReview={openEditReview}
           onOpenUserProfile={openUserProfileFromRestaurantDetail}
+          onReportReview={handleReportReview}
           onReviewAuthorFollowChange={syncFollowStateAcrossScreens}
           onOpenWriteReview={openWriteReview}
         />
@@ -3137,6 +3187,11 @@ export function AppRoot() {
               type: 'user-profile',
               userId: selectedUserProfileId,
             })
+          }
+          onReportUser={
+            selectedUserProfileId
+              ? (reason) => void handleReportUser(selectedUserProfileId, reason)
+              : undefined
           }
         />
       ) : rankingDetail ? (
