@@ -36,6 +36,8 @@ export function SignupProfileScreen({
   const [gender, setGender] = useState<'FEMALE' | 'MALE' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const birthYearInputRef = useRef<TextInput | null>(null);
+  const birthMonthInputRef = useRef<TextInput | null>(null);
+  const birthDayInputRef = useRef<TextInput | null>(null);
 
   const safeNickname = useMemo(() => {
     const trimmed = nickname.trim();
@@ -120,35 +122,57 @@ export function SignupProfileScreen({
                 <TextInput
                   ref={birthYearInputRef}
                   value={birthYear}
-                  onChangeText={(value) => setBirthYear(value.replace(/[^0-9]/g, '').slice(0, 4))}
+                  onChangeText={(value) => {
+                    const nextValue = value.replace(/[^0-9]/g, '').slice(0, 4);
+                    setBirthYear(nextValue);
+
+                    if (nextValue.length === 4) {
+                      birthMonthInputRef.current?.focus();
+                    }
+                  }}
                   placeholder="YYYY"
                   placeholderTextColor="#C7C7CC"
                   keyboardType="number-pad"
                   style={[styles.input, styles.yearInput]}
                   textAlign="center"
                   maxLength={4}
+                  returnKeyType="next"
                 />
                 <Text style={styles.separator}>년</Text>
                 <TextInput
+                  ref={birthMonthInputRef}
                   value={birthMonth}
-                  onChangeText={(value) => setBirthMonth(value.replace(/[^0-9]/g, '').slice(0, 2))}
+                  onChangeText={(value) => {
+                    const nextValue = value.replace(/[^0-9]/g, '').slice(0, 2);
+                    setBirthMonth(nextValue);
+
+                    if (nextValue.length === 2) {
+                      birthDayInputRef.current?.focus();
+                    }
+                  }}
                   placeholder="MM"
                   placeholderTextColor="#C7C7CC"
                   keyboardType="number-pad"
                   style={[styles.input, styles.dateInput]}
                   textAlign="center"
                   maxLength={2}
+                  returnKeyType="next"
                 />
                 <Text style={styles.separator}>월</Text>
                 <TextInput
+                  ref={birthDayInputRef}
                   value={birthDay}
-                  onChangeText={(value) => setBirthDay(value.replace(/[^0-9]/g, '').slice(0, 2))}
+                  onChangeText={(value) => {
+                    const nextValue = value.replace(/[^0-9]/g, '').slice(0, 2);
+                    setBirthDay(nextValue);
+                  }}
                   placeholder="DD"
                   placeholderTextColor="#C7C7CC"
                   keyboardType="number-pad"
                   style={[styles.input, styles.dateInput]}
                   textAlign="center"
                   maxLength={2}
+                  returnKeyType="done"
                 />
                 <Text style={styles.separator}>일</Text>
               </View>

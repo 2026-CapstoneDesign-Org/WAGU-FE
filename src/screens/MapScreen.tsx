@@ -22,7 +22,11 @@ import FilterIcon from '../../assets/icons/filter.svg';
 import MyLocationIcon from '../../assets/icons/mylocation.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import StarIcon from '../../assets/icons/star.svg';
-import { getRestaurant, getRestaurantPhotoUris } from '../api/wagu';
+import {
+  getRestaurant,
+  getRestaurantPhotoUris,
+  searchRestaurants,
+} from '../api/wagu';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar';
 import { Restaurant } from '../data/restaurants';
 
@@ -64,6 +68,94 @@ type MapScreenProps = {
   searchQuery?: string;
 };
 
+async function buildMapRestaurantsFromMyLists(
+  accessToken: string,
+  restaurants: Restaurant[],
+) {
+  const candidates = restaurants
+    .map((restaurant, index) => ({
+      source: restaurant,
+      index,
+      numericId: Number(restaurant.id),
+    }))
+    .filter((item) => Number.isFinite(item.numericId));
+
+  const results = await Promise.allSettled(
+    candidates.map((item) => getRestaurant(accessToken, item.numericId)),
+  );
+
+  return results.flatMap((result, index) => {
+    if (result.status !== 'fulfilled') {
+      return [];
+    }
+
+    const detail = result.value;
+    const sourceRestaurant = candidates[index]?.source;
+
+    if (typeof detail.lat !== 'number' || typeof detail.lng !== 'number') {
+      return [];
+    }
+
+    return [
+      {
+        address: detail.roadAddress ?? detail.address ?? sourceRestaurant?.address,
+        category:
+          detail.primaryCategoryName ??
+          detail.categories?.[0] ??
+          sourceRestaurant?.category ??
+          '맛집',
+        fallbackX: 0.18 + (index % 4) * 0.18,
+        fallbackY: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
+        id: String(detail.id),
+        imageUri: sourceRestaurant?.imageUri ?? detail.imageUrl,
+        latitude: detail.lat,
+        longitude: detail.lng,
+        name: detail.name,
+        photoUris:
+          sourceRestaurant?.photoUris?.length
+            ? sourceRestaurant.photoUris
+            : getRestaurantPhotoUris(detail),
+        reviews: [],
+        status: detail.regionName ?? '내 리스트',
+      },
+    ];
+  });
+}
+
+async function buildMapRestaurantsFromSearch(
+  accessToken: string,
+  keyword: string,
+) {
+  const restaurants = await searchRestaurants(accessToken, keyword);
+
+  return restaurants.flatMap((restaurant, index) => {
+    if (typeof restaurant.lat !== 'number' || typeof restaurant.lng !== 'number') {
+      return [];
+    }
+
+    return [
+      {
+        address: restaurant.roadAddress ?? restaurant.address,
+        category:
+          restaurant.primaryCategoryName ??
+          restaurant.categories?.[0] ??
+          restaurant.regionName ??
+          '맛집',
+        fallbackX: 0.18 + (index % 4) * 0.18,
+        fallbackY: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
+        id: String(restaurant.id),
+        imageUri: restaurant.imageUrl,
+        latitude: restaurant.lat,
+        longitude: restaurant.lng,
+        name: restaurant.name,
+        photoUris: getRestaurantPhotoUris(restaurant),
+        reviews: [],
+        status: restaurant.regionName ?? '검색 결과',
+      },
+    ];
+  });
+}
+
 export function MapScreen({
   accessToken,
   getFavoriteColor,
@@ -102,6 +194,7 @@ export function MapScreen({
   const panStartTopRef = useRef(snapTops.medium);
   const contentPanStartStageRef = useRef<SheetStage>('medium');
   const trimmedSearchQuery = searchQuery.trim();
+  const previousTrimmedSearchQueryRef = useRef(trimmedSearchQuery);
 
   const animateSheetTo = (stage: SheetStage) => {
     setSheetStage(stage);
@@ -124,7 +217,7 @@ export function MapScreen({
   };
 
   useEffect(() => {
-    if (!accessToken || mapRestaurantsData.length === 0) {
+    if (!accessToken) {
       setMapDataRestaurants([]);
       return;
     }
@@ -133,54 +226,11 @@ export function MapScreen({
 
     const loadMapRestaurants = async () => {
       try {
-        const candidates = mapRestaurantsData
-          .map((restaurant, index) => ({
-            source: restaurant,
-            index,
-            numericId: Number(restaurant.id),
-          }))
-          .filter((item) => Number.isFinite(item.numericId));
-
-        const results = await Promise.allSettled(
-          candidates.map((item) => getRestaurant(accessToken, item.numericId)),
-        );
-
-        const nextRestaurants = results.flatMap((result, index) => {
-          if (result.status !== 'fulfilled') {
-            return [];
-          }
-
-          const detail = result.value;
-          const sourceRestaurant = candidates[index]?.source;
-
-          if (typeof detail.lat !== 'number' || typeof detail.lng !== 'number') {
-            return [];
-          }
-
-          return [
-            {
-              address: detail.roadAddress ?? detail.address ?? sourceRestaurant?.address,
-              category:
-                detail.primaryCategoryName ??
-                detail.categories?.[0] ??
-                sourceRestaurant?.category ??
-                '맛집',
-              fallbackX: 0.18 + (index % 4) * 0.18,
-              fallbackY: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
-              id: String(detail.id),
-              imageUri: sourceRestaurant?.imageUri ?? detail.imageUrl,
-              latitude: detail.lat,
-              longitude: detail.lng,
-              name: detail.name,
-              photoUris:
-                sourceRestaurant?.photoUris?.length
-                  ? sourceRestaurant.photoUris
-                  : getRestaurantPhotoUris(detail),
-              reviews: [],
-              status: detail.regionName ?? '내 리스트',
-            },
-          ];
-        });
+        const nextRestaurants = trimmedSearchQuery
+          ? await buildMapRestaurantsFromSearch(accessToken, trimmedSearchQuery)
+          : mapRestaurantsData.length > 0
+            ? await buildMapRestaurantsFromMyLists(accessToken, mapRestaurantsData)
+            : [];
 
         if (!cancelled) {
           setMapDataRestaurants(nextRestaurants);
@@ -197,7 +247,7 @@ export function MapScreen({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, mapRestaurantsData]);
+  }, [accessToken, mapRestaurantsData, trimmedSearchQuery]);
 
   const filterOptions = useMemo(
     () =>
@@ -210,23 +260,14 @@ export function MapScreen({
   );
 
   const baseFilteredRestaurants = useMemo(() => {
-    let results = mapDataRestaurants;
-
-    if (trimmedSearchQuery) {
-      const query = trimmedSearchQuery.toLowerCase();
-      results = results.filter((restaurant) =>
-        [restaurant.name, restaurant.category, restaurant.status].some((value) =>
-          value.toLowerCase().includes(query),
-        ),
-      );
-    }
-
     if (activeFilters.length === 0) {
-      return results;
+      return mapDataRestaurants;
     }
 
-    return results.filter((restaurant) => activeFilters.includes(restaurant.category));
-  }, [activeFilters, mapDataRestaurants, trimmedSearchQuery]);
+    return mapDataRestaurants.filter((restaurant) =>
+      activeFilters.includes(restaurant.category),
+    );
+  }, [activeFilters, mapDataRestaurants]);
 
   const visibleRestaurants = useMemo(() => {
     if (!selectedMarkerRestaurantId) {
@@ -246,6 +287,18 @@ export function MapScreen({
       setSelectedMarkerRestaurantId(null);
     }
   }, [baseFilteredRestaurants, selectedMarkerRestaurantId]);
+
+  useEffect(() => {
+    const previousTrimmedSearchQuery = previousTrimmedSearchQueryRef.current;
+    previousTrimmedSearchQueryRef.current = trimmedSearchQuery;
+
+    if (previousTrimmedSearchQuery && !trimmedSearchQuery) {
+      setSelectedMarkerRestaurantId(null);
+      setFocusedRestaurantId(null);
+      setActiveFilters([]);
+      animateSheetTo('medium');
+    }
+  }, [trimmedSearchQuery]);
 
   useEffect(() => {
     if (!trimmedSearchQuery) {
@@ -301,6 +354,7 @@ export function MapScreen({
   const handlePressClear = () => {
     setSelectedMarkerRestaurantId(null);
     setFocusedRestaurantId(null);
+    setActiveFilters([]);
     animateSheetTo('medium');
     onClearSearch?.();
   };
@@ -536,7 +590,7 @@ export function MapScreen({
             numberOfLines={1}
             style={[styles.searchText, !trimmedSearchQuery && styles.searchPlaceholder]}
           >
-            {trimmedSearchQuery || '내 리스트 맛집을 검색해보세요'}
+            {trimmedSearchQuery || '맛집을 검색해보세요'}
           </Text>
           {trimmedSearchQuery ? (
             <Pressable
@@ -709,9 +763,13 @@ export function MapScreen({
 
                 {visibleRestaurants.length === 0 ? (
                   <View style={styles.emptyResult}>
-                    <Text style={styles.emptyResultTitle}>내 리스트 식당이 없어요</Text>
+                    <Text style={styles.emptyResultTitle}>
+                      {trimmedSearchQuery ? '검색 결과가 없어요' : '내 리스트 식당이 없어요'}
+                    </Text>
                     <Text style={styles.emptyResultBody}>
-                      리스트에 맛집을 담으면 지도에서 바로 확인할 수 있어요.
+                      {trimmedSearchQuery
+                        ? '다른 검색어로 다시 찾아보세요.'
+                        : '리스트에 맛집을 담으면 지도에서 바로 확인할 수 있어요.'}
                     </Text>
                   </View>
                 ) : null}

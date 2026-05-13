@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../theme/colors';
 import { radii } from '../theme/radii';
@@ -6,6 +6,7 @@ import { radii } from '../theme/radii';
 type SocialLoginButtonProps = {
   buttonBackgroundColor?: string;
   buttonBorderColor?: string;
+  iconImageSource?: ImageSourcePropType;
   iconBackgroundColor: string;
   iconLabel: string;
   iconVariant?: 'badge' | 'plain';
@@ -18,6 +19,7 @@ type SocialLoginButtonProps = {
 export function SocialLoginButton({
   buttonBackgroundColor = '#FFFFFF',
   buttonBorderColor = colors.border,
+  iconImageSource,
   iconBackgroundColor,
   iconLabel,
   iconVariant = 'plain',
@@ -39,7 +41,9 @@ export function SocialLoginButton({
       ]}
     >
       <View style={styles.content}>
-        {iconVariant === 'badge' ? (
+        {iconImageSource ? (
+          <Image source={iconImageSource} style={styles.iconImage} resizeMode="contain" />
+        ) : iconVariant === 'badge' ? (
           <View style={[styles.iconBadge, { backgroundColor: iconBackgroundColor }]}>
             <Text style={[styles.iconLabel, { color: iconTextColor }]}>{iconLabel}</Text>
           </View>
@@ -71,6 +75,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
+  },
+  iconImage: {
+    width: 18,
+    height: 18,
+    flexShrink: 0,
   },
   iconBadge: {
     width: 24,

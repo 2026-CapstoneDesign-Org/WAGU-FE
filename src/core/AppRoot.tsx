@@ -1219,7 +1219,170 @@ export function AppRoot() {
       ]);
 
       return Object.fromEntries(nextEntries);
-    });
+      });
+  };
+
+  const hydrateHomeRecommendations = async (
+    token: string,
+    options?: {
+      cancelled?: () => boolean;
+      retryOnEmpty?: boolean;
+    },
+  ) => {
+    const applyRecommendations = async () => {
+      const [restaurantRecommendationsResult, recommendationsResult] =
+        await Promise.allSettled([
+          getRestaurantRecommendations(token),
+          getListRecommendations(token),
+        ]);
+
+      if (restaurantRecommendationsResult.status === 'fulfilled') {
+        console.log('[home recommendations][restaurants] success', {
+          count: restaurantRecommendationsResult.value.items.length,
+          ids: restaurantRecommendationsResult.value.items.map((item) => item.restaurantId),
+        });
+      } else {
+        console.log(
+          '[home recommendations][restaurants] failed',
+          restaurantRecommendationsResult.reason,
+        );
+      }
+
+      if (recommendationsResult.status === 'fulfilled') {
+        console.log('[home recommendations][lists] success', {
+          count: recommendationsResult.value.items.length,
+          listIds: recommendationsResult.value.items.map((item) => item.listId),
+          ownerIds: recommendationsResult.value.items.map((item) => item.owner.ownerId),
+        });
+      } else {
+        console.log('[home recommendations][lists] failed', recommendationsResult.reason);
+      }
+
+      return { recommendationsResult, restaurantRecommendationsResult };
+    };
+
+    let { restaurantRecommendationsResult, recommendationsResult } = await applyRecommendations();
+
+    if (
+      options?.retryOnEmpty &&
+      restaurantRecommendationsResult.status === 'fulfilled' &&
+      recommendationsResult.status === 'fulfilled' &&
+      restaurantRecommendationsResult.value.items.length === 0 &&
+      recommendationsResult.value.items.length === 0
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      if (options.cancelled?.()) {
+        return;
+      }
+
+      ({ restaurantRecommendationsResult, recommendationsResult } = await applyRecommendations());
+    }
+
+    if (options?.cancelled?.()) {
+      return;
+    }
+
+    if (restaurantRecommendationsResult.status === 'fulfilled') {
+      setRecommendedRestaurantItems(
+        restaurantRecommendationsResult.value.items.map((item) => ({
+          id: `recommended-restaurant-${item.restaurantId}`,
+          imageUri: item.imageUrl,
+          name: item.restaurantName,
+          restaurantName: item.restaurantName,
+        })),
+      );
+    } else {
+      setRecommendedRestaurantItems([]);
+    }
+
+    if (recommendationsResult.status === 'fulfilled') {
+      const uniqueRecommendations = recommendationsResult.value.items.reduce<
+        typeof recommendationsResult.value.items
+      >((accumulator, item) => {
+        if (accumulator.some((currentItem) => currentItem.owner.ownerId === item.owner.ownerId)) {
+          return accumulator;
+        }
+
+        accumulator.push(item);
+        return accumulator;
+      }, []);
+
+      const recommendedProfiles = await Promise.all(
+        uniqueRecommendations.map(async (item, index) => {
+          const [detailResult, followCountForOwnerResult] = await Promise.allSettled([
+            getListDetail(token, item.listId),
+            getFollowCount(token, item.owner.ownerId),
+          ]);
+
+          if (detailResult.status !== 'fulfilled') {
+            console.log('[home recommendations][lists] detail failed', {
+              listId: item.listId,
+              ownerId: item.owner.ownerId,
+              reason: detailResult.reason,
+            });
+          }
+
+          if (followCountForOwnerResult.status !== 'fulfilled') {
+            console.log('[home recommendations][lists] follow count failed', {
+              ownerId: item.owner.ownerId,
+              reason: followCountForOwnerResult.reason,
+            });
+          }
+
+          const representativeRestaurants =
+            detailResult.status === 'fulfilled'
+              ? detailResult.value.restaurants.slice(0, 5).map((restaurantItem) => ({
+                  address: restaurantItem.restaurant.address,
+                  id: String(restaurantItem.restaurant.id),
+                  imageUri: restaurantItem.restaurant.imageUrl,
+                  name: restaurantItem.restaurant.name,
+                }))
+              : [];
+
+          return {
+            card: {
+              id: String(item.owner.ownerId),
+              imageUri: item.owner.profileImageUrl,
+              name: item.owner.nickname,
+            },
+            profile: {
+              followerCount:
+                followCountForOwnerResult.status === 'fulfilled'
+                  ? String(followCountForOwnerResult.value.followerCount)
+                  : undefined,
+              id: String(item.owner.ownerId),
+              nickname: item.owner.nickname,
+              profileImageUrl: item.owner.profileImageUrl,
+              representativeAccentColor:
+                HOME_PROFILE_ACCENT_COLORS[index % HOME_PROFILE_ACCENT_COLORS.length],
+              representativeListIsLiked: item.isLiked ?? false,
+              representativeListId: String(item.listId),
+              representativeListTitle: item.title,
+              representativeRestaurants,
+            },
+          };
+        }),
+      );
+
+      if (options?.cancelled?.()) {
+        return;
+      }
+
+      const limitedRecommendedProfiles = recommendedProfiles.slice(0, 5);
+
+      console.log('[home recommendations][lists] hydrated', {
+        count: limitedRecommendedProfiles.length,
+        withRepresentativeRestaurants: recommendedProfiles.filter(
+          (item) => item.profile.representativeRestaurants.length > 0,
+        ).length,
+      });
+      setRecommendedMealFriendItems(limitedRecommendedProfiles.map((item) => item.card));
+      setRecommendedUserProfiles(limitedRecommendedProfiles.map((item) => item.profile));
+    } else {
+      setRecommendedMealFriendItems([]);
+      setRecommendedUserProfiles([]);
+    }
   };
 
   const refreshMyReviews = async (token: string, userId: number) => {
@@ -1415,8 +1578,6 @@ export function AppRoot() {
             followersResult,
             reliabilityResult,
             myReviewsResult,
-            restaurantRecommendationsResult,
-            recommendationsResult,
           ] =
             await Promise.allSettled([
               getFollowCount(session.accessToken, me.id),
@@ -1427,8 +1588,6 @@ export function AppRoot() {
               getFollowers(session.accessToken, me.id),
               getReliabilityScore(session.accessToken, me.id),
               getUserReviews(session.accessToken, me.id),
-              getRestaurantRecommendations(session.accessToken),
-              getListRecommendations(session.accessToken),
             ]);
 
         if (cancelled) {
@@ -1502,118 +1661,9 @@ export function AppRoot() {
           }
         }
 
-        if (restaurantRecommendationsResult.status === 'fulfilled') {
-          console.log('[home recommendations][restaurants] success', {
-            count: restaurantRecommendationsResult.value.items.length,
-            ids: restaurantRecommendationsResult.value.items.map((item) => item.restaurantId),
-          });
-          if (!cancelled) {
-            setRecommendedRestaurantItems(
-              restaurantRecommendationsResult.value.items.map((item) => ({
-                id: `recommended-restaurant-${item.restaurantId}`,
-                imageUri: item.imageUrl,
-                name: item.restaurantName,
-                restaurantName: item.restaurantName,
-              })),
-            );
-          }
-        } else if (!cancelled) {
-          console.log(
-            '[home recommendations][restaurants] failed',
-            restaurantRecommendationsResult.reason,
-          );
-          setRecommendedRestaurantItems([]);
-        }
-
-        if (recommendationsResult.status === 'fulfilled') {
-          console.log('[home recommendations][lists] success', {
-            count: recommendationsResult.value.items.length,
-            listIds: recommendationsResult.value.items.map((item) => item.listId),
-            ownerIds: recommendationsResult.value.items.map((item) => item.owner.ownerId),
-          });
-          const uniqueRecommendations = recommendationsResult.value.items.reduce<
-            typeof recommendationsResult.value.items
-          >((accumulator, item) => {
-            if (accumulator.some((currentItem) => currentItem.owner.ownerId === item.owner.ownerId)) {
-              return accumulator;
-            }
-
-            accumulator.push(item);
-            return accumulator;
-          }, []);
-
-          const recommendedProfiles = await Promise.all(
-            uniqueRecommendations.map(async (item, index) => {
-              const [detailResult, followCountForOwnerResult] = await Promise.allSettled([
-                getListDetail(session.accessToken, item.listId),
-                getFollowCount(session.accessToken, item.owner.ownerId),
-              ]);
-
-              if (detailResult.status !== 'fulfilled') {
-                console.log('[home recommendations][lists] detail failed', {
-                  listId: item.listId,
-                  ownerId: item.owner.ownerId,
-                  reason: detailResult.reason,
-                });
-              }
-
-              if (followCountForOwnerResult.status !== 'fulfilled') {
-                console.log('[home recommendations][lists] follow count failed', {
-                  ownerId: item.owner.ownerId,
-                  reason: followCountForOwnerResult.reason,
-                });
-              }
-
-              const representativeRestaurants =
-                detailResult.status === 'fulfilled'
-                  ? detailResult.value.restaurants.slice(0, 5).map((restaurantItem) => ({
-                      address: restaurantItem.restaurant.address,
-                      id: String(restaurantItem.restaurant.id),
-                      imageUri: restaurantItem.restaurant.imageUrl,
-                      name: restaurantItem.restaurant.name,
-                    }))
-                  : [];
-
-              return {
-                card: {
-                  id: String(item.owner.ownerId),
-                  imageUri: item.owner.profileImageUrl,
-                  name: item.owner.nickname,
-                },
-                profile: {
-                  followerCount:
-                    followCountForOwnerResult.status === 'fulfilled'
-                      ? String(followCountForOwnerResult.value.followerCount)
-                      : undefined,
-                  id: String(item.owner.ownerId),
-                  nickname: item.owner.nickname,
-                  profileImageUrl: item.owner.profileImageUrl,
-                  representativeAccentColor:
-                    HOME_PROFILE_ACCENT_COLORS[index % HOME_PROFILE_ACCENT_COLORS.length],
-                  representativeListIsLiked: item.isLiked ?? false,
-                  representativeListId: String(item.listId),
-                  representativeListTitle: item.title,
-                  representativeRestaurants,
-                },
-              };
-            }),
-          );
-
-          if (!cancelled) {
-            console.log('[home recommendations][lists] hydrated', {
-              count: recommendedProfiles.length,
-              withRepresentativeRestaurants: recommendedProfiles.filter(
-                (item) => item.profile.representativeRestaurants.length > 0,
-              ).length,
-            });
-            setRecommendedMealFriendItems(recommendedProfiles.map((item) => item.card));
-            setRecommendedUserProfiles(recommendedProfiles.map((item) => item.profile));
-          }
-        } else if (!cancelled) {
-          console.log('[home recommendations][lists] failed', recommendationsResult.reason);
-          setRecommendedMealFriendItems([]);
-          setRecommendedUserProfiles([]);
-        }
+        await hydrateHomeRecommendations(session.accessToken, {
+          cancelled: () => cancelled,
+        });
       } catch (error) {
         if (cancelled) {
           return;
@@ -2853,6 +2903,7 @@ export function AppRoot() {
     setBirthDateLabel(`${profile.birthYear}년 ${profile.birthMonth}월 ${profile.birthDay}일`);
     setGenderLabel(profile.gender === 'MALE' ? '남성' : '여성');
     setRequiresProfileSetup(false);
+    await hydrateHomeRecommendations(session.accessToken, { retryOnEmpty: true });
     const lists = await getMyLists(session.accessToken);
     setTasteFlowSource('onboarding');
     setScreen(lists.length === 0 ? 'intro' : 'tabs');

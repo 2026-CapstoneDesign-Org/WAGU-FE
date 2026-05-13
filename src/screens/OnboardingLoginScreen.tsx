@@ -16,9 +16,10 @@ import { extractAuthTokens, getOAuthAuthorizationUrl } from '../api/wagu';
 import { Screen } from '../components/Screen';
 import { SocialLoginButton } from '../components/SocialLoginButton';
 import { colors } from '../theme/colors';
-import { radii } from '../theme/radii';
 
 const WAGU_HERO_IMAGE = require('../../assets/WAGU.png');
+const KAKAO_ICON = require('../../assets/icons/kakao.png');
+const GOOGLE_ICON = require('../../assets/icons/google.png');
 
 const socialOptions = [
   {
@@ -27,9 +28,10 @@ const socialOptions = [
     buttonBackgroundColor: '#FEE500',
     buttonBorderColor: '#FEE500',
     iconBackgroundColor: 'transparent',
-    iconLabel: '톡',
+    iconImageSource: KAKAO_ICON,
+    iconLabel: 'K',
     iconTextColor: '#191600',
-    iconVariant: 'plain',
+    iconVariant: 'plain' as const,
     labelColor: '#191600',
   },
   {
@@ -38,9 +40,10 @@ const socialOptions = [
     buttonBackgroundColor: '#FFFFFF',
     buttonBorderColor: '#DDDDDD',
     iconBackgroundColor: 'transparent',
+    iconImageSource: GOOGLE_ICON,
     iconLabel: 'G',
     iconTextColor: '#4285F4',
-    iconVariant: 'plain',
+    iconVariant: 'plain' as const,
     labelColor: '#2A2A2A',
   },
   {
@@ -49,9 +52,10 @@ const socialOptions = [
     buttonBackgroundColor: '#03C75A',
     buttonBorderColor: '#03C75A',
     iconBackgroundColor: 'transparent',
+    iconImageSource: undefined,
     iconLabel: 'N',
     iconTextColor: '#FFFFFF',
-    iconVariant: 'plain',
+    iconVariant: 'plain' as const,
     labelColor: '#FFFFFF',
   },
 ] as const;
@@ -117,6 +121,7 @@ export function OnboardingLoginScreen({
               buttonBackgroundColor={option.buttonBackgroundColor}
               buttonBorderColor={option.buttonBorderColor}
               iconBackgroundColor={option.iconBackgroundColor}
+              iconImageSource={option.iconImageSource}
               iconLabel={option.iconLabel}
               iconTextColor={option.iconTextColor}
               iconVariant={option.iconVariant}
@@ -142,7 +147,7 @@ export function OnboardingLoginScreen({
             <Pressable style={styles.backButton} onPress={closeLoginModal}>
               <ArrowLeftIcon width={24} height={24} />
             </Pressable>
-            <Text style={styles.modalTitle}>소셜 로그인</Text>
+            <Text style={styles.modalTitle}>간편 로그인</Text>
           </View>
 
           {activeProvider ? (
