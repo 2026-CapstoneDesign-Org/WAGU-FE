@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -48,6 +48,7 @@ export function TasteRatingScreen({
     createInitialRatings(restaurants),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   const visibleRestaurants = useMemo(
     () => (restaurants.length > 0 ? restaurants : []),
@@ -77,9 +78,11 @@ export function TasteRatingScreen({
     );
 
   const handleSubmit = async () => {
-    if (!isEveryRestaurantRated || isSubmitting) {
+    if (!isEveryRestaurantRated || isSubmitting || submitLockRef.current) {
       return;
     }
+
+    submitLockRef.current = true;
 
     try {
       setIsSubmitting(true);
@@ -89,6 +92,7 @@ export function TasteRatingScreen({
         error instanceof Error ? error.message : '리스트를 저장하지 못했어요.';
       Alert.alert('저장 실패', message);
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };

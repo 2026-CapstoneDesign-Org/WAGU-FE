@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from 'react';
 import { useMemo } from 'react';
+import { useRef } from 'react';
 import { Alert, Platform, ToastAndroid } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -414,6 +415,7 @@ export function AppRoot() {
   const [completionSource, setCompletionSource] = useState<'taste-flow' | 'add-to-list'>(
     'taste-flow',
   );
+  const createTasteListLockRef = useRef(false);
   const [tasteFlowSource, setTasteFlowSource] = useState<'onboarding' | 'my-lists'>(
     'onboarding',
   );
@@ -1904,11 +1906,36 @@ export function AppRoot() {
           syncFollowStateAcrossUserConnections(userId, nextIsFollowing);
 
           if (sourceTab === 'following') {
-            setMyFollowingUsers((current) =>
-              nextIsFollowing
-                ? current
-                : current.filter((user) => user.id !== userId),
+            const nextFollowUser = buildFriendUserFromSources(
+              userId,
+              [
+                myFollowerUsers,
+                myFollowingUsers,
+                ...Object.values(remoteUserFriendConnectionsByUserId).map((connection) => [
+                  ...connection.followers,
+                  ...connection.following,
+                ]),
+              ],
+              mergeUserProfiles(
+                mergeUserProfiles(
+                  remoteUserProfiles,
+                  mergeUserProfiles(searchResultUserProfiles, recommendedUserProfiles),
+                ),
+                fallbackUserProfiles,
+              ),
             );
+
+            setMyFollowingUsers((current) => {
+              if (nextIsFollowing) {
+                if (!nextFollowUser || current.some((user) => user.id === userId)) {
+                  return current;
+                }
+
+                return [...current, { ...nextFollowUser, isFollowing: true }];
+              }
+
+              return current.filter((user) => user.id !== userId);
+            });
             setMyFollowerUsers((current) =>
               sortFollowersForInitialView(
                 current.map((user) =>
@@ -1977,11 +2004,36 @@ export function AppRoot() {
     syncFollowStateAcrossUserConnections(userId, nextIsFollowing);
 
     if (sourceTab === 'following') {
-      setMyFollowingUsers((current) =>
-        nextIsFollowing
-          ? current
-          : current.filter((user) => user.id !== userId),
+      const nextFollowUser = buildFriendUserFromSources(
+        userId,
+        [
+          myFollowerUsers,
+          myFollowingUsers,
+          ...Object.values(remoteUserFriendConnectionsByUserId).map((connection) => [
+            ...connection.followers,
+            ...connection.following,
+          ]),
+        ],
+        mergeUserProfiles(
+          mergeUserProfiles(
+            remoteUserProfiles,
+            mergeUserProfiles(searchResultUserProfiles, recommendedUserProfiles),
+          ),
+          fallbackUserProfiles,
+        ),
       );
+
+      setMyFollowingUsers((current) => {
+        if (nextIsFollowing) {
+          if (!nextFollowUser || current.some((user) => user.id === userId)) {
+            return current;
+          }
+
+          return [...current, { ...nextFollowUser, isFollowing: true }];
+        }
+
+        return current.filter((user) => user.id !== userId);
+      });
       setMyFollowerUsers((current) =>
         sortFollowersForInitialView(
           current.map((user) =>
@@ -2316,6 +2368,13 @@ export function AppRoot() {
     selected: Restaurant[],
     ratings: Record<string, Record<'맛' | '서비스' | '가성비', number>>,
   ) => {
+    if (createTasteListLockRef.current) {
+      return;
+    }
+
+    createTasteListLockRef.current = true;
+
+    try {
     if (!session?.accessToken) {
       if (tasteFlowSource === 'my-lists' && title.trim()) {
         appendNewList(title.trim(), selected);
@@ -2395,6 +2454,9 @@ export function AppRoot() {
     }
 
     await refreshMyLists(session.accessToken);
+    } finally {
+      createTasteListLockRef.current = false;
+    }
   };
 
   const getFavoriteColor = (restaurantName: string) => {

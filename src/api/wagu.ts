@@ -176,6 +176,8 @@ export type ApiHiddenGemRestaurantItem = {
   adjustedScore?: number;
   averageAutoScore?: number;
   evaluationCount?: number;
+  lat?: number;
+  lng?: number;
   rank: number;
   recommendationScore?: number;
   regionName?: string;
@@ -298,7 +300,9 @@ type ApiRestaurantRecommendationResponse = {
 };
 
 type ApiHiddenGemRestaurantResponse = {
+  generatedAt?: string;
   items: ApiHiddenGemRestaurantItem[];
+  limit?: number;
   regionTownName?: string;
 };
 

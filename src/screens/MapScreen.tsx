@@ -23,6 +23,7 @@ import MyLocationIcon from '../../assets/icons/mylocation.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import StarIcon from '../../assets/icons/star.svg';
 import {
+  getHiddenGemRestaurants,
   getRestaurant,
   getRestaurantPhotoUris,
   searchRestaurants,
@@ -32,6 +33,8 @@ import { Restaurant } from '../data/restaurants';
 
 const { height: screenHeight } = Dimensions.get('window');
 
+const HIDDEN_GEM_FILTER = '숨은 맛집';
+const HIDDEN_GEM_REGION = '용인시 처인구';
 const REVIEW_CARD_WIDTH = 292;
 const DEFAULT_CAMERA = {
   latitude: 37.2369,
@@ -39,7 +42,7 @@ const DEFAULT_CAMERA = {
   zoom: 15.2,
 };
 
-type SheetStage = 'collapsed' | 'medium' | 'expanded';
+type SheetStage = 'collapsed' | 'expanded' | 'medium';
 
 type MapRestaurant = {
   address?: string;
@@ -48,6 +51,7 @@ type MapRestaurant = {
   fallbackY: number;
   id: string;
   imageUri?: string;
+  isHiddenGem: boolean;
   latitude: number;
   longitude: number;
   name: string;
@@ -68,15 +72,56 @@ type MapScreenProps = {
   searchQuery?: string;
 };
 
-async function buildMapRestaurantsFromMyLists(
-  accessToken: string,
-  restaurants: Restaurant[],
+function createFallbackPosition(index: number) {
+  return {
+    x: 0.18 + (index % 4) * 0.18,
+    y: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
+  };
+}
+
+function mergeRestaurantsWithHiddenGems(
+  baseRestaurants: MapRestaurant[],
+  hiddenGemRestaurants: MapRestaurant[],
+  includeStandaloneHiddenGems: boolean,
 ) {
+  const mergedById = new Map<string, MapRestaurant>();
+
+  baseRestaurants.forEach((restaurant) => {
+    mergedById.set(restaurant.id, restaurant);
+  });
+
+  hiddenGemRestaurants.forEach((restaurant) => {
+    const existing = mergedById.get(restaurant.id);
+
+    if (existing) {
+      mergedById.set(restaurant.id, {
+        ...existing,
+        address: existing.address ?? restaurant.address,
+        imageUri: existing.imageUri ?? restaurant.imageUri,
+        isHiddenGem: true,
+        photoUris:
+          existing.photoUris && existing.photoUris.length > 0
+            ? existing.photoUris
+            : restaurant.photoUris,
+        status: existing.status || restaurant.status,
+      });
+      return;
+    }
+
+    if (includeStandaloneHiddenGems) {
+      mergedById.set(restaurant.id, restaurant);
+    }
+  });
+
+  return Array.from(mergedById.values());
+}
+
+async function buildMapRestaurantsFromMyLists(accessToken: string, restaurants: Restaurant[]) {
   const candidates = restaurants
     .map((restaurant, index) => ({
-      source: restaurant,
       index,
       numericId: Number(restaurant.id),
+      source: restaurant,
     }))
     .filter((item) => Number.isFinite(item.numericId));
 
@@ -96,6 +141,8 @@ async function buildMapRestaurantsFromMyLists(
       return [];
     }
 
+    const fallback = createFallbackPosition(index);
+
     return [
       {
         address: detail.roadAddress ?? detail.address ?? sourceRestaurant?.address,
@@ -104,10 +151,11 @@ async function buildMapRestaurantsFromMyLists(
           detail.categories?.[0] ??
           sourceRestaurant?.category ??
           '맛집',
-        fallbackX: 0.18 + (index % 4) * 0.18,
-        fallbackY: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
+        fallbackX: fallback.x,
+        fallbackY: fallback.y,
         id: String(detail.id),
         imageUri: sourceRestaurant?.imageUri ?? detail.imageUrl,
+        isHiddenGem: false,
         latitude: detail.lat,
         longitude: detail.lng,
         name: detail.name,
@@ -122,16 +170,15 @@ async function buildMapRestaurantsFromMyLists(
   });
 }
 
-async function buildMapRestaurantsFromSearch(
-  accessToken: string,
-  keyword: string,
-) {
+async function buildMapRestaurantsFromSearch(accessToken: string, keyword: string) {
   const restaurants = await searchRestaurants(accessToken, keyword);
 
   return restaurants.flatMap((restaurant, index) => {
     if (typeof restaurant.lat !== 'number' || typeof restaurant.lng !== 'number') {
       return [];
     }
+
+    const fallback = createFallbackPosition(index);
 
     return [
       {
@@ -141,16 +188,77 @@ async function buildMapRestaurantsFromSearch(
           restaurant.categories?.[0] ??
           restaurant.regionName ??
           '맛집',
-        fallbackX: 0.18 + (index % 4) * 0.18,
-        fallbackY: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
+        fallbackX: fallback.x,
+        fallbackY: fallback.y,
         id: String(restaurant.id),
         imageUri: restaurant.imageUrl,
+        isHiddenGem: false,
         latitude: restaurant.lat,
         longitude: restaurant.lng,
         name: restaurant.name,
         photoUris: getRestaurantPhotoUris(restaurant),
         reviews: [],
         status: restaurant.regionName ?? '검색 결과',
+      },
+    ];
+  });
+}
+
+async function buildHiddenGemRestaurants(accessToken: string) {
+  const response = await getHiddenGemRestaurants(accessToken, {
+    regionTownName: HIDDEN_GEM_REGION,
+  });
+  const regionItems = response.items.filter(
+    (item) =>
+      item.regionTownName === HIDDEN_GEM_REGION ||
+      item.regionName === HIDDEN_GEM_REGION,
+  );
+
+  const results = await Promise.allSettled(
+    regionItems.map((item) => getRestaurant(accessToken, item.restaurantId)),
+  );
+
+  return results.flatMap((result, index) => {
+    const hiddenGem = regionItems[index];
+    const detail = result.status === 'fulfilled' ? result.value : null;
+    const latitude =
+      typeof hiddenGem?.lat === 'number'
+        ? hiddenGem.lat
+        : typeof detail?.lat === 'number'
+          ? detail.lat
+          : null;
+    const longitude =
+      typeof hiddenGem?.lng === 'number'
+        ? hiddenGem.lng
+        : typeof detail?.lng === 'number'
+          ? detail.lng
+          : null;
+
+    if (latitude == null || longitude == null) {
+      return [];
+    }
+
+    const fallback = createFallbackPosition(index);
+
+    return [
+      {
+        address: hiddenGem?.address ?? detail?.roadAddress ?? detail?.address,
+        category: detail?.primaryCategoryName ?? detail?.categories?.[0] ?? '숨은 맛집',
+        fallbackX: fallback.x,
+        fallbackY: fallback.y,
+        id: String(hiddenGem.restaurantId),
+        imageUri: detail?.imageUrl,
+        isHiddenGem: true,
+        latitude,
+        longitude,
+        name: hiddenGem?.restaurantName ?? detail?.name ?? '숨은 맛집',
+        photoUris: detail ? getRestaurantPhotoUris(detail) : [],
+        reviews: [],
+        status:
+          hiddenGem?.regionTownName ??
+          hiddenGem?.regionName ??
+          detail?.regionName ??
+          '숨은 맛집',
       },
     ];
   });
@@ -174,22 +282,22 @@ export function MapScreen({
   const sheetContentBottomPadding = TAB_BAR_HEIGHT + insets.bottom + 24;
   const snapTops = useMemo(
     () => ({
-      expanded: insets.top + 72,
-      medium: Math.max(insets.top + 182, screenHeight - TAB_BAR_HEIGHT - insets.bottom - 300),
       collapsed: Math.max(
         insets.top + 392,
         screenHeight - TAB_BAR_HEIGHT - insets.bottom - 76,
       ),
+      expanded: insets.top + 72,
+      medium: Math.max(insets.top + 182, screenHeight - TAB_BAR_HEIGHT - insets.bottom - 300),
     }),
     [insets.bottom, insets.top],
   );
-
   const sheetTop = useRef(new Animated.Value(snapTops.medium)).current;
   const [sheetStage, setSheetStage] = useState<SheetStage>('medium');
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [focusedRestaurantId, setFocusedRestaurantId] = useState<string | null>(null);
   const [selectedMarkerRestaurantId, setSelectedMarkerRestaurantId] = useState<string | null>(null);
   const [mapDataRestaurants, setMapDataRestaurants] = useState<MapRestaurant[]>([]);
+  const [hiddenGemRestaurants, setHiddenGemRestaurants] = useState<MapRestaurant[]>([]);
   const contentScrollOffsetRef = useRef(0);
   const panStartTopRef = useRef(snapTops.medium);
   const contentPanStartStageRef = useRef<SheetStage>('medium');
@@ -199,25 +307,26 @@ export function MapScreen({
   const animateSheetTo = (stage: SheetStage) => {
     setSheetStage(stage);
     Animated.spring(sheetTop, {
+      bounciness: 0,
+      speed: 22,
       toValue: snapTops[stage],
       useNativeDriver: false,
-      speed: 22,
-      bounciness: 0,
     }).start();
   };
 
   const animateMapToRestaurant = (restaurant: MapRestaurant | null) => {
     mapRef.current?.animateCameraTo({
+      duration: 360,
+      easing: 'EaseOut',
       latitude: restaurant?.latitude ?? DEFAULT_CAMERA.latitude,
       longitude: restaurant?.longitude ?? DEFAULT_CAMERA.longitude,
       zoom: restaurant ? currentZoomRef.current : DEFAULT_CAMERA.zoom,
-      duration: 360,
-      easing: 'EaseOut',
     });
   };
 
   useEffect(() => {
     if (!accessToken) {
+      setHiddenGemRestaurants([]);
       setMapDataRestaurants([]);
       return;
     }
@@ -225,20 +334,32 @@ export function MapScreen({
     let cancelled = false;
 
     const loadMapRestaurants = async () => {
-      try {
-        const nextRestaurants = trimmedSearchQuery
-          ? await buildMapRestaurantsFromSearch(accessToken, trimmedSearchQuery)
+      const [restaurantResult, hiddenGemResult] = await Promise.allSettled([
+        trimmedSearchQuery
+          ? buildMapRestaurantsFromSearch(accessToken, trimmedSearchQuery)
           : mapRestaurantsData.length > 0
-            ? await buildMapRestaurantsFromMyLists(accessToken, mapRestaurantsData)
-            : [];
+            ? buildMapRestaurantsFromMyLists(accessToken, mapRestaurantsData)
+            : Promise.resolve([]),
+        buildHiddenGemRestaurants(accessToken),
+      ]);
 
-        if (!cancelled) {
-          setMapDataRestaurants(nextRestaurants);
-        }
-      } catch {
-        if (!cancelled) {
-          setMapDataRestaurants([]);
-        }
+      if (cancelled) {
+        return;
+      }
+
+      setMapDataRestaurants(
+        restaurantResult.status === 'fulfilled' ? restaurantResult.value : [],
+      );
+      setHiddenGemRestaurants(
+        hiddenGemResult.status === 'fulfilled' ? hiddenGemResult.value : [],
+      );
+
+      if (restaurantResult.status === 'rejected') {
+        console.log('[map][restaurants] failed', restaurantResult.reason);
+      }
+
+      if (hiddenGemResult.status === 'rejected') {
+        console.log('[map][hidden-gems] failed', hiddenGemResult.reason);
       }
     };
 
@@ -249,25 +370,44 @@ export function MapScreen({
     };
   }, [accessToken, mapRestaurantsData, trimmedSearchQuery]);
 
-  const filterOptions = useMemo(
+  const mergedRestaurants = useMemo(
     () =>
-      Array.from(
-        new Set(
-          mapDataRestaurants.map((restaurant) => restaurant.category).filter(Boolean),
-        ),
-      ).slice(0, 5),
-    [mapDataRestaurants],
+      mergeRestaurantsWithHiddenGems(
+        mapDataRestaurants,
+        hiddenGemRestaurants,
+        !trimmedSearchQuery,
+      ),
+    [hiddenGemRestaurants, mapDataRestaurants, trimmedSearchQuery],
   );
+
+  const filterOptions = useMemo(() => {
+    const categories = Array.from(
+      new Set(mergedRestaurants.map((restaurant) => restaurant.category).filter(Boolean)),
+    ).slice(0, 5);
+
+    return [HIDDEN_GEM_FILTER, ...categories.filter((category) => category !== HIDDEN_GEM_FILTER)];
+  }, [mergedRestaurants]);
 
   const baseFilteredRestaurants = useMemo(() => {
     if (activeFilters.length === 0) {
-      return mapDataRestaurants;
+      return mergedRestaurants;
     }
 
-    return mapDataRestaurants.filter((restaurant) =>
-      activeFilters.includes(restaurant.category),
-    );
-  }, [activeFilters, mapDataRestaurants]);
+    const hasHiddenGemFilter = activeFilters.includes(HIDDEN_GEM_FILTER);
+    const categoryFilters = activeFilters.filter((filter) => filter !== HIDDEN_GEM_FILTER);
+
+    return mergedRestaurants.filter((restaurant) => {
+      if (hasHiddenGemFilter && !restaurant.isHiddenGem) {
+        return false;
+      }
+
+      if (categoryFilters.length > 0 && !categoryFilters.includes(restaurant.category)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [activeFilters, mergedRestaurants]);
 
   const visibleRestaurants = useMemo(() => {
     if (!selectedMarkerRestaurantId) {
@@ -293,9 +433,9 @@ export function MapScreen({
     previousTrimmedSearchQueryRef.current = trimmedSearchQuery;
 
     if (previousTrimmedSearchQuery && !trimmedSearchQuery) {
-      setSelectedMarkerRestaurantId(null);
-      setFocusedRestaurantId(null);
       setActiveFilters([]);
+      setFocusedRestaurantId(null);
+      setSelectedMarkerRestaurantId(null);
       animateSheetTo('medium');
     }
   }, [trimmedSearchQuery]);
@@ -352,21 +492,21 @@ export function MapScreen({
   };
 
   const handlePressClear = () => {
-    setSelectedMarkerRestaurantId(null);
-    setFocusedRestaurantId(null);
     setActiveFilters([]);
+    setFocusedRestaurantId(null);
+    setSelectedMarkerRestaurantId(null);
     animateSheetTo('medium');
     onClearSearch?.();
   };
 
   const handlePressMapBackground = () => {
-    setSelectedMarkerRestaurantId(null);
     setFocusedRestaurantId(null);
+    setSelectedMarkerRestaurantId(null);
   };
 
   const handlePressLocationButton = () => {
-    setSelectedMarkerRestaurantId(null);
     setFocusedRestaurantId(null);
+    setSelectedMarkerRestaurantId(null);
     animateMapToRestaurant(null);
   };
 
@@ -469,24 +609,25 @@ export function MapScreen({
   });
 
   const currentLocationTop = sheetTop.interpolate({
+    extrapolate: 'clamp',
     inputRange: [snapTops.expanded, snapTops.medium, snapTops.collapsed],
     outputRange: [snapTops.expanded - 42, snapTops.medium - 60, snapTops.collapsed - 60],
-    extrapolate: 'clamp',
   });
 
   const topBackdropOpacity = sheetTop.interpolate({
+    extrapolate: 'clamp',
     inputRange: [snapTops.expanded, snapTops.medium],
     outputRange: [1, 0],
-    extrapolate: 'clamp',
   });
 
   const topBackdropHeight = sheetTop.interpolate({
+    extrapolate: 'clamp',
     inputRange: [snapTops.expanded, snapTops.medium],
     outputRange: [snapTops.expanded + 4, 0],
-    extrapolate: 'clamp',
   });
 
   const hasActiveFilters = activeFilters.length > 0;
+  const hiddenGemFilterActive = activeFilters.includes(HIDDEN_GEM_FILTER);
 
   return (
     <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
@@ -515,7 +656,13 @@ export function MapScreen({
               >
                 {baseFilteredRestaurants.map((restaurant) => {
                   const active = restaurant.id === focusedRestaurantId;
-                  const markerColor = active ? '#F24E46' : '#F5655E';
+                  const markerColor = restaurant.isHiddenGem
+                    ? active
+                      ? '#111111'
+                      : '#2B2B2B'
+                    : active
+                      ? '#F24E46'
+                      : '#F5655E';
 
                   return (
                     <NaverMapMarkerOverlay
@@ -538,12 +685,6 @@ export function MapScreen({
             <Pressable style={styles.mapFallback} onPress={handlePressMapBackground}>
               {baseFilteredRestaurants.map((restaurant) => {
                 const active = restaurant.id === focusedRestaurantId;
-                const markerStemStyle = active
-                  ? styles.fallbackMarkerStemActive
-                  : styles.fallbackMarkerStem;
-                const markerHeadStyle = active
-                  ? styles.fallbackMarkerHeadActive
-                  : styles.fallbackMarkerHead;
 
                 return (
                   <Pressable
@@ -557,8 +698,20 @@ export function MapScreen({
                     ]}
                     onPress={() => handlePressMarker(restaurant)}
                   >
-                    <View style={[styles.fallbackMarkerStem, markerStemStyle]} />
-                    <View style={[styles.fallbackMarkerHead, markerHeadStyle]} />
+                    <View
+                      style={[
+                        styles.fallbackMarkerStem,
+                        active && styles.fallbackMarkerStemActive,
+                        restaurant.isHiddenGem && styles.fallbackHiddenMarkerStem,
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.fallbackMarkerHead,
+                        active && styles.fallbackMarkerHeadActive,
+                        restaurant.isHiddenGem && styles.fallbackHiddenMarkerHead,
+                      ]}
+                    />
                   </Pressable>
                 );
               })}
@@ -610,8 +763,8 @@ export function MapScreen({
           style={[
             styles.locationButton,
             {
-              top: currentLocationTop,
               opacity: currentLocationOpacity,
+              top: currentLocationTop,
               transform: [{ translateY: currentLocationTranslateY }],
             },
           ]}
@@ -625,8 +778,8 @@ export function MapScreen({
           style={[
             styles.sheet,
             {
-              top: sheetTop,
               bottom: 0,
+              top: sheetTop,
             },
           ]}
         >
@@ -696,14 +849,21 @@ export function MapScreen({
                         onPress={() => handlePressRestaurant(restaurant)}
                       >
                         <View style={styles.restaurantCopy}>
-                          <Text
-                            style={[
-                              styles.restaurantName,
-                              active && styles.restaurantNameActive,
-                            ]}
-                          >
-                            {restaurant.name}
-                          </Text>
+                          <View style={styles.restaurantTitleRow}>
+                            <Text
+                              style={[
+                                styles.restaurantName,
+                                active && styles.restaurantNameActive,
+                              ]}
+                            >
+                              {restaurant.name}
+                            </Text>
+                            {restaurant.isHiddenGem ? (
+                              <View style={styles.hiddenGemBadge}>
+                                <Text style={styles.hiddenGemBadgeText}>숨은 맛집</Text>
+                              </View>
+                            ) : null}
+                          </View>
                           <Text style={styles.restaurantMeta}>
                             {restaurant.category} · {restaurant.status}
                           </Text>
@@ -764,12 +924,18 @@ export function MapScreen({
                 {visibleRestaurants.length === 0 ? (
                   <View style={styles.emptyResult}>
                     <Text style={styles.emptyResultTitle}>
-                      {trimmedSearchQuery ? '검색 결과가 없어요' : '내 리스트 식당이 없어요'}
+                      {hiddenGemFilterActive
+                        ? '숨은 맛집이 없어요.'
+                        : trimmedSearchQuery
+                          ? '검색 결과가 없어요.'
+                          : '내 리스트 식당이 없어요.'}
                     </Text>
                     <Text style={styles.emptyResultBody}>
-                      {trimmedSearchQuery
-                        ? '다른 검색어로 다시 찾아보세요.'
-                        : '리스트에 맛집을 담으면 지도에서 바로 확인할 수 있어요.'}
+                      {hiddenGemFilterActive
+                        ? '지금 조건에 맞는 숨은 맛집을 아직 보여드릴 수 없어요.'
+                        : trimmedSearchQuery
+                          ? '다른 검색어로 다시 찾아보세요.'
+                          : '리스트에 맛집을 담으면 지도에서 바로 확인할 수 있어요.'}
                     </Text>
                   </View>
                 ) : null}
@@ -791,248 +957,223 @@ export function MapScreen({
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  screen: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  mapLayer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  mapView: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  mapFallback: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#FFFFFF',
-  },
-  mapVeil: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.68)',
-  },
-  fallbackMarkerWrap: {
-    position: 'absolute',
-    marginLeft: -14,
-    marginTop: -28,
-    width: 28,
+  clearSearchButton: {
     alignItems: 'center',
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  clearSearchLabel: {
+    color: '#A9A9A9',
+    fontSize: 22,
+    fontWeight: '300',
+    lineHeight: 22,
+  },
+  divider: {
+    backgroundColor: '#F1F1F1',
+    height: 1,
+    marginTop: 2,
+  },
+  emptyResult: {
+    alignItems: 'center',
+    gap: 8,
+    paddingBottom: 12,
+    paddingTop: 36,
+  },
+  emptyResultBody: {
+    color: '#9B9B9B',
+    fontSize: 14,
+    fontWeight: '400',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  emptyResultTitle: {
+    color: '#1A1A1A',
+    fontSize: 18,
+    fontWeight: '600',
+    lineHeight: 24,
+  },
+  fallbackHiddenMarkerHead: {
+    backgroundColor: '#2B2B2B',
+  },
+  fallbackHiddenMarkerStem: {
+    backgroundColor: '#2B2B2B',
+  },
+  fallbackMarkerHead: {
+    backgroundColor: '#F5655E',
+    borderColor: '#FFFFFF',
+    borderRadius: 11,
+    borderWidth: 4,
+    height: 22,
+    width: 22,
+  },
+  fallbackMarkerHeadActive: {
+    borderRadius: 13,
+    height: 26,
+    width: 26,
   },
   fallbackMarkerStem: {
-    width: 5,
+    backgroundColor: '#F5655E',
+    borderRadius: 99,
     height: 28,
     marginBottom: -4,
-    borderRadius: 99,
-    backgroundColor: '#F5655E',
+    width: 5,
   },
   fallbackMarkerStemActive: {
     height: 32,
-    backgroundColor: '#F24E46',
   },
-  fallbackMarkerHead: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#F5655E',
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
-  },
-  fallbackMarkerHeadActive: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#F24E46',
-  },
-  topBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-  },
-  searchBar: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
+  fallbackMarkerWrap: {
     alignItems: 'center',
-    paddingHorizontal: 18,
-    gap: 12,
-    zIndex: 4,
+    marginLeft: -14,
+    marginTop: -28,
+    position: 'absolute',
+    width: 28,
   },
-  searchBarExpanded: {
+  filterChip: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DEDEDE',
+    borderRadius: 21,
     borderWidth: 1,
-    borderColor: '#F0F0F0',
-    shadowColor: 'transparent',
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
+    height: 42,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
   },
-  searchBarFloating: {
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.06,
-    shadowRadius: 20,
-    elevation: 5,
+  filterChipActive: {
+    backgroundColor: '#FFF3F2',
+    borderColor: '#FF5A52',
   },
-  searchText: {
-    flex: 1,
-    fontSize: 16,
-    lineHeight: 22,
+  filterChipLabel: {
+    color: '#9B9B9B',
+    fontSize: 14,
     fontWeight: '500',
-    color: '#1A1A1A',
+    lineHeight: 18,
   },
-  searchPlaceholder: {
-    color: '#DDDDDD',
+  filterChipLabelActive: {
+    color: '#FF5A52',
   },
-  clearSearchButton: {
-    width: 24,
-    height: 24,
+  filterIconButton: {
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clearSearchLabel: {
-    fontSize: 22,
-    lineHeight: 22,
-    fontWeight: '300',
-    color: '#A9A9A9',
-  },
-  locationButton: {
-    position: 'absolute',
-    left: 18,
-    zIndex: 3,
-  },
-  locationButtonInner: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
     backgroundColor: '#FFFFFF',
-    alignItems: 'center',
+    borderColor: '#E2E2E2',
+    borderRadius: 21,
+    borderWidth: 1,
+    height: 42,
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 6,
+    width: 42,
   },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: -4,
-    },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    elevation: 12,
-  },
-  handleWrap: {
-    alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 14,
-  },
-  handleBar: {
-    width: 48,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: '#D7D7D7',
-  },
-  sheetScrollWrap: {
-    flex: 1,
-  },
-  sheetContent: {
-    paddingHorizontal: 16,
-    gap: 12,
+  filterIconButtonActive: {
+    backgroundColor: '#FFF3F2',
+    borderColor: '#FF5A52',
   },
   filterRow: {
     alignItems: 'center',
     gap: 10,
     paddingBottom: 12,
   },
-  filterIconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: '#E2E2E2',
-    backgroundColor: '#FFFFFF',
+  handleBar: {
+    backgroundColor: '#D7D7D7',
+    borderRadius: 999,
+    height: 4,
+    width: 48,
+  },
+  handleWrap: {
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingBottom: 14,
+    paddingTop: 10,
   },
-  filterIconButtonActive: {
-    borderColor: '#FF5A52',
-    backgroundColor: '#FFF3F2',
+  hiddenGemBadge: {
+    backgroundColor: '#111111',
+    borderRadius: 11,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
-  filterChip: {
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: '#DEDEDE',
-    paddingHorizontal: 20,
+  hiddenGemBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 13,
+  },
+  locationButton: {
+    left: 18,
+    position: 'absolute',
+    zIndex: 3,
+  },
+  locationButtonInner: {
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    elevation: 6,
+    height: 48,
     justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    width: 48,
+  },
+  mapFallback: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#FFFFFF',
   },
-  filterChipActive: {
-    borderColor: '#FF5A52',
-    backgroundColor: '#FFF3F2',
+  mapLayer: {
+    ...StyleSheet.absoluteFillObject,
   },
-  filterChipLabel: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '500',
-    color: '#9B9B9B',
+  mapVeil: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.68)',
   },
-  filterChipLabelActive: {
-    color: '#FF5A52',
-  },
-  restaurantList: {
-    gap: 6,
+  mapView: {
+    ...StyleSheet.absoluteFillObject,
   },
   restaurantBlock: {
     gap: 14,
-  },
-  restaurantRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    paddingHorizontal: 4,
   },
   restaurantCopy: {
     flex: 1,
     gap: 8,
   },
-  restaurantName: {
-    fontSize: 17,
-    lineHeight: 22,
+  restaurantList: {
+    gap: 6,
+  },
+  restaurantMeta: {
+    color: '#919191',
+    fontSize: 14,
     fontWeight: '600',
+    lineHeight: 18,
+  },
+  restaurantName: {
     color: '#FF5A52',
+    fontSize: 17,
+    fontWeight: '600',
+    lineHeight: 22,
   },
   restaurantNameActive: {
     color: '#FF3B30',
   },
-  restaurantMeta: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '600',
-    color: '#919191',
+  restaurantRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 16,
+    paddingHorizontal: 4,
+  },
+  restaurantTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  reviewBox: {
+    backgroundColor: '#F6F6F6',
+    borderRadius: 8,
+    justifyContent: 'center',
+    minHeight: 64,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    width: REVIEW_CARD_WIDTH,
   },
   reviewRow: {
     marginRight: -16,
@@ -1041,43 +1182,90 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingRight: 16,
   },
-  reviewBox: {
-    width: REVIEW_CARD_WIDTH,
-    minHeight: 64,
-    borderRadius: 8,
-    backgroundColor: '#F6F6F6',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    justifyContent: 'center',
-  },
   reviewText: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '400',
     color: '#222222',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#F1F1F1',
-    marginTop: 2,
-  },
-  emptyResult: {
-    paddingTop: 36,
-    paddingBottom: 12,
-    alignItems: 'center',
-    gap: 8,
-  },
-  emptyResultTitle: {
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  emptyResultBody: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
     fontWeight: '400',
-    color: '#9B9B9B',
-    textAlign: 'center',
+    lineHeight: 18,
+  },
+  safeArea: {
+    backgroundColor: '#FFFFFF',
+    flex: 1,
+  },
+  screen: {
+    backgroundColor: '#FFFFFF',
+    flex: 1,
+  },
+  searchBar: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 29,
+    flexDirection: 'row',
+    gap: 12,
+    height: 58,
+    left: 16,
+    paddingHorizontal: 18,
+    position: 'absolute',
+    right: 16,
+    zIndex: 4,
+  },
+  searchBarExpanded: {
+    borderColor: '#F0F0F0',
+    borderWidth: 1,
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+  },
+  searchBarFloating: {
+    elevation: 5,
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 20,
+  },
+  searchPlaceholder: {
+    color: '#DDDDDD',
+  },
+  searchText: {
+    color: '#1A1A1A',
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    lineHeight: 22,
+  },
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    elevation: 12,
+    left: 0,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: -4,
+      width: 0,
+    },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+  },
+  sheetContent: {
+    gap: 12,
+    paddingHorizontal: 16,
+  },
+  sheetScrollWrap: {
+    flex: 1,
+  },
+  topBackdrop: {
+    backgroundColor: '#FFFFFF',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
 });
