@@ -23,6 +23,7 @@ import MyLocationIcon from '../../assets/icons/mylocation.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import StarIcon from '../../assets/icons/star.svg';
 import {
+  type ApiHiddenGemRestaurantItem,
   getHiddenGemRestaurants,
   getRestaurant,
   getRestaurantPhotoUris,
@@ -34,11 +35,24 @@ import { Restaurant } from '../data/restaurants';
 const { height: screenHeight } = Dimensions.get('window');
 
 const HIDDEN_GEM_FILTER = '숨은 맛집';
-const HIDDEN_GEM_REGION = '용인시 처인구';
+const HIDDEN_GEM_REGION_NAME = '용인시 처인구';
+const HIDDEN_GEM_FALLBACK_TOWNS = [
+  '역북동',
+  '김량장동',
+  '삼가동',
+  '유방동',
+  '마평동',
+  '고림동',
+  '포곡읍',
+  '모현읍',
+  '남사읍',
+];
+const DEFAULT_MARKER_RED = '#E3483A';
+const ACTIVE_MARKER_RED = '#D92D20';
 const REVIEW_CARD_WIDTH = 292;
 const DEFAULT_CAMERA = {
-  latitude: 37.2369,
-  longitude: 127.1902,
+  latitude: 37.2368,
+  longitude: 127.1896,
   zoom: 15.2,
 };
 
@@ -56,6 +70,7 @@ type MapRestaurant = {
   longitude: number;
   name: string;
   photoUris?: string[];
+  regionTownCandidates?: string[];
   reviews: string[];
   status: string;
 };
@@ -77,6 +92,26 @@ function createFallbackPosition(index: number) {
     x: 0.18 + (index % 4) * 0.18,
     y: 0.28 + (Math.floor(index / 4) % 4) * 0.14,
   };
+}
+
+function extractTownCandidatesFromText(...texts: Array<string | undefined>) {
+  const seen = new Set<string>();
+
+  texts.forEach((text) => {
+    if (!text) {
+      return;
+    }
+
+    const matches = text.match(/[가-힣0-9]+(?:동|읍|면|리)/g) ?? [];
+    matches.forEach((match) => {
+      const normalized = match.trim();
+      if (normalized) {
+        seen.add(normalized);
+      }
+    });
+  });
+
+  return Array.from(seen);
 }
 
 function mergeRestaurantsWithHiddenGems(
@@ -163,6 +198,12 @@ async function buildMapRestaurantsFromMyLists(accessToken: string, restaurants: 
           sourceRestaurant?.photoUris?.length
             ? sourceRestaurant.photoUris
             : getRestaurantPhotoUris(detail),
+        regionTownCandidates: extractTownCandidatesFromText(
+          detail.lotAddress,
+          detail.address,
+          detail.roadAddress,
+          sourceRestaurant?.address,
+        ),
         reviews: [],
         status: detail.regionName ?? '내 리스트',
       },
@@ -197,6 +238,11 @@ async function buildMapRestaurantsFromSearch(accessToken: string, keyword: strin
         longitude: restaurant.lng,
         name: restaurant.name,
         photoUris: getRestaurantPhotoUris(restaurant),
+        regionTownCandidates: extractTownCandidatesFromText(
+          restaurant.address,
+          restaurant.roadAddress,
+          restaurant.lotAddress,
+        ),
         reviews: [],
         status: restaurant.regionName ?? '검색 결과',
       },
@@ -204,15 +250,32 @@ async function buildMapRestaurantsFromSearch(accessToken: string, keyword: strin
   });
 }
 
-async function buildHiddenGemRestaurants(accessToken: string) {
-  const response = await getHiddenGemRestaurants(accessToken, {
-    regionTownName: HIDDEN_GEM_REGION,
-  });
-  const regionItems = response.items.filter(
-    (item) =>
-      item.regionTownName === HIDDEN_GEM_REGION ||
-      item.regionName === HIDDEN_GEM_REGION,
+async function fetchHiddenGemItems(accessToken: string, regionTownCandidates: string[]) {
+  const mergedByRestaurantId = new Map<number, ApiHiddenGemRestaurantItem>();
+  const queryCandidates = Array.from(
+    new Set([...regionTownCandidates, ...HIDDEN_GEM_FALLBACK_TOWNS]),
   );
+
+  for (const regionTownName of queryCandidates) {
+    try {
+      const response = await getHiddenGemRestaurants(accessToken, { regionTownName });
+      const items = response.items ?? [];
+
+      items.forEach((item) => {
+        if (!mergedByRestaurantId.has(item.restaurantId)) {
+          mergedByRestaurantId.set(item.restaurantId, item);
+        }
+      });
+    } catch (error) {
+      console.log('[map][hidden-gems][query] failed', { error, regionTownName });
+    }
+  }
+
+  return Array.from(mergedByRestaurantId.values());
+}
+
+async function buildHiddenGemRestaurants(accessToken: string, regionTownCandidates: string[]) {
+  const regionItems = await fetchHiddenGemItems(accessToken, regionTownCandidates);
 
   const results = await Promise.allSettled(
     regionItems.map((item) => getRestaurant(accessToken, item.restaurantId)),
@@ -253,12 +316,19 @@ async function buildHiddenGemRestaurants(accessToken: string) {
         longitude,
         name: hiddenGem?.restaurantName ?? detail?.name ?? '숨은 맛집',
         photoUris: detail ? getRestaurantPhotoUris(detail) : [],
+        regionTownCandidates: extractTownCandidatesFromText(
+          hiddenGem?.regionTownName,
+          hiddenGem?.regionName,
+          detail?.lotAddress,
+          detail?.address,
+          detail?.roadAddress,
+        ),
         reviews: [],
         status:
           hiddenGem?.regionTownName ??
           hiddenGem?.regionName ??
           detail?.regionName ??
-          '숨은 맛집',
+          HIDDEN_GEM_REGION_NAME,
       },
     ];
   });
@@ -334,33 +404,38 @@ export function MapScreen({
     let cancelled = false;
 
     const loadMapRestaurants = async () => {
-      const [restaurantResult, hiddenGemResult] = await Promise.allSettled([
-        trimmedSearchQuery
-          ? buildMapRestaurantsFromSearch(accessToken, trimmedSearchQuery)
+      let nextMapRestaurants: MapRestaurant[] = [];
+
+      try {
+        nextMapRestaurants = trimmedSearchQuery
+          ? await buildMapRestaurantsFromSearch(accessToken, trimmedSearchQuery)
           : mapRestaurantsData.length > 0
-            ? buildMapRestaurantsFromMyLists(accessToken, mapRestaurantsData)
-            : Promise.resolve([]),
-        buildHiddenGemRestaurants(accessToken),
-      ]);
+            ? await buildMapRestaurantsFromMyLists(accessToken, mapRestaurantsData)
+            : [];
+      } catch (error) {
+        console.log('[map][restaurants] failed', error);
+      }
+
+      const regionTownCandidates = Array.from(
+        new Set(
+          nextMapRestaurants.flatMap((restaurant) => restaurant.regionTownCandidates ?? []),
+        ),
+      );
+
+      let nextHiddenGemRestaurants: MapRestaurant[] = [];
+
+      try {
+        nextHiddenGemRestaurants = await buildHiddenGemRestaurants(accessToken, regionTownCandidates);
+      } catch (error) {
+        console.log('[map][hidden-gems] failed', error);
+      }
 
       if (cancelled) {
         return;
       }
 
-      setMapDataRestaurants(
-        restaurantResult.status === 'fulfilled' ? restaurantResult.value : [],
-      );
-      setHiddenGemRestaurants(
-        hiddenGemResult.status === 'fulfilled' ? hiddenGemResult.value : [],
-      );
-
-      if (restaurantResult.status === 'rejected') {
-        console.log('[map][restaurants] failed', restaurantResult.reason);
-      }
-
-      if (hiddenGemResult.status === 'rejected') {
-        console.log('[map][hidden-gems] failed', hiddenGemResult.reason);
-      }
+      setMapDataRestaurants(nextMapRestaurants);
+      setHiddenGemRestaurants(nextHiddenGemRestaurants);
     };
 
     void loadMapRestaurants();
@@ -656,30 +731,69 @@ export function MapScreen({
               >
                 {baseFilteredRestaurants.map((restaurant) => {
                   const active = restaurant.id === focusedRestaurantId;
+                  const hiddenGemMarkerWidth = active ? 50 : 44;
+                  const hiddenGemMarkerHeight = active ? 60 : 54;
                   const markerColor = restaurant.isHiddenGem
-                    ? active
-                      ? '#111111'
-                      : '#2B2B2B'
+                    ? '#111111'
                     : active
-                      ? '#F24E46'
-                      : '#F5655E';
+                      ? ACTIVE_MARKER_RED
+                      : DEFAULT_MARKER_RED;
+                  const markerImage = restaurant.isHiddenGem ? {} : { symbol: 'red' as const };
 
                   return (
                     <NaverMapMarkerOverlay
                       key={restaurant.id}
                       latitude={restaurant.latitude}
                       longitude={restaurant.longitude}
-                      width={active ? 34 : 28}
-                      height={active ? 42 : 34}
+                      width={restaurant.isHiddenGem ? hiddenGemMarkerWidth : active ? 34 : 28}
+                      height={restaurant.isHiddenGem ? hiddenGemMarkerHeight : active ? 42 : 34}
                       anchor={{ x: 0.5, y: 1 }}
-                      image={{ symbol: 'red' }}
-                      tintColor={markerColor}
+                      image={markerImage}
+                      tintColor={restaurant.isHiddenGem ? undefined : markerColor}
                       onTap={() => handlePressMarker(restaurant)}
-                    />
+                    >
+                      {restaurant.isHiddenGem ? (
+                        <View
+                          key={`hidden-gem-marker-${restaurant.id}-${active ? 'active' : 'idle'}`}
+                          collapsable={false}
+                          style={[
+                            styles.hiddenGemMapMarker,
+                            active && styles.hiddenGemMapMarkerActive,
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.hiddenGemMapMarkerHead,
+                              active && styles.hiddenGemMapMarkerHeadActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.hiddenGemMapMarkerLabel,
+                                active && styles.hiddenGemMapMarkerLabelActive,
+                              ]}
+                            >
+                              {'숨은\n맛집'}
+                            </Text>
+                          </View>
+                          <View
+                            style={[
+                              styles.hiddenGemMapMarkerStem,
+                              active && styles.hiddenGemMapMarkerStemActive,
+                            ]}
+                          />
+                          <View
+                            style={[
+                              styles.hiddenGemMapMarkerTip,
+                              active && styles.hiddenGemMapMarkerTipActive,
+                            ]}
+                          />
+                        </View>
+                      ) : null}
+                    </NaverMapMarkerOverlay>
                   );
                 })}
               </NaverMapView>
-              <View pointerEvents="none" style={styles.mapVeil} />
             </>
           ) : (
             <Pressable style={styles.mapFallback} onPress={handlePressMapBackground}>
@@ -994,13 +1108,13 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   fallbackHiddenMarkerHead: {
-    backgroundColor: '#2B2B2B',
+    backgroundColor: '#111111',
   },
   fallbackHiddenMarkerStem: {
-    backgroundColor: '#2B2B2B',
+    backgroundColor: '#111111',
   },
   fallbackMarkerHead: {
-    backgroundColor: '#F5655E',
+    backgroundColor: DEFAULT_MARKER_RED,
     borderColor: '#FFFFFF',
     borderRadius: 11,
     borderWidth: 4,
@@ -1013,7 +1127,7 @@ const styles = StyleSheet.create({
     width: 26,
   },
   fallbackMarkerStem: {
-    backgroundColor: '#F5655E',
+    backgroundColor: DEFAULT_MARKER_RED,
     borderRadius: 99,
     height: 28,
     marginBottom: -4,
@@ -1082,6 +1196,63 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     paddingTop: 10,
   },
+  hiddenGemMapMarker: {
+    alignItems: 'center',
+    height: 54,
+    justifyContent: 'flex-end',
+    width: 44,
+  },
+  hiddenGemMapMarkerActive: {
+    height: 60,
+    width: 50,
+  },
+  hiddenGemMapMarkerHead: {
+    alignItems: 'center',
+    backgroundColor: '#111111',
+    borderRadius: 17,
+    height: 34,
+    justifyContent: 'center',
+    width: 44,
+  },
+  hiddenGemMapMarkerHeadActive: {
+    borderRadius: 19,
+    height: 38,
+    width: 50,
+  },
+  hiddenGemMapMarkerLabel: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    lineHeight: 11,
+    textAlign: 'center',
+  },
+  hiddenGemMapMarkerLabelActive: {
+    fontSize: 11,
+    lineHeight: 12,
+  },
+  hiddenGemMapMarkerStem: {
+    backgroundColor: '#111111',
+    borderRadius: 99,
+    height: 10,
+    marginTop: -1,
+    width: 6,
+  },
+  hiddenGemMapMarkerStemActive: {
+    height: 12,
+    width: 7,
+  },
+  hiddenGemMapMarkerTip: {
+    backgroundColor: '#111111',
+    borderRadius: 99,
+    height: 10,
+    marginTop: -2,
+    width: 10,
+  },
+  hiddenGemMapMarkerTipActive: {
+    height: 11,
+    width: 11,
+  },
   hiddenGemBadge: {
     backgroundColor: '#111111',
     borderRadius: 11,
@@ -1121,10 +1292,6 @@ const styles = StyleSheet.create({
   },
   mapLayer: {
     ...StyleSheet.absoluteFillObject,
-  },
-  mapVeil: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.68)',
   },
   mapView: {
     ...StyleSheet.absoluteFillObject,

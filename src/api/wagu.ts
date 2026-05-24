@@ -424,7 +424,10 @@ export async function getRestaurantRecommendations(token: string) {
 export async function getHiddenGemRestaurants(
   token: string,
   query?: {
+    regionKeyword?: string;
+    regionName?: string;
     regionTownName?: string;
+    townName?: string;
   },
 ) {
   return apiRequest<ApiHiddenGemRestaurantResponse>('/recommendations/restaurants/hidden-gems', {
