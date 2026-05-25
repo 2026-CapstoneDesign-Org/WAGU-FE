@@ -101,6 +101,7 @@ import { UserReviewsScreen } from '../screens/UserReviewsScreen';
 import { UserProfileScreen } from '../screens/UserProfileScreen';
 import { WriteReviewDraft, WriteReviewScreen } from '../screens/WriteReviewScreen';
 import { UserProfile, userProfiles } from '../data/userProfiles';
+import { mapReliabilityGrade } from '../utils/reliability';
 import {
   clearStoredSession,
   readStoredSession,
@@ -268,52 +269,6 @@ function createSearchResultUserProfile(user: {
     representativeListTitle: '대표 리스트',
     representativeRestaurants: [],
   };
-}
-
-function mapReliabilityGrade(grade?: string, score?: number) {
-  const normalizedGrade = grade?.trim().toUpperCase();
-
-  if (normalizedGrade === 'BRONZE') {
-    return '브론즈';
-  }
-
-  if (normalizedGrade === 'SILVER') {
-    return '실버';
-  }
-
-  if (normalizedGrade === 'GOLD') {
-    return '골드';
-  }
-
-  if (normalizedGrade === 'PLATINUM') {
-    return '플래티넘';
-  }
-
-  if (normalizedGrade === 'DIAMOND') {
-    return '다이아';
-  }
-
-  if (score === undefined) {
-    return grade;
-  }
-
-  if (score >= 80) {
-    return '다이아';
-  }
-
-  if (score >= 60) {
-    return '플래티넘';
-  }
-
-  if (score >= 40) {
-    return '골드';
-  }
-
-  if (score >= 20) {
-    return '실버';
-  }
-
-  return '브론즈';
 }
 
 function formatApiReviewDate(createdAt?: string) {

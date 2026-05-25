@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import HeartIcon from '../../assets/icons/heart.svg';
+import { ReliabilityBadge } from '../components/ReliabilityBadge';
 import { restaurants as allRestaurants } from '../data/restaurants';
 import { UserProfile } from '../data/userProfiles';
 
@@ -104,9 +105,7 @@ export function UserProfileScreen({
                 <View style={styles.nicknameRow}>
                   <Text style={styles.nickname}>{profile.nickname}</Text>
                   {hasReliability ? (
-                    <View style={styles.reliabilityBadge}>
-                      <Text style={styles.reliabilityBadgeLabel}>{profile.reliabilityGrade}</Text>
-                    </View>
+                    <ReliabilityBadge grade={profile.reliabilityGrade} height={56} />
                   ) : null}
                 </View>
                 {!isOwnProfile && onFollowToggle ? (
@@ -397,20 +396,6 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     fontWeight: '800',
     color: '#000000',
-  },
-  reliabilityBadge: {
-    minHeight: 24,
-    borderRadius: 12,
-    backgroundColor: '#F3F3F3',
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reliabilityBadgeLabel: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '800',
-    color: '#111111',
   },
   followButton: {
     minWidth: 72,

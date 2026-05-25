@@ -8,6 +8,7 @@ import ListIcon from '../../assets/icons/list.svg';
 import ReviewIcon from '../../assets/icons/review.svg';
 import SettingIcon from '../../assets/icons/setting.svg';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar';
+import { ReliabilityBadge } from '../components/ReliabilityBadge';
 import { MyList } from '../data/myLists';
 import { restaurants as allRestaurants } from '../data/restaurants';
 
@@ -154,9 +155,7 @@ export function MyPageScreen({
               <View style={styles.nicknameRow}>
                 <Text style={styles.nickname}>{nickname}님</Text>
                 {hasReliability ? (
-                  <View style={styles.reliabilityBadge}>
-                    <Text style={styles.reliabilityBadgeLabel}>{reliabilityGrade}</Text>
-                  </View>
+                  <ReliabilityBadge grade={reliabilityGrade} height={56} />
                 ) : null}
               </View>
               <View style={styles.metricsRow}>
@@ -342,20 +341,6 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     fontWeight: '800',
     color: '#000000',
-  },
-  reliabilityBadge: {
-    minHeight: 24,
-    borderRadius: 12,
-    backgroundColor: '#F3F3F3',
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reliabilityBadgeLabel: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '800',
-    color: '#111111',
   },
   metricsRow: {
     flexDirection: 'row',
