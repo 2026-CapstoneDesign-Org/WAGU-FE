@@ -105,7 +105,7 @@ export function UserProfileScreen({
                 <View style={styles.nicknameRow}>
                   <Text style={styles.nickname}>{profile.nickname}</Text>
                   {hasReliability ? (
-                    <ReliabilityBadge grade={profile.reliabilityGrade} height={56} />
+                    <ReliabilityBadge grade={profile.reliabilityGrade} height={44} />
                   ) : null}
                 </View>
                 {!isOwnProfile && onFollowToggle ? (
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 2,
   },
   nickname: {
     fontSize: 24,

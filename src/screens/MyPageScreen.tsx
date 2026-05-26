@@ -155,7 +155,7 @@ export function MyPageScreen({
               <View style={styles.nicknameRow}>
                 <Text style={styles.nickname}>{nickname}님</Text>
                 {hasReliability ? (
-                  <ReliabilityBadge grade={reliabilityGrade} height={56} />
+                  <ReliabilityBadge grade={reliabilityGrade} height={44} />
                 ) : null}
               </View>
               <View style={styles.metricsRow}>
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
   nicknameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 2,
   },
   nickname: {
     fontSize: 24,
