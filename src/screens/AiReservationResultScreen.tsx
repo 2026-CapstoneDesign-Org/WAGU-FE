@@ -93,7 +93,7 @@ export function AiReservationResultScreen({
           <View style={styles.infoCard}>
             <Text style={styles.restaurantName}>{draft.restaurant.name}</Text>
             <View style={styles.infoList}>
-              <InfoRow label="예약 상태" value={isConfirmed ? '예약 확인 완료' : result.title} />
+              <InfoRow label="예약 상태" value={isConfirmed ? '예약 완료' : result.title} />
               <InfoRow label="예약 날짜" value={draft.reservationDateLabel} />
               <InfoRow label="예약 시간" value={draft.reservationTimeLabel} />
               <InfoRow label="인원 수" value={`${draft.partySize}명`} />
@@ -123,20 +123,16 @@ export function AiReservationResultScreen({
             <Pressable style={[styles.primaryButton, { backgroundColor: accent.button }]} onPress={onRetry}>
               <Text style={styles.primaryButtonLabel}>다시 시도하기</Text>
             </Pressable>
-          ) : null}
-          <Pressable
-            style={[styles.secondaryButton, isConfirmed && styles.secondaryButtonConfirmed]}
-            onPress={onBack}
-          >
-            <Text
-              style={[
-                styles.secondaryButtonLabel,
-                isConfirmed && styles.secondaryButtonLabelConfirmed,
-              ]}
+          ) : (
+            <Pressable
+              style={[styles.secondaryButton, styles.secondaryButtonSuccess]}
+              onPress={onBack}
             >
-              가게 상세로 돌아가기
-            </Text>
-          </Pressable>
+              <Text style={[styles.secondaryButtonLabel, styles.secondaryButtonLabelSuccess]}>
+                확인
+              </Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </SafeAreaView>
@@ -193,10 +189,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#EAF8EF',
   },
   statusSymbolRejected: {
-    backgroundColor: '#FFF4E8',
+    backgroundColor: '#FFF1EF',
   },
   statusSymbolNoAnswer: {
-    backgroundColor: '#FFF1EF',
+    backgroundColor: '#FFF4E8',
   },
   statusSymbolText: {
     fontSize: 32,
@@ -204,10 +200,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   statusSymbolTextRejected: {
-    color: '#C96D14',
+    color: '#FF0000',
   },
   statusSymbolTextNoAnswer: {
-    color: '#FF3B30',
+    color: '#D85A3A',
   },
   title: {
     fontSize: 30,
@@ -298,9 +294,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
   },
-  secondaryButtonConfirmed: {
-    backgroundColor: '#111111',
-    borderColor: '#111111',
+  secondaryButtonSuccess: {
+    backgroundColor: '#FF0000',
+    borderColor: '#FF0000',
   },
   secondaryButtonLabel: {
     fontSize: 16,
@@ -308,7 +304,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111111',
   },
-  secondaryButtonLabelConfirmed: {
+  secondaryButtonLabelSuccess: {
     color: '#FFFFFF',
   },
 });

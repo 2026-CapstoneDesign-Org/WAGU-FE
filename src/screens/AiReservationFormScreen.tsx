@@ -130,7 +130,6 @@ export function AiReservationFormScreen({
     initialDraft?.bookerPhone ?? formatPhoneNumber(initialBookerPhone),
   );
   const [partySize, setPartySize] = useState(initialDraft?.partySize ?? 2);
-  const [requestNote, setRequestNote] = useState(initialDraft?.requestNote ?? '');
 
   const selectedDateOption =
     dateOptions.find((option) => option.value === selectedDate) ?? dateOptions[0];
@@ -154,7 +153,7 @@ export function AiReservationFormScreen({
       hour24,
       minute,
       partySize,
-      requestNote: requestNote.trim() || undefined,
+      requestNote: initialDraft?.requestNote,
       reservationDate: selectedDateOption.value,
       reservationDateLabel: selectedDateOption.label,
       reservationTime,
@@ -250,20 +249,6 @@ export function AiReservationFormScreen({
                   <Text style={styles.partyButtonLabel}>+</Text>
                 </Pressable>
               </View>
-            </View>
-
-            <View style={styles.inputField}>
-              <Text style={styles.fieldLabel}>요청사항</Text>
-              <TextInput
-                value={requestNote}
-                onChangeText={setRequestNote}
-                placeholder="요청사항이 있다면 남겨주세요 (선택)"
-                placeholderTextColor="#AAAAAA"
-                style={[styles.input, styles.noteInput]}
-                multiline
-                textAlignVertical="top"
-                maxLength={80}
-              />
             </View>
           </View>
 
@@ -544,9 +529,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#111111',
     paddingVertical: 0,
-  },
-  noteInput: {
-    minHeight: 74,
   },
   partyField: {
     borderRadius: 18,

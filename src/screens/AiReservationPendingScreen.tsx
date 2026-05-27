@@ -1,66 +1,168 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, BackHandler, Easing, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
-import { AiReservationDraft } from '../types/aiReservation';
+import CallIcon from '../../assets/icons/call.svg';
+import { AiReservationDraft, AiReservationStatus } from '../types/aiReservation';
 
 type AiReservationPendingScreenProps = {
   draft: AiReservationDraft;
-  onBack: () => void;
   onComplete: () => void;
+  targetStatus: AiReservationStatus;
 };
-
-const STATUS_MESSAGES = [
-  '매장에 연결 중이에요',
-  '예약 가능 여부를 확인하고 있어요',
-  '통화 내용을 정리하고 있어요',
-];
 
 export function AiReservationPendingScreen({
   draft: _draft,
-  onBack,
   onComplete,
+  targetStatus,
 }: AiReservationPendingScreenProps) {
   const [statusIndex, setStatusIndex] = useState(0);
   const [dotCount, setDotCount] = useState(1);
+  const floatY = useRef(new Animated.Value(0)).current;
+  const pulseScale = useRef(new Animated.Value(0.9)).current;
+  const pulseOpacity = useRef(new Animated.Value(0.22)).current;
+  const statusMessages = useMemo(() => {
+    if (targetStatus === 'no-answer') {
+      return ['매장에 연결 중이에요'];
+    }
+
+    if (targetStatus === 'rejected') {
+      return ['매장에 연결 중이에요', '예약 가능 여부를 확인하고 있어요'];
+    }
+
+    return ['매장에 연결 중이에요', '예약 가능 여부를 확인하고 있어요', '통화 내용을 정리하고 있어요'];
+  }, [targetStatus]);
   const activeStatus = useMemo(
-    () => STATUS_MESSAGES[Math.min(statusIndex, STATUS_MESSAGES.length - 1)],
-    [statusIndex],
+    () => statusMessages[Math.min(statusIndex, statusMessages.length - 1)],
+    [statusIndex, statusMessages],
   );
 
   useEffect(() => {
-    const first = setTimeout(() => setStatusIndex(1), 1400);
-    const second = setTimeout(() => setStatusIndex(2), 2800);
-    const done = setTimeout(() => onComplete(), 4200);
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+
+    for (let index = 1; index < statusMessages.length; index += 1) {
+      timers.push(setTimeout(() => setStatusIndex(index), 1400 * index));
+    }
+
+    timers.push(setTimeout(() => onComplete(), 1400 * statusMessages.length));
+
     const dots = setInterval(() => {
       setDotCount((current) => (current >= 3 ? 1 : current + 1));
     }, 500);
 
     return () => {
-      clearTimeout(first);
-      clearTimeout(second);
-      clearTimeout(done);
+      timers.forEach((timer) => clearTimeout(timer));
       clearInterval(dots);
     };
-  }, [onComplete]);
+  }, [onComplete, statusMessages.length]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    const floatingAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatY, {
+          toValue: -13,
+          duration: 1020,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatY, {
+          toValue: 0,
+          duration: 1020,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    floatingAnimation.start();
+
+    return () => {
+      floatingAnimation.stop();
+      floatY.stopAnimation();
+    };
+  }, [floatY]);
+
+  useEffect(() => {
+    const pulseAnimation = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(pulseScale, {
+            toValue: 1.22,
+            duration: 1700,
+            easing: Easing.out(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseScale, {
+            toValue: 0.9,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(pulseOpacity, {
+            toValue: 0.06,
+            duration: 1700,
+            easing: Easing.out(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseOpacity, {
+            toValue: 0.22,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+    );
+
+    pulseAnimation.start();
+
+    return () => {
+      pulseAnimation.stop();
+      pulseScale.stopAnimation();
+      pulseOpacity.stopAnimation();
+    };
+  }, [pulseOpacity, pulseScale]);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
       <View style={styles.screen}>
         <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={onBack}>
-            <ArrowLeftIcon width={24} height={24} />
-          </Pressable>
+          <View style={styles.headerSpacer} />
           <Text style={styles.headerTitle}>AI 예약 진행 중</Text>
           <View style={styles.headerSpacer} />
         </View>
 
         <View style={styles.content}>
-          <View style={styles.callOrb}>
-            <View style={styles.callOrbInner}>
-              <Text style={styles.callOrbLabel}>CALL</Text>
-            </View>
+          <View style={styles.callVisualWrap}>
+            <View style={styles.glowLarge} />
+            <View style={styles.glowSmall} />
+            <Animated.View
+              style={[
+                styles.pulseRing,
+                {
+                  opacity: pulseOpacity,
+                  transform: [{ scale: pulseScale }],
+                },
+              ]}
+            />
+            <Animated.View
+              style={[
+                styles.callIconWrap,
+                {
+                  transform: [{ translateY: floatY }],
+                },
+              ]}
+            >
+              <CallIcon width={132} height={132} color="#FF0000" />
+            </Animated.View>
           </View>
           <Text style={styles.statusLabel}>
             {activeStatus}
@@ -89,12 +191,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  backButton: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   headerTitle: {
     fontSize: 17,
     lineHeight: 22,
@@ -109,30 +205,40 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingBottom: 72,
   },
-  callOrb: {
+  callVisualWrap: {
+    width: 220,
+    height: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  glowLarge: {
+    position: 'absolute',
+    width: 206,
+    height: 206,
+    borderRadius: 103,
+    backgroundColor: 'rgba(255, 83, 72, 0.08)',
+  },
+  glowSmall: {
+    position: 'absolute',
+    width: 156,
+    height: 156,
+    borderRadius: 78,
+    backgroundColor: 'rgba(255, 83, 72, 0.12)',
+  },
+  pulseRing: {
+    position: 'absolute',
     width: 170,
     height: 170,
     borderRadius: 85,
-    backgroundColor: 'rgba(255, 59, 48, 0.12)',
+    borderWidth: 1.5,
+    borderColor: '#FFB6AF',
+  },
+  callIconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 28,
-  },
-  callOrbInner: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    backgroundColor: '#FF3B30',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  callOrbLabel: {
-    fontSize: 24,
-    lineHeight: 28,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 1.2,
   },
   statusLabel: {
     marginTop: 6,
