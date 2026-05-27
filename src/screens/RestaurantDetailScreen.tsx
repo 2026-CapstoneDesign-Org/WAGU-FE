@@ -63,6 +63,7 @@ type RestaurantDetailScreenProps = {
   onBack: () => void;
   restaurantName?: string;
   onAddToList?: (restaurant: Restaurant) => void;
+  onOpenAiReservation?: (restaurant: Restaurant) => void;
   onEditReview?: (reviewId: number, restaurantName: string, restaurantId?: number, content?: string) => void;
   onOpenUserProfile?: (authorName: string) => void;
   onReportReview?: (reviewId: string, reason: string) => void;
@@ -1547,6 +1548,7 @@ export function RestaurantDetailScreen({
   onBack,
   restaurantName = '와이앤웍',
   onAddToList,
+  onOpenAiReservation,
   onEditReview,
   onOpenUserProfile,
   onReportReview,
@@ -1612,6 +1614,15 @@ export function RestaurantDetailScreen({
     }
 
     Alert.alert('리뷰 쓰기', '리뷰 작성 기능은 곧 추가됩니다.');
+  };
+
+  const handlePressAiReservation = () => {
+    if (onOpenAiReservation) {
+      onOpenAiReservation(addToListRestaurant);
+      return;
+    }
+
+    Alert.alert('AI 예약', 'AI 예약 화면은 곧 연결될 예정입니다.');
   };
 
   useEffect(() => {
@@ -2543,6 +2554,15 @@ export function RestaurantDetailScreen({
           ) : null}
         </View>
 
+        {activeTab === 'home' ? (
+          <Pressable
+            style={styles.aiReservationFloatingButton}
+            onPress={handlePressAiReservation}
+          >
+            <Text style={styles.aiReservationFloatingButtonLabel}>AI 예약</Text>
+          </Pressable>
+        ) : null}
+
         {activeTab === 'review' && restaurantReviewList.length > 0 ? (
           <Pressable
             style={styles.writeReviewFloatingButton}
@@ -3057,6 +3077,29 @@ const styles = StyleSheet.create({
     elevation: 7,
   },
   writeReviewFloatingButtonLabel: {
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  aiReservationFloatingButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    minWidth: 98,
+    height: 44,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    backgroundColor: '#FF0000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  aiReservationFloatingButtonLabel: {
     fontSize: 16,
     lineHeight: 21,
     fontWeight: '700',

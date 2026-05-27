@@ -64,6 +64,9 @@ import { Restaurant, restaurants as initialRestaurantPool } from '../data/restau
 import { userReviewsByUserId } from '../data/userReviews';
 import { AddRestaurantToListRatingScreen } from '../screens/AddRestaurantToListRatingScreen';
 import { AddRestaurantToListSelectScreen } from '../screens/AddRestaurantToListSelectScreen';
+import { AiReservationFormScreen } from '../screens/AiReservationFormScreen';
+import { AiReservationPendingScreen } from '../screens/AiReservationPendingScreen';
+import { AiReservationResultScreen } from '../screens/AiReservationResultScreen';
 import { AiChatScreen } from '../screens/AiChatScreen';
 import { DeleteAccountScreen } from '../screens/DeleteAccountScreen';
 import { EditNicknameScreen } from '../screens/EditNicknameScreen';
@@ -101,6 +104,11 @@ import { UserReviewsScreen } from '../screens/UserReviewsScreen';
 import { UserProfileScreen } from '../screens/UserProfileScreen';
 import { WriteReviewDraft, WriteReviewScreen } from '../screens/WriteReviewScreen';
 import { UserProfile, userProfiles } from '../data/userProfiles';
+import {
+  AiReservationDraft,
+  AiReservationMockMode,
+  AiReservationResult,
+} from '../types/aiReservation';
 import { mapReliabilityGrade } from '../utils/reliability';
 import {
   clearStoredSession,
@@ -140,6 +148,9 @@ type FlowScreen =
   | 'edit-nickname'
   | 'delete-account'
   | 'restaurant-detail'
+  | 'ai-reservation-form'
+  | 'ai-reservation-pending'
+  | 'ai-reservation-result'
   | 'user-profile';
 
 type RankingDetailState = {
@@ -326,6 +337,63 @@ function mapApiReviewToMyReview(review: {
   };
 }
 
+function buildMockAiReservationResult(
+  draft: AiReservationDraft,
+  mockMode: AiReservationMockMode,
+): AiReservationResult {
+  if (mockMode === 'confirmed') {
+    return {
+      detail: `${draft.reservationDateLabel} ${draft.reservationTimeLabel}에 ${draft.partySize}명 예약으로 정리했어요.`,
+      status: 'confirmed',
+      summary: 'AI가 매장과 통화해 예약 가능하다는 답변을 받았어요.',
+      title: '예약이 확인됐어요',
+    };
+  }
+
+  if (mockMode === 'rejected') {
+    return {
+      detail: '매장에서 해당 시간대는 예약이 마감되었다고 안내했어요.',
+      status: 'rejected',
+      summary: '매장에서 해당 시간 예약이 어렵다고 답변했어요.',
+      title: '예약이 완료되지 않았어요',
+    };
+  }
+
+  if (mockMode === 'no-answer') {
+    return {
+      detail: '전화를 받지 않아 예약 가능 여부를 확인하지 못했어요.',
+      status: 'no-answer',
+      summary: '매장과 연결되지 않아 예약 확인을 마치지 못했어요.',
+      title: '매장과 연결되지 않았어요',
+    };
+  }
+
+  if (draft.partySize >= 7) {
+    return {
+      detail: '인원이 많아 같은 시간대 테이블 확보가 어렵다고 안내받았어요.',
+      status: 'rejected',
+      summary: '매장에서 해당 시간 예약이 어렵다고 답변했어요.',
+      title: '예약이 완료되지 않았어요',
+    };
+  }
+
+  if (draft.minute === 50) {
+    return {
+      detail: '영업 마감 준비 시간과 겹쳐 통화 연결이 원활하지 않았어요.',
+      status: 'no-answer',
+      summary: '매장과 연결되지 않아 예약 확인을 마치지 못했어요.',
+      title: '매장과 연결되지 않았어요',
+    };
+  }
+
+  return {
+    detail: `${draft.reservationDateLabel} ${draft.reservationTimeLabel}에 ${draft.partySize}명 예약으로 정리했어요.`,
+    status: 'confirmed',
+    summary: 'AI가 매장과 통화해 예약 가능하다는 답변을 받았어요.',
+    title: '예약이 확인됐어요',
+  };
+}
+
 type AuthSession = {
   accessToken: string;
   needsProfile?: boolean | null;
@@ -453,6 +521,16 @@ export function AppRoot() {
   const [restaurantDetailInitialTab, setRestaurantDetailInitialTab] = useState<'home' | 'review'>(
     'home',
   );
+  const [aiReservationRestaurant, setAiReservationRestaurant] = useState<{
+    address?: string;
+    category?: string;
+    name: string;
+    phone?: string;
+  } | null>(null);
+  const [aiReservationDraft, setAiReservationDraft] = useState<AiReservationDraft | null>(null);
+  const [aiReservationMockMode, setAiReservationMockMode] =
+    useState<AiReservationMockMode>('auto');
+  const [aiReservationResult, setAiReservationResult] = useState<AiReservationResult | null>(null);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [birthDateLabel, setBirthDateLabel] = useState<string | null>(null);
   const [genderLabel, setGenderLabel] = useState<string | null>(null);
@@ -2655,6 +2733,20 @@ export function AppRoot() {
     setScreen('restaurant-detail');
   };
 
+  const openAiReservation = (restaurant: Restaurant) => {
+    setAiReservationRestaurant({
+      address: restaurant.address,
+      category: restaurant.category,
+      name: restaurant.name,
+      phone: restaurant.phone,
+    });
+    setAiReservationDraft((current) =>
+      current?.restaurant.name === restaurant.name ? current : null,
+    );
+    setAiReservationResult(null);
+    setScreen('ai-reservation-form');
+  };
+
   const openWriteReview = (restaurantName: string, restaurantId?: number) => {
     if (!restaurantId) {
       Alert.alert('??덇땀', '??몃뼣 ?類ｋ궖???븍뜄???삳뮉 餓λ쵐??癒?뼄. ?醫롫뻻 ????쇰뻻 ??뺣즲??곻폒?紐꾩뒄.');
@@ -3144,6 +3236,7 @@ export function AppRoot() {
           restaurantName={selectedRestaurantName}
           onBack={handleBackFromRestaurantDetail}
           favoriteColor={getFavoriteColor(selectedRestaurantName)}
+          onOpenAiReservation={openAiReservation}
           onAddToList={(restaurant) =>
             openAddRestaurantToListFlow(restaurant, 'restaurant-detail')
           }
@@ -3152,6 +3245,42 @@ export function AppRoot() {
           onReportReview={handleReportReview}
           onReviewAuthorFollowChange={syncFollowStateAcrossScreens}
           onOpenWriteReview={openWriteReview}
+        />
+      ) : screen === 'ai-reservation-form' && aiReservationRestaurant ? (
+        <AiReservationFormScreen
+          restaurant={aiReservationRestaurant}
+          initialDraft={aiReservationDraft}
+          mockMode={aiReservationMockMode}
+          onBack={() => setScreen('restaurant-detail')}
+          onChangeMockMode={setAiReservationMockMode}
+          onSubmit={(draft) => {
+            setAiReservationDraft(draft);
+            setAiReservationResult(null);
+            setScreen('ai-reservation-pending');
+          }}
+        />
+      ) : screen === 'ai-reservation-pending' && aiReservationDraft ? (
+        <AiReservationPendingScreen
+          draft={aiReservationDraft}
+          onBack={() => setScreen('ai-reservation-form')}
+          onComplete={() => {
+            const nextResult = buildMockAiReservationResult(
+              aiReservationDraft,
+              aiReservationMockMode,
+            );
+            setAiReservationResult(nextResult);
+            setScreen('ai-reservation-result');
+          }}
+        />
+      ) : screen === 'ai-reservation-result' && aiReservationDraft && aiReservationResult ? (
+        <AiReservationResultScreen
+          draft={aiReservationDraft}
+          result={aiReservationResult}
+          onBack={() => setScreen('restaurant-detail')}
+          onRetry={() => {
+            setAiReservationResult(null);
+            setScreen('ai-reservation-form');
+          }}
         />
       ) : screen === 'write-review' ? (
         <WriteReviewScreen
