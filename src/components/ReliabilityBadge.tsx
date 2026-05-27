@@ -1,33 +1,21 @@
-import type { ComponentType } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Image, type ImageSourcePropType, StyleSheet, View } from 'react-native';
 
-import BronzeBadge from '../../assets/rank/bronze.svg';
-import DiamondBadge from '../../assets/rank/diamond.svg';
-import GoldBadge from '../../assets/rank/gold.svg';
-import PlatinumBadge from '../../assets/rank/platinum.svg';
-import RubyBadge from '../../assets/rank/ruby.svg';
-import SilverBadge from '../../assets/rank/silver.svg';
-import UnrankBadge from '../../assets/rank/unrank.svg';
 import {
   normalizeReliabilityGrade,
   type ReliabilityGradeLabel,
 } from '../utils/reliability';
 
 const DEFAULT_BADGE_HEIGHT = 32;
-const BADGE_ASPECT_RATIO = 1.22;
-const BADGE_VISUAL_SCALE = 2.15;
+const BADGE_ASPECT_RATIO = 320 / 310;
 
-const BADGE_COMPONENT_BY_GRADE: Record<
-  ReliabilityGradeLabel,
-  ComponentType<any>
-> = {
-  언랭: UnrankBadge,
-  브론즈: BronzeBadge,
-  실버: SilverBadge,
-  골드: GoldBadge,
-  플레티넘: PlatinumBadge,
-  다이아: DiamondBadge,
-  루비: RubyBadge,
+const BADGE_SOURCE_BY_GRADE: Record<ReliabilityGradeLabel, ImageSourcePropType> = {
+  언랭: require('../../assets/rank/unrank.png'),
+  브론즈: require('../../assets/rank/bronze.png'),
+  실버: require('../../assets/rank/silver.png'),
+  골드: require('../../assets/rank/gold.png'),
+  플레티넘: require('../../assets/rank/platinum.png'),
+  다이아: require('../../assets/rank/diamond.png'),
+  루비: require('../../assets/rank/ruby.png'),
 };
 
 type ReliabilityBadgeProps = {
@@ -45,7 +33,6 @@ export function ReliabilityBadge({
     return null;
   }
 
-  const BadgeComponent = BADGE_COMPONENT_BY_GRADE[normalizedGrade];
   const width = height * BADGE_ASPECT_RATIO;
 
   return (
@@ -58,25 +45,26 @@ export function ReliabilityBadge({
         },
       ]}
     >
-      <BadgeComponent
-        height={height}
-        width={width}
-        style={{
-          height,
-          transform: [{ scale: BADGE_VISUAL_SCALE }],
-          width,
-        }}
+      <Image
+        source={BADGE_SOURCE_BY_GRADE[normalizedGrade]}
+        style={[
+          styles.badgeImage,
+          {
+            height,
+            width,
+          },
+        ]}
+        resizeMode="contain"
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  badgeImage: {},
   badgeWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: -6,
-    overflow: 'hidden',
-    transform: [{ translateY: 4 }],
+    marginLeft: 0,
   },
 });
