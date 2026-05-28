@@ -252,31 +252,6 @@ export function AiReservationFormScreen({
             </View>
           </View>
 
-          {__DEV__ ? (
-            <View style={styles.devSection}>
-              <Text style={styles.devTitle}>개발용 결과 선택</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.devChipRow}>
-                  {MOCK_MODE_OPTIONS.map((option) => {
-                    const isActive = option.value === mockMode;
-
-                    return (
-                      <Pressable
-                        key={option.value}
-                        style={[styles.devChip, isActive && styles.devChipActive]}
-                        onPress={() => onChangeMockMode?.(option.value)}
-                      >
-                        <Text style={[styles.devChipLabel, isActive && styles.devChipLabelActive]}>
-                          {option.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-            </View>
-          ) : null}
-
           <View style={styles.noticeBox}>
             <Text style={styles.noticeTitle}>안내</Text>
             <Text style={styles.noticeItem}>
@@ -586,42 +561,6 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontWeight: '400',
     color: '#666666',
-  },
-  devSection: {
-    gap: 10,
-  },
-  devTitle: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '700',
-    color: '#111111',
-  },
-  devChipRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  devChip: {
-    minHeight: 38,
-    paddingHorizontal: 14,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  devChipActive: {
-    borderColor: '#FFBDB8',
-    backgroundColor: '#FFF1EF',
-  },
-  devChipLabel: {
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: '600',
-    color: '#555555',
-  },
-  devChipLabelActive: {
-    color: '#FF3B30',
   },
   bottomBar: {
     paddingHorizontal: 16,

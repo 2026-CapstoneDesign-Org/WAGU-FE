@@ -3,6 +3,7 @@ import {
   Animated,
   Dimensions,
   Image,
+  type ImageSourcePropType,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -35,14 +36,16 @@ export type HomeScrollState = {
 
 type BannerItem = {
   id: string;
-  imageUri?: string;
+  imageSource?: ImageSourcePropType;
 };
 
+const GOGI_BANNER = require('../../assets/icons/gogi.png');
+
 const banners: BannerItem[] = [
-  { id: 'banner-1' },
-  { id: 'banner-2' },
-  { id: 'banner-3' },
-  { id: 'banner-4' },
+  { id: 'banner-1', imageSource: GOGI_BANNER },
+  { id: 'banner-2', imageSource: GOGI_BANNER },
+  { id: 'banner-3', imageSource: GOGI_BANNER },
+  { id: 'banner-4', imageSource: GOGI_BANNER },
 ];
 
 const loopedBanners = [banners[banners.length - 1], ...banners, banners[0]];
@@ -497,10 +500,10 @@ export function MainHomeScreen({
               }}
             >
               {loopedBanners.map((banner, index) =>
-                banner.imageUri ? (
+                banner.imageSource ? (
                   <Image
                     key={`${banner.id}-${index}`}
-                    source={{ uri: banner.imageUri }}
+                    source={banner.imageSource}
                     style={styles.banner}
                     resizeMode="cover"
                   />

@@ -91,6 +91,7 @@ import { OnboardingLoginScreen } from '../screens/OnboardingLoginScreen';
 import { RankingDetailScreen } from '../screens/RankingDetailScreen';
 import { RankingTabScreen, RankingTabScrollState } from '../screens/RankingTabScreen';
 import { RegistrationCompleteScreen } from '../screens/RegistrationCompleteScreen';
+import { ReliabilityGuideScreen } from '../screens/ReliabilityGuideScreen';
 import { RestaurantDetailScreen } from '../screens/RestaurantDetailScreen';
 import { SearchResultScreen } from '../screens/SearchResultScreen';
 import { SearchScreen } from '../screens/SearchScreen';
@@ -151,6 +152,7 @@ type FlowScreen =
   | 'ai-reservation-form'
   | 'ai-reservation-pending'
   | 'ai-reservation-result'
+  | 'reliability-guide'
   | 'user-profile';
 
 type RankingDetailState = {
@@ -180,6 +182,8 @@ type UserProfileHistoryEntry = {
   userId: string;
   source: UserProfileSource;
 };
+
+type ReliabilityGuideSource = 'my-page' | 'user-profile' | null;
 
 function sortFollowersForInitialView(users: FriendUser[]) {
   return [...users].sort((left, right) => {
@@ -505,6 +509,7 @@ export function AppRoot() {
     >({});
   const [myUserId, setMyUserId] = useState<number | null>(null);
   const [myReliabilityGrade, setMyReliabilityGrade] = useState<string | null>(null);
+  const [myReliabilityScore, setMyReliabilityScore] = useState<number | null>(null);
   const [myHonorTitle, setMyHonorTitle] = useState<string | null>(null);
   const [myHonorPeriod, setMyHonorPeriod] = useState<string | null>(null);
   const [rankingEntries, setRankingEntries] = useState<{
@@ -548,8 +553,12 @@ export function AppRoot() {
   } | null>(null);
   const [aiReservationDraft, setAiReservationDraft] = useState<AiReservationDraft | null>(null);
   const [aiReservationMockMode, setAiReservationMockMode] =
-    useState<AiReservationMockMode>('auto');
+    useState<AiReservationMockMode>('no-answer');
   const [aiReservationResult, setAiReservationResult] = useState<AiReservationResult | null>(null);
+  const [reliabilityGuideSource, setReliabilityGuideSource] =
+    useState<ReliabilityGuideSource>(null);
+  const [reliabilityGuideGrade, setReliabilityGuideGrade] = useState<string | null>(null);
+  const [reliabilityGuideScore, setReliabilityGuideScore] = useState<number | null>(null);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [birthDateLabel, setBirthDateLabel] = useState<string | null>(null);
   const [genderLabel, setGenderLabel] = useState<string | null>(null);
@@ -651,6 +660,7 @@ export function AppRoot() {
     setPendingNickname(null);
     setRequiresProfileSetup(false);
     setMyReliabilityGrade(null);
+    setMyReliabilityScore(null);
     setMyHonorTitle(null);
     setMyHonorPeriod(null);
     setMyReviewItems([]);
@@ -813,6 +823,7 @@ export function AppRoot() {
         reliabilityGrade:
           mapReliabilityGrade(reliability?.grade, reliability?.score) ??
           baseProfile?.reliabilityGrade,
+        reliabilityScore: reliability?.score ?? baseProfile?.reliabilityScore,
         honorTitle: reliability?.honorTitle ?? baseProfile?.honorTitle,
         honorPeriod: reliability?.honorPeriod ?? baseProfile?.honorPeriod,
         followerCount:
@@ -1657,6 +1668,7 @@ export function AppRoot() {
             mapReliabilityGrade(reliabilityResult.value.grade, reliabilityResult.value.score) ??
               null,
           );
+          setMyReliabilityScore(reliabilityResult.value.score ?? null);
           setMyHonorTitle(reliabilityResult.value.honorTitle ?? null);
           setMyHonorPeriod(reliabilityResult.value.honorPeriod ?? null);
         }
@@ -2766,6 +2778,17 @@ export function AppRoot() {
     setScreen('ai-reservation-form');
   };
 
+  const openReliabilityGuide = (
+    source: Exclude<ReliabilityGuideSource, null>,
+    grade?: string | null,
+    score?: number | null,
+  ) => {
+    setReliabilityGuideSource(source);
+    setReliabilityGuideGrade(grade ?? null);
+    setReliabilityGuideScore(score ?? null);
+    setScreen('reliability-guide');
+  };
+
   const openWriteReview = (restaurantName: string, restaurantId?: number) => {
     if (!restaurantId) {
       Alert.alert('??덇땀', '??몃뼣 ?類ｋ궖???븍뜄???삳뮉 餓λ쵐??癒?뼄. ?醫롫뻻 ????쇰뻻 ??뺣즲??곻폒?紐꾩뒄.');
@@ -3304,6 +3327,20 @@ export function AppRoot() {
             setScreen('ai-reservation-form');
           }}
         />
+      ) : screen === 'reliability-guide' ? (
+        <ReliabilityGuideScreen
+          currentGrade={reliabilityGuideGrade}
+          currentScore={reliabilityGuideScore}
+          onBack={() => {
+            if (reliabilityGuideSource === 'user-profile') {
+              setScreen('user-profile');
+              return;
+            }
+
+            setActiveTab('my');
+            setScreen('tabs');
+          }}
+        />
       ) : screen === 'write-review' ? (
         <WriteReviewScreen
           initialContent={writeReviewInitialContent}
@@ -3467,6 +3504,13 @@ export function AppRoot() {
           isFollowLoading={userProfileFollowPendingIds.includes(selectedUserProfileId)}
           isFollowing={userProfileFollowStateById[selectedUserProfileId]}
           isOwnProfile={myUserId !== null && Number(selectedUserProfileId) === myUserId}
+          onOpenReliabilityGuide={() =>
+            openReliabilityGuide(
+              'user-profile',
+              selectedVisibleUserProfile?.reliabilityGrade,
+              selectedVisibleUserProfile?.reliabilityScore,
+            )
+          }
           onFollowToggle={(nextIsFollowing) =>
             void handleToggleUserProfileFollow(selectedUserProfileId, nextIsFollowing)
           }
@@ -3646,6 +3690,13 @@ export function AppRoot() {
           initialScrollState={myPageScrollState}
           nickname={nickname}
           myLists={myLists}
+          onOpenReliabilityGuide={() =>
+            openReliabilityGuide(
+              'my-page',
+              myReliabilityGrade ?? undefined,
+              myReliabilityScore ?? undefined,
+            )
+          }
           onOpenMyFollowers={() => {
             setMyFriendsInitialTab('followers');
             setScreen('my-friends');

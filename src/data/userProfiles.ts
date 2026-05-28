@@ -9,6 +9,7 @@ export type UserProfile = {
   honorPeriod?: string;
   honorTitle?: string;
   reliabilityGrade?: string;
+  reliabilityScore?: number;
   reviewCount?: string;
   representativeListIsLiked?: boolean;
   representativeListId?: string;

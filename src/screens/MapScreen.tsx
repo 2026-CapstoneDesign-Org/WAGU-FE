@@ -464,14 +464,14 @@ export function MapScreen({
   }, [mergedRestaurants]);
 
   const baseFilteredRestaurants = useMemo(() => {
-    if (activeFilters.length === 0) {
-      return mergedRestaurants;
-    }
-
     const hasHiddenGemFilter = activeFilters.includes(HIDDEN_GEM_FILTER);
     const categoryFilters = activeFilters.filter((filter) => filter !== HIDDEN_GEM_FILTER);
 
     return mergedRestaurants.filter((restaurant) => {
+      if (restaurant.isHiddenGem && !hasHiddenGemFilter) {
+        return false;
+      }
+
       if (hasHiddenGemFilter && !restaurant.isHiddenGem) {
         return false;
       }

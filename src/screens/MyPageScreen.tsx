@@ -35,6 +35,7 @@ type MyPageScreenProps = {
   initialScrollState?: MyPageScrollState;
   nickname?: string;
   myLists: MyList[];
+  onOpenReliabilityGuide?: () => void;
   onOpenMyFollowers?: () => void;
   onOpenMyFriends?: () => void;
   onOpenMyLists?: () => void;
@@ -77,6 +78,7 @@ export function MyPageScreen({
   initialScrollState,
   nickname = '먹부림',
   myLists,
+  onOpenReliabilityGuide,
   onOpenMyFollowers,
   onOpenMyFriends,
   onOpenMyLists,
@@ -155,7 +157,13 @@ export function MyPageScreen({
               <View style={styles.nicknameRow}>
                 <Text style={styles.nickname}>{nickname}님</Text>
                 {hasReliability ? (
-                  <ReliabilityBadge grade={reliabilityGrade} height={28} />
+                  <Pressable
+                    hitSlop={8}
+                    onPress={onOpenReliabilityGuide}
+                    disabled={!onOpenReliabilityGuide}
+                  >
+                    <ReliabilityBadge grade={reliabilityGrade} height={28} />
+                  </Pressable>
                 ) : null}
               </View>
               <View style={styles.metricsRow}>

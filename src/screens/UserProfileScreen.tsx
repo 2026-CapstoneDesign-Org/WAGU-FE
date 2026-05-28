@@ -18,6 +18,7 @@ type UserProfileScreenProps = {
   isFollowing?: boolean;
   isOwnProfile?: boolean;
   onBack: () => void;
+  onOpenReliabilityGuide?: () => void;
   onOpenFollowing?: () => void;
   onFollowToggle?: (nextIsFollowing: boolean) => void;
   onOpenFollowers?: () => void;
@@ -36,6 +37,7 @@ export function UserProfileScreen({
   isFollowing = false,
   isOwnProfile = false,
   onBack,
+  onOpenReliabilityGuide,
   onOpenFollowing,
   onFollowToggle,
   onOpenFollowers,
@@ -105,7 +107,13 @@ export function UserProfileScreen({
                 <View style={styles.nicknameRow}>
                   <Text style={styles.nickname}>{profile.nickname}</Text>
                   {hasReliability ? (
-                    <ReliabilityBadge grade={profile.reliabilityGrade} height={28} />
+                    <Pressable
+                      hitSlop={8}
+                      onPress={onOpenReliabilityGuide}
+                      disabled={!onOpenReliabilityGuide}
+                    >
+                      <ReliabilityBadge grade={profile.reliabilityGrade} height={28} />
+                    </Pressable>
                   ) : null}
                 </View>
                 {!isOwnProfile && onFollowToggle ? (
