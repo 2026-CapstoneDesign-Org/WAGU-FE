@@ -3,24 +3,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import { ReliabilityBadge } from '../components/ReliabilityBadge';
-import {
-  getReliabilityProgress,
-  RELIABILITY_GRADE_INFOS,
-} from '../utils/reliability';
+import { RELIABILITY_GRADE_INFOS } from '../utils/reliability';
 
 type ReliabilityGuideScreenProps = {
   currentGrade?: string | null;
-  currentScore?: number | null;
   onBack: () => void;
 };
 
 export function ReliabilityGuideScreen({
   currentGrade,
-  currentScore,
   onBack,
 }: ReliabilityGuideScreenProps) {
-  const progress = getReliabilityProgress(currentGrade, currentScore);
-
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
       <View style={styles.screen}>
@@ -38,7 +31,7 @@ export function ReliabilityGuideScreen({
         >
           <View style={styles.grid}>
             {RELIABILITY_GRADE_INFOS.map((gradeInfo) => {
-              const isCurrent = progress.currentGrade === gradeInfo.key;
+              const isCurrent = currentGrade === gradeInfo.key;
 
               return (
                 <View

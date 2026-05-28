@@ -91,12 +91,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}) 
   const isAuthLikeFailure =
     response.status === 401 || response.status === 403 || contentType?.includes('text/html');
 
-  if (
-    options.token &&
-    !options.skipAuthRefresh &&
-    isAuthLikeFailure &&
-    authRefreshHandler
-  ) {
+  if (options.token && !options.skipAuthRefresh && isAuthLikeFailure && authRefreshHandler) {
     inflightAuthRefresh ??= authRefreshHandler().finally(() => {
       inflightAuthRefresh = null;
     });
@@ -113,7 +108,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}) 
   }
 
   if (contentType?.includes('text/html')) {
-    throw new ApiError('로그인이 필요합니다.', response.status || 401, parsedBody);
+    throw new ApiError('Login required.', 401, parsedBody);
   }
 
   if (!response.ok) {
@@ -123,7 +118,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}) 
       'message' in parsedBody &&
       typeof parsedBody.message === 'string'
         ? parsedBody.message
-        : '요청을 처리하지 못했습니다.';
+        : 'Request failed.';
 
     throw new ApiError(message, response.status, parsedBody);
   }

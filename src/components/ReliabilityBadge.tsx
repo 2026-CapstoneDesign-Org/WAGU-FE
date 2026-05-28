@@ -13,7 +13,7 @@ const BADGE_SOURCE_BY_GRADE: Record<ReliabilityGradeLabel, ImageSourcePropType> 
   브론즈: require('../../assets/rank/bronze.png'),
   실버: require('../../assets/rank/silver.png'),
   골드: require('../../assets/rank/gold.png'),
-  플레티넘: require('../../assets/rank/platinum.png'),
+  플래티넘: require('../../assets/rank/platinum.png'),
   다이아: require('../../assets/rank/diamond.png'),
   루비: require('../../assets/rank/ruby.png'),
 };

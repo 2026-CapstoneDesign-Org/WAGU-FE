@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from 'react';
 import { useMemo } from 'react';
 import { useRef } from 'react';
-import { Alert, Platform, ToastAndroid } from 'react-native';
+import { ActivityIndicator, Alert, Platform, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -110,7 +110,7 @@ import {
   AiReservationMockMode,
   AiReservationResult,
 } from '../types/aiReservation';
-import { mapReliabilityGrade } from '../utils/reliability';
+import { normalizeReliabilityGrade } from '../utils/reliability';
 import {
   clearStoredSession,
   readStoredSession,
@@ -120,6 +120,7 @@ import {
 type SearchResultTabKey = 'restaurant' | 'user' | 'region';
 
 type FlowScreen =
+  | 'auth-loading'
   | 'login'
   | 'signup-nickname'
   | 'signup-profile'
@@ -159,6 +160,14 @@ type RankingDetailState = {
   sourceTab: AppTab;
   variant: 'local' | 'national';
 } | null;
+
+function AuthLoadingScreen() {
+  return (
+    <View style={styles.authLoadingScreen}>
+      <ActivityIndicator size="large" color="#FF3B30" />
+    </View>
+  );
+}
 
 type RestaurantDetailSource =
   | { type: 'search-result' }
@@ -465,7 +474,7 @@ export function AppRoot() {
   const [tasteFlowSource, setTasteFlowSource] = useState<'onboarding' | 'my-lists'>(
     'onboarding',
   );
-  const [screen, setScreen] = useState<FlowScreen>('login');
+  const [screen, setScreen] = useState<FlowScreen>('auth-loading');
   const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [rankingDetail, setRankingDetail] = useState<RankingDetailState>(null);
   const [selectedRestaurants, setSelectedRestaurants] = useState<Restaurant[]>([]);
@@ -553,12 +562,11 @@ export function AppRoot() {
   } | null>(null);
   const [aiReservationDraft, setAiReservationDraft] = useState<AiReservationDraft | null>(null);
   const [aiReservationMockMode, setAiReservationMockMode] =
-    useState<AiReservationMockMode>('no-answer');
+    useState<AiReservationMockMode>('auto');
   const [aiReservationResult, setAiReservationResult] = useState<AiReservationResult | null>(null);
   const [reliabilityGuideSource, setReliabilityGuideSource] =
     useState<ReliabilityGuideSource>(null);
   const [reliabilityGuideGrade, setReliabilityGuideGrade] = useState<string | null>(null);
-  const [reliabilityGuideScore, setReliabilityGuideScore] = useState<number | null>(null);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [birthDateLabel, setBirthDateLabel] = useState<string | null>(null);
   const [genderLabel, setGenderLabel] = useState<string | null>(null);
@@ -679,20 +687,62 @@ export function AppRoot() {
     await clearStoredSession();
   };
 
+  const hasRejectedAuthError = (
+    results: PromiseSettledResult<unknown>[],
+  ) => results.some((result) => result.status === 'rejected' && isAuthError(result.reason));
+
   useEffect(() => {
     let cancelled = false;
 
     const restoreStoredSession = async () => {
       const storedSession = await readStoredSession();
 
-      if (!storedSession || cancelled) {
+      if (cancelled) {
+        return;
+      }
+
+      if (!storedSession) {
+        setScreen('login');
         return;
       }
 
       setLoginProvider(storedSession.provider);
+
+      if (storedSession.refreshToken) {
+        try {
+          const refreshed = await refreshAuthToken(storedSession.refreshToken);
+
+          if (cancelled) {
+            return;
+          }
+
+          const nextSession = {
+            accessToken: refreshed.accessToken,
+            refreshToken: refreshed.refreshToken ?? storedSession.refreshToken,
+          };
+
+          await applyStoredSession(storedSession.provider, nextSession);
+
+          if (cancelled) {
+            return;
+          }
+
+          setActiveTab('home');
+          setScreen('tabs');
+          return;
+        } catch {
+          if (cancelled) {
+            return;
+          }
+
+          await clearAuthSession();
+          return;
+        }
+      }
+
       setSession({
         accessToken: storedSession.accessToken,
-        refreshToken: storedSession.refreshToken,
+        refreshToken: null,
       });
       setActiveTab('home');
       setScreen('tabs');
@@ -777,6 +827,22 @@ export function AppRoot() {
         return;
       }
 
+      if (
+        hasRejectedAuthError([
+          userInfoResult,
+          followCountResult,
+          reliabilityResult,
+          userReviewsResult,
+          followStatusResult,
+          representativeListResult,
+          followingsResult,
+          followersResult,
+        ])
+      ) {
+        await clearAuthSession();
+        return;
+      }
+
       const userInfo = userInfoResult.status === 'fulfilled' ? userInfoResult.value : null;
       const followCount = followCountResult.status === 'fulfilled' ? followCountResult.value : null;
       const reliability =
@@ -821,8 +887,7 @@ export function AppRoot() {
         nickname: userInfo?.nickname ?? baseProfile?.nickname ?? '',
         profileImageUrl: userInfo?.profileImageUrl ?? baseProfile?.profileImageUrl,
         reliabilityGrade:
-          mapReliabilityGrade(reliability?.grade, reliability?.score) ??
-          baseProfile?.reliabilityGrade,
+          normalizeReliabilityGrade(reliability?.grade) ?? baseProfile?.reliabilityGrade,
         reliabilityScore: reliability?.score ?? baseProfile?.reliabilityScore,
         honorTitle: reliability?.honorTitle ?? baseProfile?.honorTitle,
         honorPeriod: reliability?.honorPeriod ?? baseProfile?.honorPeriod,
@@ -1301,6 +1366,17 @@ export function AppRoot() {
           getListRecommendations(token),
         ]);
 
+      if (hasRejectedAuthError([restaurantRecommendationsResult, recommendationsResult])) {
+        const authError =
+          restaurantRecommendationsResult.status === 'rejected'
+            ? restaurantRecommendationsResult.reason
+            : recommendationsResult.status === 'rejected'
+              ? recommendationsResult.reason
+              : new Error('Authentication required.');
+
+        throw authError;
+      }
+
       if (restaurantRecommendationsResult.status === 'fulfilled') {
         console.log('[home recommendations][restaurants] success', {
           count: restaurantRecommendationsResult.value.items.length,
@@ -1655,6 +1731,22 @@ export function AppRoot() {
               getUserReviews(session.accessToken, me.id),
             ]);
 
+        if (
+          hasRejectedAuthError([
+            followCountResult,
+            listsResult,
+            localRankingResult,
+            nationalRankingResult,
+            followingsResult,
+            followersResult,
+            reliabilityResult,
+            myReviewsResult,
+          ])
+        ) {
+          await clearAuthSession();
+          return;
+        }
+
         if (cancelled) {
           return;
         }
@@ -1664,10 +1756,7 @@ export function AppRoot() {
         }
 
         if (reliabilityResult.status === 'fulfilled') {
-          setMyReliabilityGrade(
-            mapReliabilityGrade(reliabilityResult.value.grade, reliabilityResult.value.score) ??
-              null,
-          );
+          setMyReliabilityGrade(normalizeReliabilityGrade(reliabilityResult.value.grade));
           setMyReliabilityScore(reliabilityResult.value.score ?? null);
           setMyHonorTitle(reliabilityResult.value.honorTitle ?? null);
           setMyHonorPeriod(reliabilityResult.value.honorPeriod ?? null);
@@ -2781,11 +2870,9 @@ export function AppRoot() {
   const openReliabilityGuide = (
     source: Exclude<ReliabilityGuideSource, null>,
     grade?: string | null,
-    score?: number | null,
   ) => {
     setReliabilityGuideSource(source);
     setReliabilityGuideGrade(grade ?? null);
-    setReliabilityGuideScore(score ?? null);
     setScreen('reliability-guide');
   };
 
@@ -3085,7 +3172,9 @@ export function AppRoot() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" backgroundColor="#FFFFFF" />
-      {screen === 'login' ? (
+      {screen === 'auth-loading' ? (
+        <AuthLoadingScreen />
+      ) : screen === 'login' ? (
         <OnboardingLoginScreen
           onLoginSuccess={(provider, nextSession) =>
             void handleLoginSuccess(provider as LoginProvider, nextSession)
@@ -3330,7 +3419,6 @@ export function AppRoot() {
       ) : screen === 'reliability-guide' ? (
         <ReliabilityGuideScreen
           currentGrade={reliabilityGuideGrade}
-          currentScore={reliabilityGuideScore}
           onBack={() => {
             if (reliabilityGuideSource === 'user-profile') {
               setScreen('user-profile');
@@ -3508,7 +3596,6 @@ export function AppRoot() {
             openReliabilityGuide(
               'user-profile',
               selectedVisibleUserProfile?.reliabilityGrade,
-              selectedVisibleUserProfile?.reliabilityScore,
             )
           }
           onFollowToggle={(nextIsFollowing) =>
@@ -3694,7 +3781,6 @@ export function AppRoot() {
             openReliabilityGuide(
               'my-page',
               myReliabilityGrade ?? undefined,
-              myReliabilityScore ?? undefined,
             )
           }
           onOpenMyFollowers={() => {
@@ -3756,3 +3842,13 @@ export function AppRoot() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  authLoadingScreen: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+});
