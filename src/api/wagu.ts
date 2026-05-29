@@ -267,6 +267,23 @@ export type ApiReliabilityScore = {
   userId: number;
 };
 
+export type ApiNotificationType =
+  | 'FOLLOW'
+  | 'FOLLOWING_NEW_LIST'
+  | 'FOLLOWING_NEW_REVIEW'
+  | 'LIST_LIKE'
+  | 'REVIEW_LIKE';
+
+export type ApiNotification = {
+  createdAt?: string;
+  id: number;
+  isRead?: boolean;
+  message?: string;
+  targetId?: number;
+  targetType?: string;
+  type: ApiNotificationType;
+};
+
 type ApiReviewVoteRequest = {
   voteType: 'DISLIKE' | 'LIKE';
 };
@@ -779,6 +796,32 @@ export async function followUser(token: string, userId: number) {
 export async function unfollowUser(token: string, userId: number) {
   return apiRequest<void>(`/users/${userId}/follow`, {
     method: 'DELETE',
+    token,
+  });
+}
+
+export async function getNotifications(token: string) {
+  return apiRequest<ApiNotification[]>('/notifications', {
+    token,
+  });
+}
+
+export async function getUnreadNotificationCount(token: string) {
+  return apiRequest<number>('/notifications/unread/count', {
+    token,
+  });
+}
+
+export async function markNotificationAsRead(token: string, notificationId: number) {
+  return apiRequest<void>(`/notifications/${notificationId}/read`, {
+    method: 'PATCH',
+    token,
+  });
+}
+
+export async function markAllNotificationsAsRead(token: string) {
+  return apiRequest<void>('/notifications/read/all', {
+    method: 'PATCH',
     token,
   });
 }

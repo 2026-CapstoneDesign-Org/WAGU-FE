@@ -22,6 +22,7 @@ import {
   getFollowCount,
   getFollowStatus,
   getFollowings,
+  getUnreadNotificationCount,
   getListDetail,
   getListLikeCount,
   getListRecommendations,
@@ -561,6 +562,7 @@ export function AppRoot() {
   const [recommendedRestaurantItems, setRecommendedRestaurantItems] = useState<
     HomeRestaurantCardItem[]
   >([]);
+  const [hasUnreadNews, setHasUnreadNews] = useState(false);
   const [recommendedUserProfiles, setRecommendedUserProfiles] = useState<UserProfile[]>([]);
   const [remoteUserProfiles, setRemoteUserProfiles] = useState<UserProfile[]>([]);
   const [searchResultUserProfiles, setSearchResultUserProfiles] = useState<UserProfile[]>([]);
@@ -1126,6 +1128,42 @@ export function AppRoot() {
       cancelled = true;
     };
   }, [activeTab, myListLikeCountById, myLists, screen, session?.accessToken]);
+
+  useEffect(() => {
+    if (!session?.accessToken || activeTab !== 'home' || screen !== 'tabs') {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncUnreadNotificationCount = async () => {
+      try {
+        const unreadCount = await getUnreadNotificationCount(session.accessToken);
+
+        if (cancelled) {
+          return;
+        }
+
+        setHasUnreadNews(unreadCount > 0);
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setHasUnreadNews(false);
+      }
+    };
+
+    void syncUnreadNotificationCount();
+    const intervalId = setInterval(() => {
+      void syncUnreadNotificationCount();
+    }, 30000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [activeTab, screen, session?.accessToken]);
 
   useEffect(() => {
     if (!session?.accessToken || screen !== 'user-profile' || !selectedUserProfileId) {
@@ -1704,6 +1742,7 @@ export function AppRoot() {
       setRecommendedRestaurantItems([]);
       setRecommendedMealFriendItems([]);
       setRecommendedUserProfiles([]);
+      setHasUnreadNews(false);
       return;
     }
 
@@ -1752,6 +1791,7 @@ export function AppRoot() {
             followersResult,
             reliabilityResult,
             myReviewsResult,
+            unreadNotificationCountResult,
           ] =
             await Promise.allSettled([
               getFollowCount(session.accessToken, me.id),
@@ -1762,6 +1802,7 @@ export function AppRoot() {
               getFollowers(session.accessToken, me.id),
               getReliabilityScore(session.accessToken, me.id),
               getUserReviews(session.accessToken, me.id),
+              getUnreadNotificationCount(session.accessToken),
             ]);
 
         if (
@@ -1774,6 +1815,7 @@ export function AppRoot() {
             followersResult,
             reliabilityResult,
             myReviewsResult,
+            unreadNotificationCountResult,
           ])
         ) {
           await clearAuthSession();
@@ -1797,6 +1839,10 @@ export function AppRoot() {
 
         if (myReviewsResult.status === 'fulfilled') {
           setMyReviewItems(myReviewsResult.value.map(mapApiReviewToMyReview));
+        }
+
+        if (unreadNotificationCountResult.status === 'fulfilled') {
+          setHasUnreadNews(unreadNotificationCountResult.value > 0);
         }
 
         if (followingsResult.status === 'fulfilled' && followersResult.status === 'fulfilled') {
@@ -1887,6 +1933,7 @@ export function AppRoot() {
           setRecommendedRestaurantItems([]);
           setRecommendedMealFriendItems([]);
           setRecommendedUserProfiles([]);
+          setHasUnreadNews(false);
           setRankingEntries({
             local: [],
             national: [],
@@ -3358,7 +3405,23 @@ export function AppRoot() {
       ) : screen === 'ai-chat' ? (
         <AiChatScreen onBack={() => setScreen('tabs')} />
       ) : screen === 'news' ? (
-        <NewsScreen onBack={() => setScreen('tabs')} />
+        <NewsScreen
+          accessToken={session?.accessToken}
+          onBack={async () => {
+            if (session?.accessToken) {
+              try {
+                const unreadCount = await getUnreadNotificationCount(session.accessToken);
+                setHasUnreadNews(unreadCount > 0);
+              } catch {
+                setHasUnreadNews(false);
+              }
+            } else {
+              setHasUnreadNews(false);
+            }
+
+            setScreen('tabs');
+          }}
+        />
         ) : screen === 'search' ? (
           <SearchScreen
             initialQuery={searchScreenInitialQuery}
@@ -3788,6 +3851,7 @@ export function AppRoot() {
       ) : activeTab === 'home' ? (
         <MainHomeScreen
           featuredRestaurantItems={recommendedRestaurantItems}
+          hasUnreadNews={hasUnreadNews}
           initialScrollState={homeScrollState}
           localRankingItems={rankingEntries.local}
           mealFriendItems={recommendedMealFriendItems}

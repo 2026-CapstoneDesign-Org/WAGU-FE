@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import HeartIcon from '../../assets/icons/heart.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
@@ -125,6 +126,7 @@ type MainHomeScreenProps = {
   localRankingItems?: RankingEntry[];
   mealFriendItems?: HomeProfileCardItem[];
   nationalRankingItems?: RankingEntry[];
+  hasUnreadNews?: boolean;
   onOpenUserProfile?: (userId: string) => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onPressAi?: () => void;
@@ -376,12 +378,14 @@ function HorizontalRestaurantSection({
 
 export function MainHomeScreen({
   featuredRestaurantItems,
+  hasUnreadNews = false,
   initialScrollState,
   localRankingItems,
   mealFriendItems,
   nationalRankingItems,
   onOpenUserProfile,
   onOpenRestaurantDetail,
+  onPressNews,
   onPressLadderGame,
   onPressLocalRanking,
   onPressNationalRanking,
@@ -477,6 +481,10 @@ export function MainHomeScreen({
             <Text style={styles.logo}>WAGU</Text>
 
             <View style={styles.headerIcons}>
+              <Pressable style={styles.iconButton} onPress={onPressNews}>
+                <HeartIcon width={24} height={24} color="#000000" />
+                {hasUnreadNews ? <View style={styles.newsBadgeDot} /> : null}
+              </Pressable>
               <Pressable style={styles.iconButton} onPress={onPressSearch}>
                 <SearchIcon width={24} height={24} color="#000000" />
               </Pressable>
@@ -700,6 +708,16 @@ const styles = StyleSheet.create({
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  newsBadgeDot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#FF3B30',
   },
   banner: {
     aspectRatio: 3 / 2,
