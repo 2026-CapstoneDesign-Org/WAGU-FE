@@ -70,6 +70,8 @@ import { AiReservationResultScreen } from '../screens/AiReservationResultScreen'
 import { AiChatScreen } from '../screens/AiChatScreen';
 import { DeleteAccountScreen } from '../screens/DeleteAccountScreen';
 import { EditNicknameScreen } from '../screens/EditNicknameScreen';
+import { LadderGamePlayScreen } from '../screens/LadderGamePlayScreen';
+import { LadderGameStartScreen } from '../screens/LadderGameStartScreen';
 import {
   HomeProfileCardItem,
   HomeRestaurantCardItem,
@@ -110,7 +112,9 @@ import {
   AiReservationMockMode,
   AiReservationResult,
 } from '../types/aiReservation';
+import { LadderGameSetup } from '../types/ladderGame';
 import { normalizeReliabilityGrade } from '../utils/reliability';
+import { buildLadderSetup } from '../utils/ladderGame';
 import {
   clearStoredSession,
   readStoredSession,
@@ -153,6 +157,8 @@ type FlowScreen =
   | 'ai-reservation-form'
   | 'ai-reservation-pending'
   | 'ai-reservation-result'
+  | 'ladder-start'
+  | 'ladder-play'
   | 'reliability-guide'
   | 'user-profile';
 
@@ -251,6 +257,30 @@ const HOME_PROFILE_ACCENT_COLORS = [
   '#5D8DF4',
   '#E96DC0',
 ];
+
+const retryAsync = async <T,>(
+  operation: () => Promise<T>,
+  attempts = 3,
+  delayMs = 450,
+): Promise<T> => {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === attempts - 1) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw lastError;
+};
 
 function mergeUserProfiles(
   primaryProfiles: UserProfile[],
@@ -564,6 +594,8 @@ export function AppRoot() {
   const [aiReservationMockMode, setAiReservationMockMode] =
     useState<AiReservationMockMode>('auto');
   const [aiReservationResult, setAiReservationResult] = useState<AiReservationResult | null>(null);
+  const [ladderPlayerCount, setLadderPlayerCount] = useState(4);
+  const [ladderSetup, setLadderSetup] = useState<LadderGameSetup>(buildLadderSetup(4));
   const [reliabilityGuideSource, setReliabilityGuideSource] =
     useState<ReliabilityGuideSource>(null);
   const [reliabilityGuideGrade, setReliabilityGuideGrade] = useState<string | null>(null);
@@ -728,7 +760,6 @@ export function AppRoot() {
           }
 
           setActiveTab('home');
-          setScreen('tabs');
           return;
         } catch {
           if (cancelled) {
@@ -745,7 +776,6 @@ export function AppRoot() {
         refreshToken: null,
       });
       setActiveTab('home');
-      setScreen('tabs');
     };
 
     void restoreStoredSession();
@@ -1681,17 +1711,20 @@ export function AppRoot() {
 
     const hydrateSession = async () => {
       try {
-        const me = await getMyInfo(session.accessToken);
+        const me = await retryAsync(() => getMyInfo(session.accessToken));
 
         if (cancelled) {
           return;
         }
+
+        const derivedNeedsProfile = !me.birthYear || !me.birthMonth || !me.birthDay || !me.gender;
 
         setNickname(me.nickname);
         setProfileImageUrl(me.profileImageUrl ?? null);
         setBirthDateLabel(formatBirthDate(me));
         setGenderLabel(formatGenderLabel(me.gender));
         setMyUserId(me.id);
+        setRequiresProfileSetup(derivedNeedsProfile);
 
         const fetchPreferredLocalRanking = async () => {
           const regionCandidates = ['용인시 처인구', '용인', '용인시', '처인구', '기흥구', '수지구'];
@@ -1819,6 +1852,23 @@ export function AppRoot() {
         await hydrateHomeRecommendations(session.accessToken, {
           cancelled: () => cancelled,
         });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (listsResult.status === 'fulfilled' && listsResult.value.length === 0) {
+          setTasteFlowSource('onboarding');
+          setScreen((current) => (current === 'auth-loading' ? 'signup-nickname' : current));
+          return;
+        }
+
+        if (derivedNeedsProfile) {
+          setScreen((current) => (current === 'auth-loading' ? 'signup-profile' : current));
+          return;
+        }
+
+        setScreen((current) => (current === 'auth-loading' ? 'tabs' : current));
       } catch (error) {
         if (cancelled) {
           return;
@@ -1843,6 +1893,8 @@ export function AppRoot() {
           });
           setMyLists([]);
         }
+
+        setScreen((current) => (current === 'auth-loading' ? 'tabs' : current));
       }
     };
 
@@ -2876,6 +2928,16 @@ export function AppRoot() {
     setScreen('reliability-guide');
   };
 
+  const openLadderGame = () => {
+    setScreen('ladder-start');
+  };
+
+  const handleConfirmLadderCount = (count: number) => {
+    setLadderPlayerCount(count);
+    setLadderSetup(buildLadderSetup(count));
+    setScreen('ladder-play');
+  };
+
   const openWriteReview = (restaurantName: string, restaurantId?: number) => {
     if (!restaurantId) {
       Alert.alert('??덇땀', '??몃뼣 ?類ｋ궖???븍뜄???삳뮉 餓λ쵐??癒?뼄. ?醫롫뻻 ????쇰뻻 ??뺣즲??곻폒?紐꾩뒄.');
@@ -3416,6 +3478,23 @@ export function AppRoot() {
             setScreen('ai-reservation-form');
           }}
         />
+      ) : screen === 'ladder-start' ? (
+        <LadderGameStartScreen
+          initialCount={ladderPlayerCount}
+          onBack={() => {
+            setActiveTab('home');
+            setHomeRestoreAnimated(false);
+            setHomeRestoreKey((current) => current + 1);
+            setScreen('tabs');
+          }}
+          onChangeCount={setLadderPlayerCount}
+          onConfirm={handleConfirmLadderCount}
+        />
+      ) : screen === 'ladder-play' ? (
+        <LadderGamePlayScreen
+          setup={ladderSetup}
+          onBack={() => setScreen('ladder-start')}
+        />
       ) : screen === 'reliability-guide' ? (
         <ReliabilityGuideScreen
           currentGrade={reliabilityGuideGrade}
@@ -3722,6 +3801,7 @@ export function AppRoot() {
             setScreen('user-profile');
           }}
           onPressAi={() => setScreen('ai-chat')}
+          onPressLadderGame={openLadderGame}
           onPressNews={() => setScreen('news')}
           onPressLocalRanking={() => openRankingDetail('local')}
           onPressNationalRanking={() => openRankingDetail('national')}

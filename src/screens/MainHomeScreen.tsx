@@ -35,13 +35,36 @@ export type HomeScrollState = {
 
 type BannerItem = {
   id: string;
+  subtitle: string;
+  title: string;
+  type: 'default' | 'ladder';
 };
 
 const banners: BannerItem[] = [
-  { id: 'banner-1' },
-  { id: 'banner-2' },
-  { id: 'banner-3' },
-  { id: 'banner-4' },
+  {
+    id: 'banner-1',
+    title: '사다리타기',
+    subtitle: '누가 걸릴지 빠르게 정해보세요',
+    type: 'ladder',
+  },
+  {
+    id: 'banner-2',
+    title: '업데이트 예정',
+    subtitle: '다음 프로모션이 곧 공개돼요',
+    type: 'default',
+  },
+  {
+    id: 'banner-3',
+    title: '업데이트 예정',
+    subtitle: 'WAGU의 새로운 기능을 준비 중이에요',
+    type: 'default',
+  },
+  {
+    id: 'banner-4',
+    title: '업데이트 예정',
+    subtitle: '다음 배너 자리에 새 소식이 들어와요',
+    type: 'default',
+  },
 ];
 
 const loopedBanners = [banners[banners.length - 1], ...banners, banners[0]];
@@ -105,6 +128,7 @@ type MainHomeScreenProps = {
   onOpenUserProfile?: (userId: string) => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onPressAi?: () => void;
+  onPressLadderGame?: () => void;
   onPressNews?: () => void;
   onPressLocalRanking?: () => void;
   onPressNationalRanking?: () => void;
@@ -358,6 +382,7 @@ export function MainHomeScreen({
   nationalRankingItems,
   onOpenUserProfile,
   onOpenRestaurantDetail,
+  onPressLadderGame,
   onPressLocalRanking,
   onPressNationalRanking,
   onPressSearch,
@@ -495,9 +520,45 @@ export function MainHomeScreen({
                 scheduleNextAutoSlide();
               }}
             >
-              {loopedBanners.map((banner, index) => (
-                <View key={`${banner.id}-${index}`} style={styles.bannerFallback} />
-              ))}
+              {loopedBanners.map((banner, index) => {
+                const isLadderBanner = banner.type === 'ladder';
+
+                return (
+                  <Pressable
+                    key={`${banner.id}-${index}`}
+                    style={[
+                      styles.bannerFallback,
+                      isLadderBanner ? styles.bannerLadderCard : styles.bannerDefaultCard,
+                    ]}
+                    disabled={!isLadderBanner || !onPressLadderGame}
+                    onPress={isLadderBanner ? onPressLadderGame : undefined}
+                  >
+                    <Text
+                      style={[
+                        styles.bannerTitle,
+                        isLadderBanner ? styles.bannerLadderTitle : styles.bannerDefaultTitle,
+                      ]}
+                    >
+                      {banner.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.bannerSubtitle,
+                        isLadderBanner
+                          ? styles.bannerLadderSubtitle
+                          : styles.bannerDefaultSubtitle,
+                      ]}
+                    >
+                      {banner.subtitle}
+                    </Text>
+                    {isLadderBanner ? (
+                      <View style={styles.bannerLadderBadge}>
+                        <Text style={styles.bannerLadderBadgeLabel}>PLAY</Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
             </ScrollView>
 
             <View style={styles.dots}>
@@ -649,7 +710,55 @@ const styles = StyleSheet.create({
     aspectRatio: 3 / 2,
     width: bannerWidth,
     borderRadius: 8,
-    backgroundColor: '#CFCFCF',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    justifyContent: 'flex-end',
+  },
+  bannerLadderCard: {
+    backgroundColor: '#111111',
+  },
+  bannerDefaultCard: {
+    backgroundColor: '#D9D9D9',
+  },
+  bannerTitle: {
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '800',
+  },
+  bannerSubtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  bannerLadderTitle: {
+    color: '#FFFFFF',
+  },
+  bannerDefaultTitle: {
+    color: '#222222',
+  },
+  bannerLadderSubtitle: {
+    color: '#E0E0E0',
+  },
+  bannerDefaultSubtitle: {
+    color: '#555555',
+  },
+  bannerLadderBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 14,
+    minHeight: 28,
+    borderRadius: 14,
+    backgroundColor: '#FF3B30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  bannerLadderBadgeLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 1,
   },
   dots: {
     position: 'absolute',
