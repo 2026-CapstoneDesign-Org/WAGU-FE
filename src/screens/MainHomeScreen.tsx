@@ -38,7 +38,7 @@ type BannerItem = {
   id: string;
   subtitle: string;
   title: string;
-  type: 'default' | 'ladder';
+  type: 'default' | 'ladder' | 'snail';
 };
 
 const banners: BannerItem[] = [
@@ -68,7 +68,22 @@ const banners: BannerItem[] = [
   },
 ];
 
-const loopedBanners = [banners[banners.length - 1], ...banners, banners[0]];
+const displayBanners: BannerItem[] = [
+  banners[0],
+  {
+    id: 'banner-snail-race',
+    title: '달팽이 레이스',
+    subtitle: '누가 먼저 도착할지 랜덤으로 겨뤄보세요',
+    type: 'snail',
+  },
+  ...banners.slice(2),
+];
+
+const loopedBanners = [
+  displayBanners[displayBanners.length - 1],
+  ...displayBanners,
+  displayBanners[0],
+];
 
 const influencers = [
   { id: 'following-1', name: '라면러버', meta: '리뷰 · 42' },
@@ -131,6 +146,7 @@ type MainHomeScreenProps = {
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   onPressAi?: () => void;
   onPressLadderGame?: () => void;
+  onPressSnailRace?: () => void;
   onPressNews?: () => void;
   onPressLocalRanking?: () => void;
   onPressNationalRanking?: () => void;
@@ -387,6 +403,7 @@ export function MainHomeScreen({
   onOpenRestaurantDetail,
   onPressNews,
   onPressLadderGame,
+  onPressSnailRace,
   onPressLocalRanking,
   onPressNationalRanking,
   onPressSearch,
@@ -459,7 +476,8 @@ export function MainHomeScreen({
   }, [restoreAnimated, restoreScrollKey]);
 
   const dots = useMemo(
-    () => banners.map((banner, index) => ({ id: banner.id, active: index === activeBanner })),
+    () =>
+      displayBanners.map((banner, index) => ({ id: banner.id, active: index === activeBanner })),
     [activeBanner]
   );
 
@@ -502,7 +520,7 @@ export function MainHomeScreen({
                 let nextLoopIndex = rawIndex;
 
                 if (rawIndex === 0) {
-                  nextLoopIndex = banners.length;
+                  nextLoopIndex = displayBanners.length;
                   bannerScrollRef.current?.scrollTo({
                     x: nextLoopIndex * bannerWidth,
                     animated: false,
@@ -530,21 +548,33 @@ export function MainHomeScreen({
             >
               {loopedBanners.map((banner, index) => {
                 const isLadderBanner = banner.type === 'ladder';
+                const isSnailBanner = banner.type === 'snail';
+                const isGameBanner = isLadderBanner || isSnailBanner;
 
                 return (
                   <Pressable
                     key={`${banner.id}-${index}`}
                     style={[
                       styles.bannerFallback,
-                      isLadderBanner ? styles.bannerLadderCard : styles.bannerDefaultCard,
+                      isGameBanner ? styles.bannerLadderCard : styles.bannerDefaultCard,
                     ]}
-                    disabled={!isLadderBanner || !onPressLadderGame}
-                    onPress={isLadderBanner ? onPressLadderGame : undefined}
+                    disabled={
+                      (!isLadderBanner && !isSnailBanner) ||
+                      (isLadderBanner && !onPressLadderGame) ||
+                      (isSnailBanner && !onPressSnailRace)
+                    }
+                    onPress={
+                      isLadderBanner
+                        ? onPressLadderGame
+                        : isSnailBanner
+                          ? onPressSnailRace
+                          : undefined
+                    }
                   >
                     <Text
                       style={[
                         styles.bannerTitle,
-                        isLadderBanner ? styles.bannerLadderTitle : styles.bannerDefaultTitle,
+                        isGameBanner ? styles.bannerLadderTitle : styles.bannerDefaultTitle,
                       ]}
                     >
                       {banner.title}
@@ -552,14 +582,14 @@ export function MainHomeScreen({
                     <Text
                       style={[
                         styles.bannerSubtitle,
-                        isLadderBanner
+                        isGameBanner
                           ? styles.bannerLadderSubtitle
                           : styles.bannerDefaultSubtitle,
                       ]}
                     >
                       {banner.subtitle}
                     </Text>
-                    {isLadderBanner ? (
+                    {isGameBanner ? (
                       <View style={styles.bannerLadderBadge}>
                         <Text style={styles.bannerLadderBadgeLabel}>PLAY</Text>
                       </View>
@@ -583,8 +613,8 @@ export function MainHomeScreen({
                     transform: [
                       {
                         translateX: indicatorPosition.interpolate({
-                          inputRange: [1, banners.length],
-                          outputRange: [0, (banners.length - 1) * 12],
+                          inputRange: [1, displayBanners.length],
+                          outputRange: [0, (displayBanners.length - 1) * 12],
                         }),
                       },
                     ],

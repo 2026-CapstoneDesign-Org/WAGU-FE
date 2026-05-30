@@ -99,6 +99,8 @@ import { RestaurantDetailScreen } from '../screens/RestaurantDetailScreen';
 import { SearchResultScreen } from '../screens/SearchResultScreen';
 import { SearchScreen } from '../screens/SearchScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { SnailRacePlayScreen } from '../screens/SnailRacePlayScreen';
+import { SnailRaceStartScreen } from '../screens/SnailRaceStartScreen';
 import { SignupNicknameScreen } from '../screens/SignupNicknameScreen';
 import { SignupProfileScreen } from '../screens/SignupProfileScreen';
 import { TasteRatingScreen } from '../screens/TasteRatingScreen';
@@ -160,6 +162,8 @@ type FlowScreen =
   | 'ai-reservation-result'
   | 'ladder-start'
   | 'ladder-play'
+  | 'snail-race-start'
+  | 'snail-race-play'
   | 'reliability-guide'
   | 'user-profile';
 
@@ -598,6 +602,7 @@ export function AppRoot() {
   const [aiReservationResult, setAiReservationResult] = useState<AiReservationResult | null>(null);
   const [ladderPlayerCount, setLadderPlayerCount] = useState(4);
   const [ladderSetup, setLadderSetup] = useState<LadderGameSetup>(buildLadderSetup(4));
+  const [snailRaceCount, setSnailRaceCount] = useState(4);
   const [reliabilityGuideSource, setReliabilityGuideSource] =
     useState<ReliabilityGuideSource>(null);
   const [reliabilityGuideGrade, setReliabilityGuideGrade] = useState<string | null>(null);
@@ -2979,10 +2984,19 @@ export function AppRoot() {
     setScreen('ladder-start');
   };
 
+  const openSnailRace = () => {
+    setScreen('snail-race-start');
+  };
+
   const handleConfirmLadderCount = (count: number) => {
     setLadderPlayerCount(count);
     setLadderSetup(buildLadderSetup(count));
     setScreen('ladder-play');
+  };
+
+  const handleConfirmSnailRaceCount = (count: number) => {
+    setSnailRaceCount(count);
+    setScreen('snail-race-play');
   };
 
   const openWriteReview = (restaurantName: string, restaurantId?: number) => {
@@ -3558,6 +3572,23 @@ export function AppRoot() {
           setup={ladderSetup}
           onBack={() => setScreen('ladder-start')}
         />
+      ) : screen === 'snail-race-start' ? (
+        <SnailRaceStartScreen
+          initialCount={snailRaceCount}
+          onBack={() => {
+            setActiveTab('home');
+            setHomeRestoreAnimated(false);
+            setHomeRestoreKey((current) => current + 1);
+            setScreen('tabs');
+          }}
+          onChangeCount={setSnailRaceCount}
+          onConfirm={handleConfirmSnailRaceCount}
+        />
+      ) : screen === 'snail-race-play' ? (
+        <SnailRacePlayScreen
+          racerCount={snailRaceCount}
+          onBack={() => setScreen('snail-race-start')}
+        />
       ) : screen === 'reliability-guide' ? (
         <ReliabilityGuideScreen
           currentGrade={reliabilityGuideGrade}
@@ -3866,6 +3897,7 @@ export function AppRoot() {
           }}
           onPressAi={() => setScreen('ai-chat')}
           onPressLadderGame={openLadderGame}
+          onPressSnailRace={openSnailRace}
           onPressNews={() => setScreen('news')}
           onPressLocalRanking={() => openRankingDetail('local')}
           onPressNationalRanking={() => openRankingDetail('national')}
