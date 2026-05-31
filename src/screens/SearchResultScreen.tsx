@@ -20,7 +20,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import SearchIcon from '../../assets/icons/search.svg';
-import { searchAll } from '../api/wagu';
+import { getReliabilityScore, searchAll } from '../api/wagu';
+import { ReliabilityBadge } from '../components/ReliabilityBadge';
 
 type SearchResultTab = 'restaurant' | 'user' | 'region';
 
@@ -35,6 +36,7 @@ type SearchResultScreenProps = {
     id: string;
     nickname: string;
     profileImageUrl?: string;
+    reliabilityGrade?: string;
   }) => void;
   onPressSearchBar?: () => void;
   onSearch?: (query: string) => void;
@@ -53,6 +55,7 @@ type UserResult = {
   imageUri?: string;
   name: string;
   profileImageUrl?: string;
+  reliabilityGrade?: string;
 };
 
 type RegionResult = {
@@ -66,6 +69,7 @@ type ResultListItem = {
   imageUri?: string;
   meta: string;
   name: string;
+  reliabilityGrade?: string;
 };
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -110,7 +114,10 @@ function ResultList({
             ) : null}
           </View>
           <View style={styles.resultCopy}>
-            <Text style={styles.resultName}>{item.name}</Text>
+            <View style={styles.resultNameRow}>
+              <Text style={styles.resultName}>{item.name}</Text>
+              <ReliabilityBadge grade={item.reliabilityGrade} height={20} />
+            </View>
             <Text style={styles.resultMeta}>{item.meta}</Text>
           </View>
         </Pressable>
@@ -211,16 +218,26 @@ export function SearchResultScreen({
             name: restaurant.restaurantName,
           })),
         );
-        setUserResults(
-          (result.users ?? [])
-            .filter((user) => user.userId !== myUserId)
-            .map((user) => ({
+        const filteredUsers = (result.users ?? []).filter((user) => user.userId !== myUserId);
+        const nextUserResults = await Promise.all(
+          filteredUsers.map(async (user) => {
+            const reliability = await getReliabilityScore(accessToken, user.userId).catch(() => null);
+
+            return {
               id: String(user.userId),
               imageUri: user.profileImageUrl,
               name: user.nickname,
               profileImageUrl: user.profileImageUrl,
-            })),
+              reliabilityGrade: reliability?.grade,
+            };
+          }),
         );
+
+        if (cancelled) {
+          return;
+        }
+
+        setUserResults(nextUserResults);
         setRegionResults(
           (result.regions ?? []).map((region) => ({
             id: region.regionName ?? region.displayName ?? region.rankingPath ?? 'region',
@@ -401,6 +418,7 @@ export function SearchResultScreen({
                         id,
                         nickname: name,
                         profileImageUrl: selectedUser?.profileImageUrl,
+                        reliabilityGrade: selectedUser?.reliabilityGrade,
                       });
                     }}
                   />
@@ -563,6 +581,11 @@ const styles = StyleSheet.create({
   },
   resultCopy: {
     gap: 3,
+  },
+  resultNameRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   resultName: {
     fontSize: 15,

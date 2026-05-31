@@ -95,6 +95,8 @@ export type ApiParkingLot = {
   alternateNoDivision?: string;
   basicParkingFee?: number;
   basicParkingTime?: number;
+  currentParkingCount?: number;
+  currentParkingTime?: string;
   distanceMeters?: number;
   holidayOperatingHours?: string;
   id?: number;
@@ -106,6 +108,9 @@ export type ApiParkingLot = {
   parkingLotName?: string;
   parkingLotType?: string;
   phoneNumber?: string;
+  realtimeParkingAvailable?: boolean;
+  realtimeParkingCode?: string;
+  realtimeSource?: string;
   roadAddress?: string;
   saturdayOperatingHours?: string;
   weekdayOperatingHours?: string;

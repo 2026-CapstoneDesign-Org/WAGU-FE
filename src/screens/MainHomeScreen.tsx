@@ -16,6 +16,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import HeartIcon from '../../assets/icons/heart.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../components/BottomTabBar';
+import { ReliabilityBadge } from '../components/ReliabilityBadge';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { localRankingEntries, nationalRankingEntries, RankingEntry } from '../data/rankings';
 
@@ -123,6 +124,7 @@ export type HomeProfileCardItem = {
   imageUri?: string;
   meta?: string;
   name: string;
+  reliabilityGrade?: string;
 };
 
 export type HomeRestaurantCardItem = {
@@ -324,7 +326,10 @@ function HorizontalProfileSection({
                 <View style={styles.profileImage} />
               )}
               <View style={styles.profileCopy}>
-                <Text style={styles.profileName}>{item.name}</Text>
+                <View style={styles.profileNameRow}>
+                  <Text style={styles.profileName}>{item.name}</Text>
+                  <ReliabilityBadge grade={item.reliabilityGrade} height={20} />
+                </View>
                 {item.meta ? <Text style={styles.profileMeta}>{item.meta}</Text> : null}
               </View>
             </Pressable>
@@ -518,12 +523,12 @@ export function MainHomeScreen({
             <Text style={styles.logo}>WAGU</Text>
 
             <View style={styles.headerIcons}>
+              <Pressable style={styles.iconButton} onPress={onPressSearch}>
+                <SearchIcon width={24} height={24} color="#000000" />
+              </Pressable>
               <Pressable style={styles.iconButton} onPress={onPressNews}>
                 <HeartIcon width={24} height={24} color="#000000" />
                 {hasUnreadNews ? <View style={styles.newsBadgeDot} /> : null}
-              </Pressable>
-              <Pressable style={styles.iconButton} onPress={onPressSearch}>
-                <SearchIcon width={24} height={24} color="#000000" />
               </Pressable>
             </View>
           </View>
@@ -968,6 +973,11 @@ const styles = StyleSheet.create({
   profileCopy: {
     marginTop: 6,
     gap: 0.1,
+  },
+  profileNameRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   profileName: {
     fontSize: 15,

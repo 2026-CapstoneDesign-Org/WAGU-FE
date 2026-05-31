@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
+import { ReliabilityBadge } from '../components/ReliabilityBadge';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
 import {
   FollowTogglePayload,
@@ -64,7 +65,10 @@ function FriendRow({
     <Pressable style={styles.friendRow} onPress={() => onOpenUserProfile?.(user.id)}>
       <View style={styles.thumbnail} />
       <View style={styles.friendCopy}>
-        <Text style={styles.friendName}>{user.name}</Text>
+        <View style={styles.friendNameRow}>
+          <Text style={styles.friendName}>{user.name}</Text>
+          <ReliabilityBadge grade={user.reliabilityGrade} height={20} />
+        </View>
         <Text style={styles.friendMeta}>{`\uB9AC\uBDF0 \u00B7 ${user.reviewCount.toLocaleString('ko-KR')}`}</Text>
       </View>
       {user.showFollowAction ? (
@@ -525,6 +529,11 @@ const styles = StyleSheet.create({
   friendCopy: {
     flex: 1,
     gap: 3,
+  },
+  friendNameRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   friendName: {
     fontSize: 15,

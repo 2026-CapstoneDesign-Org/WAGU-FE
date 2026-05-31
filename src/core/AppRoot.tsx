@@ -230,9 +230,33 @@ function mapFollowUsersToFriendUsers(
     id: String(user.userId),
     isFollowing: followingUserIds.has(user.userId),
     name: user.nickname,
+    reliabilityGrade: undefined,
     reviewCount: 0,
     showFollowAction: true,
   }));
+}
+
+async function hydrateFriendUsersWithReliability(
+  token: string,
+  users: Array<{ nickname: string; userId: number }>,
+  followingUserIds: Set<number>,
+) {
+  const results = await Promise.allSettled(
+    users.map(async (user) => {
+      const reliability = await getReliabilityScore(token, user.userId).catch(() => null);
+
+      return {
+        id: String(user.userId),
+        isFollowing: followingUserIds.has(user.userId),
+        name: user.nickname,
+        reliabilityGrade: normalizeReliabilityGrade(reliability?.grade) ?? undefined,
+        reviewCount: 0,
+        showFollowAction: true,
+      } satisfies FriendUser;
+    }),
+  );
+
+  return results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
 }
 
 function buildFriendUserFromSources(
@@ -256,6 +280,7 @@ function buildFriendUserFromSources(
     id: userId,
     isFollowing: true,
     name: targetProfile.nickname,
+    reliabilityGrade: targetProfile.reliabilityGrade,
     reviewCount: Number(targetProfile.reviewCount ?? 0) || 0,
     showFollowAction: true,
   } satisfies FriendUser;
@@ -316,6 +341,7 @@ function createSearchResultUserProfile(user: {
   id: string;
   nickname: string;
   profileImageUrl?: string;
+  reliabilityGrade?: string;
 }): UserProfile {
   const numericId = Number(user.id);
   const accentColor =
@@ -329,6 +355,7 @@ function createSearchResultUserProfile(user: {
     id: user.id,
     nickname: user.nickname,
     profileImageUrl: user.profileImageUrl,
+    reliabilityGrade: user.reliabilityGrade,
     representativeAccentColor: accentColor,
     representativeListIsLiked: false,
     representativeListId: undefined,
@@ -969,16 +996,37 @@ export function AppRoot() {
             .filter((followedUserId) => Number.isFinite(followedUserId)),
         );
 
+        const [hydratedFollowings, hydratedFollowers] = await Promise.all([
+          followings !== null
+            ? hydrateFriendUsersWithReliability(
+                session.accessToken,
+                followings,
+                myFollowingIdSet,
+              )
+            : Promise.resolve<FriendUser[] | null>(null),
+          followers !== null
+            ? hydrateFriendUsersWithReliability(
+                session.accessToken,
+                followers,
+                myFollowingIdSet,
+              )
+            : Promise.resolve<FriendUser[] | null>(null),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
         setRemoteUserFriendConnectionsByUserId((current) => ({
           ...current,
           [selectedUserProfileId]: {
             following:
-              followings !== null
-                ? mapFollowUsersToFriendUsers(followings, myFollowingIdSet)
+              hydratedFollowings !== null
+                ? hydratedFollowings
                 : current[selectedUserProfileId]?.following ?? [],
             followers:
-              followers !== null
-                ? mapFollowUsersToFriendUsers(followers, myFollowingIdSet)
+              hydratedFollowers !== null
+                ? hydratedFollowers
                 : current[selectedUserProfileId]?.followers ?? [],
           },
         }));
@@ -1521,9 +1569,10 @@ export function AppRoot() {
 
       const recommendedProfiles = await Promise.all(
         uniqueRecommendations.map(async (item, index) => {
-          const [detailResult, followCountForOwnerResult] = await Promise.allSettled([
+          const [detailResult, followCountForOwnerResult, reliabilityResult] = await Promise.allSettled([
             getListDetail(token, item.listId),
             getFollowCount(token, item.owner.ownerId),
+            getReliabilityScore(token, item.owner.ownerId),
           ]);
 
           if (detailResult.status !== 'fulfilled') {
@@ -1556,6 +1605,10 @@ export function AppRoot() {
               id: String(item.owner.ownerId),
               imageUri: item.owner.profileImageUrl,
               name: item.owner.nickname,
+              reliabilityGrade:
+                reliabilityResult.status === 'fulfilled'
+                  ? normalizeReliabilityGrade(reliabilityResult.value.grade) ?? undefined
+                  : undefined,
             },
             profile: {
               followerCount:
@@ -1565,6 +1618,10 @@ export function AppRoot() {
               id: String(item.owner.ownerId),
               nickname: item.owner.nickname,
               profileImageUrl: item.owner.profileImageUrl,
+              reliabilityGrade:
+                reliabilityResult.status === 'fulfilled'
+                  ? normalizeReliabilityGrade(reliabilityResult.value.grade) ?? undefined
+                  : undefined,
               representativeAccentColor:
                 HOME_PROFILE_ACCENT_COLORS[index % HOME_PROFILE_ACCENT_COLORS.length],
               representativeListIsLiked: item.isLiked ?? false,
@@ -1852,12 +1909,27 @@ export function AppRoot() {
             followingsResult.value.map((user) => user.userId),
           );
 
-          setMyFollowingUsers(
-            mapFollowUsersToFriendUsers(followingsResult.value, followingUserIds),
-          );
+          const [nextFollowingUsers, nextFollowerUsers] = await Promise.all([
+            hydrateFriendUsersWithReliability(
+              session.accessToken,
+              followingsResult.value,
+              followingUserIds,
+            ),
+            hydrateFriendUsersWithReliability(
+              session.accessToken,
+              followersResult.value,
+              followingUserIds,
+            ),
+          ]);
+
+          if (cancelled) {
+            return;
+          }
+
+          setMyFollowingUsers(nextFollowingUsers);
           setMyFollowerUsers(
             sortFollowersForInitialView(
-              mapFollowUsersToFriendUsers(followersResult.value, followingUserIds),
+              nextFollowerUsers,
             ),
           );
         }

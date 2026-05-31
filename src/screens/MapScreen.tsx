@@ -26,6 +26,7 @@ import {
   type ApiHiddenGemRestaurantItem,
   getHiddenGemRestaurants,
   getRestaurant,
+  getRestaurantReviews,
   getRestaurantPhotoUris,
   searchRestaurants,
 } from '../api/wagu';
@@ -114,6 +115,23 @@ function extractTownCandidatesFromText(...texts: Array<string | undefined>) {
   return Array.from(seen);
 }
 
+function extractLatestReviewSnippets(
+  reviews: Array<{
+    content: string;
+    createdAt: string;
+  }>,
+) {
+  return [...reviews]
+    .sort((left, right) => {
+      const leftTime = new Date(left.createdAt).getTime();
+      const rightTime = new Date(right.createdAt).getTime();
+      return rightTime - leftTime;
+    })
+    .map((review) => review.content.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
 function mergeRestaurantsWithHiddenGems(
   baseRestaurants: MapRestaurant[],
   hiddenGemRestaurants: MapRestaurant[],
@@ -161,7 +179,17 @@ async function buildMapRestaurantsFromMyLists(accessToken: string, restaurants: 
     .filter((item) => Number.isFinite(item.numericId));
 
   const results = await Promise.allSettled(
-    candidates.map((item) => getRestaurant(accessToken, item.numericId)),
+    candidates.map(async (item) => {
+      const [detail, reviews] = await Promise.all([
+        getRestaurant(accessToken, item.numericId),
+        getRestaurantReviews(accessToken, item.numericId).catch(() => []),
+      ]);
+
+      return {
+        detail,
+        reviews,
+      };
+    }),
   );
 
   return results.flatMap((result, index) => {
@@ -169,7 +197,7 @@ async function buildMapRestaurantsFromMyLists(accessToken: string, restaurants: 
       return [];
     }
 
-    const detail = result.value;
+    const { detail, reviews } = result.value;
     const sourceRestaurant = candidates[index]?.source;
 
     if (typeof detail.lat !== 'number' || typeof detail.lng !== 'number') {
@@ -204,7 +232,7 @@ async function buildMapRestaurantsFromMyLists(accessToken: string, restaurants: 
           detail.roadAddress,
           sourceRestaurant?.address,
         ),
-        reviews: [],
+        reviews: extractLatestReviewSnippets(reviews),
         status: detail.regionName ?? '내 리스트',
       },
     ];
@@ -214,7 +242,23 @@ async function buildMapRestaurantsFromMyLists(accessToken: string, restaurants: 
 async function buildMapRestaurantsFromSearch(accessToken: string, keyword: string) {
   const restaurants = await searchRestaurants(accessToken, keyword);
 
-  return restaurants.flatMap((restaurant, index) => {
+  const results = await Promise.allSettled(
+    restaurants.map(async (restaurant) => ({
+      restaurant,
+      reviews:
+        typeof restaurant.id === 'number'
+          ? await getRestaurantReviews(accessToken, restaurant.id).catch(() => [])
+          : [],
+    })),
+  );
+
+  return results.flatMap((result, index) => {
+    if (result.status !== 'fulfilled') {
+      return [];
+    }
+
+    const { restaurant, reviews } = result.value;
+
     if (typeof restaurant.lat !== 'number' || typeof restaurant.lng !== 'number') {
       return [];
     }
@@ -243,7 +287,7 @@ async function buildMapRestaurantsFromSearch(accessToken: string, keyword: strin
           restaurant.roadAddress,
           restaurant.lotAddress,
         ),
-        reviews: [],
+        reviews: extractLatestReviewSnippets(reviews),
         status: restaurant.regionName ?? '검색 결과',
       },
     ];
@@ -278,12 +322,23 @@ async function buildHiddenGemRestaurants(accessToken: string, regionTownCandidat
   const regionItems = await fetchHiddenGemItems(accessToken, regionTownCandidates);
 
   const results = await Promise.allSettled(
-    regionItems.map((item) => getRestaurant(accessToken, item.restaurantId)),
+    regionItems.map(async (item) => {
+      const [detail, reviews] = await Promise.all([
+        getRestaurant(accessToken, item.restaurantId),
+        getRestaurantReviews(accessToken, item.restaurantId).catch(() => []),
+      ]);
+
+      return {
+        detail,
+        reviews,
+      };
+    }),
   );
 
   return results.flatMap((result, index) => {
     const hiddenGem = regionItems[index];
-    const detail = result.status === 'fulfilled' ? result.value : null;
+    const detail = result.status === 'fulfilled' ? result.value.detail : null;
+    const reviews = result.status === 'fulfilled' ? result.value.reviews : [];
     const latitude =
       typeof hiddenGem?.lat === 'number'
         ? hiddenGem.lat
@@ -323,7 +378,7 @@ async function buildHiddenGemRestaurants(accessToken: string, regionTownCandidat
           detail?.address,
           detail?.roadAddress,
         ),
-        reviews: [],
+        reviews: extractLatestReviewSnippets(reviews),
         status:
           hiddenGem?.regionTownName ??
           hiddenGem?.regionName ??

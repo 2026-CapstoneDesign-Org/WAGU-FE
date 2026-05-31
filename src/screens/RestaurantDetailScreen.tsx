@@ -25,6 +25,7 @@ import { ApiError } from '../api/client';
 import {
   ApiReview,
   ApiBusinessHoursDisplayRow,
+  ApiParkingLot,
   ApiRestaurant,
   ApiRestaurantMenuItem,
   ApiReviewSummary,
@@ -83,7 +84,12 @@ type RestaurantMeta = {
   openingHoursCollapsed?: string;
   openingHoursRows?: ApiBusinessHoursDisplayRow[];
   openingHoursStatus?: string;
-  parkingLots?: { distanceText?: string; name: string }[];
+  parkingLots?: {
+    capacityText?: string;
+    distanceText?: string;
+    liveStatusText?: string;
+    name: string;
+  }[];
   parkingSummary?: string;
   phone: string;
   features: string;
@@ -520,6 +526,26 @@ function formatParkingDistance(distanceMeters?: number) {
     : `${Math.round(distanceMeters)}m`;
 }
 
+function formatParkingCapacity(parkingCapacity?: number) {
+  if (!parkingCapacity || parkingCapacity <= 0) {
+    return '';
+  }
+
+  return `총 ${parkingCapacity}대`;
+}
+
+function formatParkingLiveStatus(lot: ApiParkingLot) {
+  if (lot.realtimeParkingAvailable === false) {
+    return '실시간 정보 없음';
+  }
+
+  if (typeof lot.currentParkingCount === 'number' && lot.currentParkingCount >= 0) {
+    return `현재 ${lot.currentParkingCount}대 주차 중`;
+  }
+
+  return lot.realtimeParkingAvailable ? '실시간 정보 제공' : '';
+}
+
 function buildParkingLots(restaurant?: ApiRestaurant) {
   if (!restaurant?.nearbyParkingLots?.length) {
     return [];
@@ -527,7 +553,9 @@ function buildParkingLots(restaurant?: ApiRestaurant) {
 
   return restaurant.nearbyParkingLots
     .map((lot) => ({
+      capacityText: formatParkingCapacity(lot.parkingCapacity),
       distanceText: formatParkingDistance(lot.distanceMeters),
+      liveStatusText: formatParkingLiveStatus(lot),
       name: lot.parkingLotName?.trim() || lot.roadAddress?.trim() || lot.lotAddress?.trim() || '',
     }))
     .filter((lot) => Boolean(lot.name))
@@ -547,8 +575,16 @@ function buildParkingSummary(restaurant?: ApiRestaurant) {
       : '';
   const lots = buildParkingLots(restaurant);
   const nearbyText = lots.length > 0 ? `근처 주차장 ${lots.length}곳` : '';
+  const totalCapacity = (restaurant.nearbyParkingLots ?? []).reduce((sum, lot) => {
+    if (typeof lot.parkingCapacity === 'number' && lot.parkingCapacity > 0) {
+      return sum + lot.parkingCapacity;
+    }
 
-  return [availability, nearbyText].filter(Boolean).join(' · ');
+    return sum;
+  }, 0);
+  const capacityText = totalCapacity > 0 ? `총 ${totalCapacity}대` : '';
+
+  return [availability, nearbyText, capacityText].filter(Boolean).join(' · ');
 }
 
 function MenuList({ menuItems }: { menuItems: RestaurantMenuItem[] }) {
@@ -1014,9 +1050,16 @@ function HomeTabContent({
   const parkingText = hasParkingLots
     ? isParkingExpanded
       ? parkingLots
-          .map((lot) => [lot.name, lot.distanceText].filter(Boolean).join(' · '))
+          .map((lot) =>
+            [lot.name, lot.distanceText, lot.capacityText, lot.liveStatusText]
+              .filter(Boolean)
+              .join(' · '),
+          )
           .join('\n')
-      : restaurantMeta.parkingSummary || [parkingLots[0]?.name, parkingLots[0]?.distanceText].filter(Boolean).join(' · ')
+      : restaurantMeta.parkingSummary ||
+        [parkingLots[0]?.name, parkingLots[0]?.distanceText, parkingLots[0]?.capacityText]
+          .filter(Boolean)
+          .join(' · ')
     : restaurantMeta.parkingSummary || '';
   const hasOpeningHoursRows = openingHoursRows.length > 0;
   const todayOpeningHoursText =

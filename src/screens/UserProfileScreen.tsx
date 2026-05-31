@@ -300,9 +300,9 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingHorizontal: HORIZONTAL_PADDING,
-    paddingTop: 25,
+    paddingTop: 14,
     paddingBottom: 40,
-    gap: 35,
+    gap: 18,
   },
   headerRow: {
     flexDirection: 'row',
