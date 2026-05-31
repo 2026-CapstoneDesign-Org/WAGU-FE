@@ -217,6 +217,49 @@ export type ApiReviewSummary = {
   summary?: string;
 };
 
+export type ApiReservationStatus =
+  | 'REQUESTED'
+  | 'CALLING'
+  | 'CONFIRMED'
+  | 'UNAVAILABLE'
+  | 'NEEDS_CONFIRMATION'
+  | 'FAILED'
+  | 'CANCELED';
+
+export type ApiCreateAiCallReservationRequest = {
+  partySize: number;
+  requestNote?: string;
+  reservationDate: string;
+  reservationTime: string;
+};
+
+export type ApiReservation = {
+  aiSummary?: string;
+  attemptCount?: number;
+  canceledAt?: string;
+  confirmedAt?: string;
+  createdAt?: string;
+  failureReason?: string;
+  partySize: number;
+  provider?: string;
+  providerCallId?: string;
+  providerStatus?: string;
+  requestNote?: string;
+  reservationDateTime: string;
+  reservationId: number;
+  restaurantAddress?: string;
+  restaurantId: number;
+  restaurantName: string;
+  restaurantPhoneNumberMasked?: string;
+  resultMessage?: string;
+  status: ApiReservationStatus;
+  updatedAt?: string;
+};
+
+type ApiReservationListResponse = {
+  items: ApiReservation[];
+};
+
 export type ApiSearchRestaurantItem = {
   address?: string;
   categories?: string[];
@@ -434,6 +477,37 @@ export async function getListRecommendations(token: string) {
 
 export async function getRestaurantRecommendations(token: string) {
   return apiRequest<ApiRestaurantRecommendationResponse>('/recommendations/restaurants', {
+    token,
+  });
+}
+
+export async function createAiCallReservation(
+  token: string,
+  restaurantId: number,
+  body: ApiCreateAiCallReservationRequest,
+) {
+  return apiRequest<ApiReservation>(`/restaurants/${restaurantId}/reservations/ai-call`, {
+    method: 'POST',
+    token,
+    body,
+  });
+}
+
+export async function getMyReservations(token: string) {
+  return apiRequest<ApiReservationListResponse>('/reservations', {
+    token,
+  });
+}
+
+export async function getReservation(token: string, reservationId: number) {
+  return apiRequest<ApiReservation>(`/reservations/${reservationId}`, {
+    token,
+  });
+}
+
+export async function cancelReservation(token: string, reservationId: number) {
+  return apiRequest<void>(`/reservations/${reservationId}/cancel`, {
+    method: 'PATCH',
     token,
   });
 }

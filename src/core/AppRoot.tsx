@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import {
+  ApiReservation,
   addExternalRestaurantToListFallback,
   addRestaurantToList,
   cancelReviewVote,
@@ -115,7 +116,6 @@ import { WriteReviewDraft, WriteReviewScreen } from '../screens/WriteReviewScree
 import { UserProfile, userProfiles } from '../data/userProfiles';
 import {
   AiReservationDraft,
-  AiReservationMockMode,
   AiReservationResult,
 } from '../types/aiReservation';
 import { LadderGameSetup } from '../types/ladderGame';
@@ -392,80 +392,69 @@ function mapApiReviewToMyReview(review: {
   };
 }
 
-function buildMockAiReservationResult(
+function buildAiReservationResult(
   draft: AiReservationDraft,
-  mockMode: AiReservationMockMode,
+  reservation: ApiReservation,
 ): AiReservationResult {
-  if (mockMode === 'confirmed') {
+  if (reservation.status === 'CONFIRMED') {
     return {
-      detail: `${draft.reservationDateLabel} ${draft.reservationTimeLabel}에 ${draft.partySize}명 예약으로 정리했어요.`,
+      detail:
+        reservation.aiSummary ??
+        `${draft.reservationDateLabel} ${draft.reservationTimeLabel}에 ${draft.partySize}명 예약으로 정리했어요.`,
       status: 'confirmed',
-      summary: 'AI가 매장과 통화해 예약 가능하다는 답변을 받았어요.',
+      summary:
+        reservation.resultMessage ?? 'AI가 매장과 통화해 예약 가능하다는 답변을 받았어요.',
       title: '예약 완료',
     };
   }
 
-  if (mockMode === 'rejected') {
+  if (reservation.status === 'UNAVAILABLE') {
     return {
-      detail: '매장에서 해당 시간대는 예약이 마감되었다고 안내했어요.',
+      detail:
+        reservation.failureReason ??
+        reservation.aiSummary ??
+        '매장에서 해당 시간대는 예약이 어렵다고 안내했어요.',
       status: 'rejected',
-      summary: '매장에서 해당 시간 예약이 어렵다고 답변했어요.',
+      summary:
+        reservation.resultMessage ?? '매장에서 해당 시간 예약이 어렵다고 답변했어요.',
       title: '예약 실패',
     };
   }
 
-  if (mockMode === 'no-answer') {
+  if (reservation.status === 'NEEDS_CONFIRMATION') {
     return {
-      detail: '전화를 받지 않아 예약 가능 여부를 확인하지 못했어요.',
-      status: 'no-answer',
-      summary: '매장과 연결되지 않아 예약 확인을 마치지 못했어요.',
-      title: '전화 연결 실패',
+      detail:
+        reservation.aiSummary ??
+        reservation.failureReason ??
+        '매장에서 추가 확인이 필요하다고 안내했어요.',
+      status: 'needs-confirmation',
+      summary: reservation.resultMessage ?? '추가 확인이 필요한 예약으로 접수되었어요.',
+      title: '추가 확인 필요',
     };
   }
 
-  if (draft.partySize >= 7) {
+  if (reservation.status === 'CANCELED') {
     return {
-      detail: '인원이 많아 같은 시간대 테이블 확보가 어렵다고 안내받았어요.',
-      status: 'rejected',
-      summary: '매장에서 해당 시간 예약이 어렵다고 답변했어요.',
-      title: '예약 실패',
-    };
-  }
-
-  if (draft.minute === 50) {
-    return {
-      detail: '영업 마감 준비 시간과 겹쳐 통화 연결이 원활하지 않았어요.',
-      status: 'no-answer',
-      summary: '매장과 연결되지 않아 예약 확인을 마치지 못했어요.',
-      title: '전화 연결 실패',
+      detail:
+        reservation.resultMessage ??
+        reservation.failureReason ??
+        '예약 요청이 취소되었어요.',
+      status: 'canceled',
+      summary: '예약 요청이 더 이상 진행되지 않았어요.',
+      title: '예약 취소',
     };
   }
 
   return {
-    detail: `${draft.reservationDateLabel} ${draft.reservationTimeLabel}에 ${draft.partySize}명 예약으로 정리했어요.`,
-    status: 'confirmed',
-    summary: 'AI가 매장과 통화해 예약 가능하다는 답변을 받았어요.',
-    title: '예약 완료',
+    detail:
+      reservation.failureReason ??
+      reservation.aiSummary ??
+      '전화를 받지 않아 예약 가능 여부를 확인하지 못했어요.',
+    status: 'no-answer',
+    summary:
+      reservation.resultMessage ?? '매장과 연결되지 않아 예약 확인을 마치지 못했어요.',
+    title: '전화 연결 실패',
   };
-}
-
-function resolveMockAiReservationStatus(
-  draft: AiReservationDraft,
-  mockMode: AiReservationMockMode,
-): AiReservationResult['status'] {
-  if (mockMode !== 'auto') {
-    return mockMode;
-  }
-
-  if (draft.partySize >= 7) {
-    return 'rejected';
-  }
-
-  if (draft.minute === 50) {
-    return 'no-answer';
-  }
-
-  return 'confirmed';
 }
 
 type AuthSession = {
@@ -600,12 +589,11 @@ export function AppRoot() {
   const [aiReservationRestaurant, setAiReservationRestaurant] = useState<{
     address?: string;
     category?: string;
+    id: number;
     name: string;
     phone?: string;
   } | null>(null);
   const [aiReservationDraft, setAiReservationDraft] = useState<AiReservationDraft | null>(null);
-  const [aiReservationMockMode, setAiReservationMockMode] =
-    useState<AiReservationMockMode>('auto');
   const [aiReservationResult, setAiReservationResult] = useState<AiReservationResult | null>(null);
   const [ladderPlayerCount, setLadderPlayerCount] = useState(4);
   const [ladderSetup, setLadderSetup] = useState<LadderGameSetup>(buildLadderSetup(4));
@@ -2967,9 +2955,16 @@ export function AppRoot() {
   };
 
   const openAiReservation = (restaurant: Restaurant) => {
+    if (!session?.accessToken) {
+      Alert.alert('안내', '로그인 후 이용해 주세요.');
+      setScreen('login');
+      return;
+    }
+
     setAiReservationRestaurant({
       address: restaurant.address,
       category: restaurant.category,
+      id: Number(restaurant.id),
       name: restaurant.name,
       phone: restaurant.phone,
     });
@@ -3539,29 +3534,29 @@ export function AppRoot() {
         <AiReservationFormScreen
           restaurant={aiReservationRestaurant}
           initialDraft={aiReservationDraft}
-          mockMode={aiReservationMockMode}
           onBack={() => setScreen('restaurant-detail')}
-          onChangeMockMode={setAiReservationMockMode}
           onSubmit={(draft) => {
             setAiReservationDraft(draft);
             setAiReservationResult(null);
             setScreen('ai-reservation-pending');
           }}
         />
-      ) : screen === 'ai-reservation-pending' && aiReservationDraft ? (
+      ) : screen === 'ai-reservation-pending' &&
+        aiReservationDraft &&
+        aiReservationRestaurant &&
+        session?.accessToken ? (
         <AiReservationPendingScreen
+          accessToken={session.accessToken}
           draft={aiReservationDraft}
-          targetStatus={resolveMockAiReservationStatus(
-            aiReservationDraft,
-            aiReservationMockMode,
-          )}
-          onComplete={() => {
-            const nextResult = buildMockAiReservationResult(
-              aiReservationDraft,
-              aiReservationMockMode,
-            );
+          restaurantId={aiReservationRestaurant.id}
+          onComplete={(reservation) => {
+            const nextResult = buildAiReservationResult(aiReservationDraft, reservation);
             setAiReservationResult(nextResult);
             setScreen('ai-reservation-result');
+          }}
+          onError={(message) => {
+            Alert.alert('안내', message);
+            setScreen('ai-reservation-form');
           }}
         />
       ) : screen === 'ai-reservation-result' && aiReservationDraft && aiReservationResult ? (

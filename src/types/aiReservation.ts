@@ -1,6 +1,7 @@
 export type AiReservationRestaurantInfo = {
   address?: string;
   category?: string;
+  id: number;
   name: string;
   phone?: string;
 };
@@ -20,11 +21,14 @@ export type AiReservationDraft = {
 };
 
 export type AiReservationStatus = 'confirmed' | 'rejected' | 'no-answer';
-export type AiReservationMockMode = 'auto' | AiReservationStatus;
+export type AiReservationLiveStatus =
+  | AiReservationStatus
+  | 'canceled'
+  | 'needs-confirmation';
 
 export type AiReservationResult = {
   detail?: string;
-  status: AiReservationStatus;
+  status: AiReservationLiveStatus;
   summary: string;
   title: string;
 };

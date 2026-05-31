@@ -13,16 +13,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import {
   AiReservationDraft,
-  AiReservationMockMode,
   AiReservationRestaurantInfo,
 } from '../types/aiReservation';
 
 type AiReservationFormScreenProps = {
   initialBookerPhone?: string;
   initialDraft?: AiReservationDraft | null;
-  mockMode?: AiReservationMockMode;
   onBack: () => void;
-  onChangeMockMode?: (mode: AiReservationMockMode) => void;
   onSubmit: (draft: AiReservationDraft) => void;
   restaurant: AiReservationRestaurantInfo;
 };
@@ -35,12 +32,6 @@ type DateOption = {
 const MINUTE_OPTIONS = [0, 10, 20, 30, 40, 50];
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => index);
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
-const MOCK_MODE_OPTIONS: Array<{ label: string; value: AiReservationMockMode }> = [
-  { label: '자동', value: 'auto' },
-  { label: '성공', value: 'confirmed' },
-  { label: '실패', value: 'rejected' },
-  { label: '연결 실패', value: 'no-answer' },
-];
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -109,9 +100,7 @@ function buildDateOptions() {
 export function AiReservationFormScreen({
   initialBookerPhone = '',
   initialDraft,
-  mockMode = 'auto',
   onBack,
-  onChangeMockMode,
   onSubmit,
   restaurant,
 }: AiReservationFormScreenProps) {

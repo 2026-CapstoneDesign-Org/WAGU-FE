@@ -37,6 +37,22 @@ function StatusSymbol({ status }: { status: AiReservationResult['status'] }) {
     );
   }
 
+  if (status === 'needs-confirmation') {
+    return (
+      <View style={[styles.statusSymbol, styles.statusSymbolNeedsConfirmation]}>
+        <Text style={[styles.statusSymbolText, styles.statusSymbolTextNeedsConfirmation]}>?</Text>
+      </View>
+    );
+  }
+
+  if (status === 'canceled') {
+    return (
+      <View style={[styles.statusSymbol, styles.statusSymbolCanceled]}>
+        <Text style={[styles.statusSymbolText, styles.statusSymbolTextCanceled]}>-</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.statusSymbol, styles.statusSymbolNoAnswer]}>
       <Text style={[styles.statusSymbolText, styles.statusSymbolTextNoAnswer]}>...</Text>
@@ -54,9 +70,15 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 function getStatusAccent(status: AiReservationResult['status']) {
-  if (status === 'rejected') {
+  if (status === 'rejected' || status === 'canceled') {
     return {
       button: '#FF0000',
+    };
+  }
+
+  if (status === 'needs-confirmation') {
+    return {
+      button: '#D85A3A',
     };
   }
 
@@ -194,6 +216,12 @@ const styles = StyleSheet.create({
   statusSymbolNoAnswer: {
     backgroundColor: '#FFF4E8',
   },
+  statusSymbolNeedsConfirmation: {
+    backgroundColor: '#FFF4E8',
+  },
+  statusSymbolCanceled: {
+    backgroundColor: '#F4F4F4',
+  },
   statusSymbolText: {
     fontSize: 32,
     lineHeight: 36,
@@ -204,6 +232,12 @@ const styles = StyleSheet.create({
   },
   statusSymbolTextNoAnswer: {
     color: '#D85A3A',
+  },
+  statusSymbolTextNeedsConfirmation: {
+    color: '#D85A3A',
+  },
+  statusSymbolTextCanceled: {
+    color: '#666666',
   },
   title: {
     fontSize: 30,

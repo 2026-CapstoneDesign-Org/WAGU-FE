@@ -3,58 +3,181 @@ import { Animated, BackHandler, Easing, StyleSheet, Text, View } from 'react-nat
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import CallIcon from '../../assets/icons/call.svg';
-import { AiReservationDraft, AiReservationStatus } from '../types/aiReservation';
+import {
+  ApiReservation,
+  ApiReservationStatus,
+  createAiCallReservation,
+  getReservation,
+} from '../api/wagu';
+import { ApiError } from '../api/client';
+import { AiReservationDraft } from '../types/aiReservation';
 
 type AiReservationPendingScreenProps = {
+  accessToken: string;
   draft: AiReservationDraft;
-  onComplete: () => void;
-  targetStatus: AiReservationStatus;
+  onComplete: (reservation: ApiReservation) => void;
+  onError: (message: string) => void;
+  restaurantId: number;
 };
 
+const POLL_INTERVAL_MS = 1800;
+const POLL_TIMEOUT_ATTEMPTS = 30;
+
+function isTerminalReservationStatus(status: ApiReservationStatus) {
+  return (
+    status === 'CONFIRMED' ||
+    status === 'UNAVAILABLE' ||
+    status === 'NEEDS_CONFIRMATION' ||
+    status === 'FAILED' ||
+    status === 'CANCELED'
+  );
+}
+
+function getStatusMessage(status?: ApiReservationStatus) {
+  if (status === 'CALLING') {
+    return '매장에 연결 중이에요';
+  }
+
+  if (status === 'UNAVAILABLE') {
+    return '예약 가능 여부를 확인하고 있어요';
+  }
+
+  if (status === 'NEEDS_CONFIRMATION' || status === 'CONFIRMED') {
+    return '통화 내용을 정리하고 있어요';
+  }
+
+  if (status === 'FAILED' || status === 'CANCELED') {
+    return '통화 결과를 정리하고 있어요';
+  }
+
+  return '예약 요청을 접수하고 있어요';
+}
+
+function getReservationErrorMessage(error: unknown) {
+  if (error instanceof ApiError && error.message) {
+    return error.message;
+  }
+
+  return 'AI 예약 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
 export function AiReservationPendingScreen({
-  draft: _draft,
+  accessToken,
+  draft,
   onComplete,
-  targetStatus,
+  onError,
+  restaurantId,
 }: AiReservationPendingScreenProps) {
-  const [statusIndex, setStatusIndex] = useState(0);
+  const [reservation, setReservation] = useState<ApiReservation | null>(null);
   const [dotCount, setDotCount] = useState(1);
   const floatY = useRef(new Animated.Value(0)).current;
   const pulseScale = useRef(new Animated.Value(0.9)).current;
   const pulseOpacity = useRef(new Animated.Value(0.22)).current;
-  const statusMessages = useMemo(() => {
-    if (targetStatus === 'no-answer') {
-      return ['매장에 연결 중이에요'];
-    }
-
-    if (targetStatus === 'rejected') {
-      return ['매장에 연결 중이에요', '예약 가능 여부를 확인하고 있어요'];
-    }
-
-    return ['매장에 연결 중이에요', '예약 가능 여부를 확인하고 있어요', '통화 내용을 정리하고 있어요'];
-  }, [targetStatus]);
+  const startedRef = useRef(false);
+  const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeStatus = useMemo(
-    () => statusMessages[Math.min(statusIndex, statusMessages.length - 1)],
-    [statusIndex, statusMessages],
+    () => getStatusMessage(reservation?.status),
+    [reservation?.status],
   );
 
   useEffect(() => {
-    const timers: Array<ReturnType<typeof setTimeout>> = [];
-
-    for (let index = 1; index < statusMessages.length; index += 1) {
-      timers.push(setTimeout(() => setStatusIndex(index), 1400 * index));
+    if (startedRef.current) {
+      return;
     }
 
-    timers.push(setTimeout(() => onComplete(), 1400 * statusMessages.length));
+    startedRef.current = true;
+    let cancelled = false;
+
+    const finishWithReservation = (nextReservation: ApiReservation) => {
+      if (completionTimeoutRef.current) {
+        clearTimeout(completionTimeoutRef.current);
+      }
+
+      completionTimeoutRef.current = setTimeout(() => {
+        if (!cancelled) {
+          onComplete(nextReservation);
+        }
+      }, 700);
+    };
+
+    const pollReservation = async (reservationId: number, attempt: number) => {
+      try {
+        const nextReservation = await getReservation(accessToken, reservationId);
+
+        if (cancelled) {
+          return;
+        }
+
+        setReservation(nextReservation);
+
+        if (isTerminalReservationStatus(nextReservation.status)) {
+          finishWithReservation(nextReservation);
+          return;
+        }
+
+        if (attempt >= POLL_TIMEOUT_ATTEMPTS) {
+          onError('예약 결과를 확인하는 데 시간이 더 필요합니다. 잠시 후 다시 시도해 주세요.');
+          return;
+        }
+
+        pollTimeoutRef.current = setTimeout(() => {
+          void pollReservation(reservationId, attempt + 1);
+        }, POLL_INTERVAL_MS);
+      } catch (error) {
+        if (!cancelled) {
+          onError(getReservationErrorMessage(error));
+        }
+      }
+    };
+
+    const startReservation = async () => {
+      try {
+        const createdReservation = await createAiCallReservation(accessToken, restaurantId, {
+          partySize: draft.partySize,
+          requestNote: draft.requestNote?.trim() || undefined,
+          reservationDate: draft.reservationDate,
+          reservationTime: draft.reservationTime,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setReservation(createdReservation);
+
+        if (isTerminalReservationStatus(createdReservation.status)) {
+          finishWithReservation(createdReservation);
+          return;
+        }
+
+        pollTimeoutRef.current = setTimeout(() => {
+          void pollReservation(createdReservation.reservationId, 1);
+        }, POLL_INTERVAL_MS);
+      } catch (error) {
+        if (!cancelled) {
+          onError(getReservationErrorMessage(error));
+        }
+      }
+    };
+
+    void startReservation();
 
     const dots = setInterval(() => {
       setDotCount((current) => (current >= 3 ? 1 : current + 1));
     }, 500);
 
     return () => {
-      timers.forEach((timer) => clearTimeout(timer));
+      cancelled = true;
+      if (completionTimeoutRef.current) {
+        clearTimeout(completionTimeoutRef.current);
+      }
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+      }
       clearInterval(dots);
     };
-  }, [onComplete, statusMessages.length]);
+  }, [accessToken, draft, onComplete, onError, restaurantId]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
