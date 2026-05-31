@@ -108,6 +108,9 @@ import { TasteListNameScreen } from '../screens/TasteListNameScreen';
 import { TasteSelectionScreen } from '../screens/TasteSelectionScreen';
 import { UserReviewsScreen } from '../screens/UserReviewsScreen';
 import { UserProfileScreen } from '../screens/UserProfileScreen';
+import { WorldCupBattleScreen } from '../screens/WorldCupBattleScreen';
+import { WorldCupResultScreen } from '../screens/WorldCupResultScreen';
+import { WorldCupStartScreen } from '../screens/WorldCupStartScreen';
 import { WriteReviewDraft, WriteReviewScreen } from '../screens/WriteReviewScreen';
 import { UserProfile, userProfiles } from '../data/userProfiles';
 import {
@@ -116,6 +119,7 @@ import {
   AiReservationResult,
 } from '../types/aiReservation';
 import { LadderGameSetup } from '../types/ladderGame';
+import { WorldCupCategory, WorldCupEntry } from '../types/worldCup';
 import { normalizeReliabilityGrade } from '../utils/reliability';
 import { buildLadderSetup } from '../utils/ladderGame';
 import {
@@ -164,6 +168,9 @@ type FlowScreen =
   | 'ladder-play'
   | 'snail-race-start'
   | 'snail-race-play'
+  | 'worldcup-start'
+  | 'worldcup-battle'
+  | 'worldcup-result'
   | 'reliability-guide'
   | 'user-profile';
 
@@ -603,6 +610,8 @@ export function AppRoot() {
   const [ladderPlayerCount, setLadderPlayerCount] = useState(4);
   const [ladderSetup, setLadderSetup] = useState<LadderGameSetup>(buildLadderSetup(4));
   const [snailRaceCount, setSnailRaceCount] = useState(4);
+  const [worldCupCategory, setWorldCupCategory] = useState<WorldCupCategory>('all');
+  const [worldCupWinner, setWorldCupWinner] = useState<WorldCupEntry | null>(null);
   const [reliabilityGuideSource, setReliabilityGuideSource] =
     useState<ReliabilityGuideSource>(null);
   const [reliabilityGuideGrade, setReliabilityGuideGrade] = useState<string | null>(null);
@@ -2988,6 +2997,11 @@ export function AppRoot() {
     setScreen('snail-race-start');
   };
 
+  const openWorldCup = () => {
+    setWorldCupWinner(null);
+    setScreen('worldcup-start');
+  };
+
   const handleConfirmLadderCount = (count: number) => {
     setLadderPlayerCount(count);
     setLadderSetup(buildLadderSetup(count));
@@ -2997,6 +3011,11 @@ export function AppRoot() {
   const handleConfirmSnailRaceCount = (count: number) => {
     setSnailRaceCount(count);
     setScreen('snail-race-play');
+  };
+
+  const handleConfirmWorldCup = () => {
+    setWorldCupWinner(null);
+    setScreen('worldcup-battle');
   };
 
   const openWriteReview = (restaurantName: string, restaurantId?: number) => {
@@ -3589,6 +3608,41 @@ export function AppRoot() {
           racerCount={snailRaceCount}
           onBack={() => setScreen('snail-race-start')}
         />
+      ) : screen === 'worldcup-start' ? (
+        <WorldCupStartScreen
+          category={worldCupCategory}
+          onBack={() => {
+            setActiveTab('home');
+            setHomeRestoreAnimated(false);
+            setHomeRestoreKey((current) => current + 1);
+            setScreen('tabs');
+          }}
+          onChangeCategory={setWorldCupCategory}
+          onConfirm={handleConfirmWorldCup}
+        />
+      ) : screen === 'worldcup-battle' ? (
+        <WorldCupBattleScreen
+          category={worldCupCategory}
+          onBack={() => setScreen('worldcup-start')}
+          onComplete={(winner) => {
+            setWorldCupWinner(winner);
+            setScreen('worldcup-result');
+          }}
+        />
+      ) : screen === 'worldcup-result' && worldCupWinner ? (
+        <WorldCupResultScreen
+          winner={worldCupWinner}
+          onBackToHome={() => {
+            setActiveTab('home');
+            setHomeRestoreAnimated(false);
+            setHomeRestoreKey((current) => current + 1);
+            setScreen('tabs');
+          }}
+          onRestart={() => {
+            setWorldCupWinner(null);
+            setScreen('worldcup-battle');
+          }}
+        />
       ) : screen === 'reliability-guide' ? (
         <ReliabilityGuideScreen
           currentGrade={reliabilityGuideGrade}
@@ -3898,6 +3952,7 @@ export function AppRoot() {
           onPressAi={() => setScreen('ai-chat')}
           onPressLadderGame={openLadderGame}
           onPressSnailRace={openSnailRace}
+          onPressWorldCup={openWorldCup}
           onPressNews={() => setScreen('news')}
           onPressLocalRanking={() => openRankingDetail('local')}
           onPressNationalRanking={() => openRankingDetail('national')}

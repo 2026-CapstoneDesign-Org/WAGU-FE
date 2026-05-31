@@ -38,7 +38,7 @@ type BannerItem = {
   id: string;
   subtitle: string;
   title: string;
-  type: 'default' | 'ladder' | 'snail';
+  type: 'default' | 'ladder' | 'snail' | 'worldcup';
 };
 
 const banners: BannerItem[] = [
@@ -83,6 +83,23 @@ const loopedBanners = [
   displayBanners[displayBanners.length - 1],
   ...displayBanners,
   displayBanners[0],
+];
+
+const gameDisplayBanners: BannerItem[] = [
+  ...displayBanners.slice(0, 2),
+  {
+    id: 'banner-worldcup',
+    title: '메뉴 월드컵',
+    subtitle: '더 끌리는 메뉴를 골라 오늘의 우승 메뉴를 정해보세요',
+    type: 'worldcup',
+  },
+  ...displayBanners.slice(2),
+];
+
+const gameLoopedBanners = [
+  gameDisplayBanners[gameDisplayBanners.length - 1],
+  ...gameDisplayBanners,
+  gameDisplayBanners[0],
 ];
 
 const influencers = [
@@ -147,6 +164,7 @@ type MainHomeScreenProps = {
   onPressAi?: () => void;
   onPressLadderGame?: () => void;
   onPressSnailRace?: () => void;
+  onPressWorldCup?: () => void;
   onPressNews?: () => void;
   onPressLocalRanking?: () => void;
   onPressNationalRanking?: () => void;
@@ -404,6 +422,7 @@ export function MainHomeScreen({
   onPressNews,
   onPressLadderGame,
   onPressSnailRace,
+  onPressWorldCup,
   onPressLocalRanking,
   onPressNationalRanking,
   onPressSearch,
@@ -477,7 +496,7 @@ export function MainHomeScreen({
 
   const dots = useMemo(
     () =>
-      displayBanners.map((banner, index) => ({ id: banner.id, active: index === activeBanner })),
+      gameDisplayBanners.map((banner, index) => ({ id: banner.id, active: index === activeBanner })),
     [activeBanner]
   );
 
@@ -520,12 +539,12 @@ export function MainHomeScreen({
                 let nextLoopIndex = rawIndex;
 
                 if (rawIndex === 0) {
-                  nextLoopIndex = displayBanners.length;
+                  nextLoopIndex = gameDisplayBanners.length;
                   bannerScrollRef.current?.scrollTo({
                     x: nextLoopIndex * bannerWidth,
                     animated: false,
                   });
-                } else if (rawIndex === loopedBanners.length - 1) {
+                } else if (rawIndex === gameLoopedBanners.length - 1) {
                   nextLoopIndex = 1;
                   bannerScrollRef.current?.scrollTo({
                     x: nextLoopIndex * bannerWidth,
@@ -546,10 +565,11 @@ export function MainHomeScreen({
                 scheduleNextAutoSlide();
               }}
             >
-              {loopedBanners.map((banner, index) => {
+              {gameLoopedBanners.map((banner, index) => {
                 const isLadderBanner = banner.type === 'ladder';
                 const isSnailBanner = banner.type === 'snail';
-                const isGameBanner = isLadderBanner || isSnailBanner;
+                const isWorldCupBanner = banner.type === 'worldcup';
+                const isGameBanner = isLadderBanner || isSnailBanner || isWorldCupBanner;
 
                 return (
                   <Pressable
@@ -559,15 +579,18 @@ export function MainHomeScreen({
                       isGameBanner ? styles.bannerLadderCard : styles.bannerDefaultCard,
                     ]}
                     disabled={
-                      (!isLadderBanner && !isSnailBanner) ||
+                      (!isLadderBanner && !isSnailBanner && !isWorldCupBanner) ||
                       (isLadderBanner && !onPressLadderGame) ||
-                      (isSnailBanner && !onPressSnailRace)
+                      (isSnailBanner && !onPressSnailRace) ||
+                      (isWorldCupBanner && !onPressWorldCup)
                     }
                     onPress={
                       isLadderBanner
                         ? onPressLadderGame
                         : isSnailBanner
                           ? onPressSnailRace
+                          : isWorldCupBanner
+                            ? onPressWorldCup
                           : undefined
                     }
                   >
@@ -613,8 +636,8 @@ export function MainHomeScreen({
                     transform: [
                       {
                         translateX: indicatorPosition.interpolate({
-                          inputRange: [1, displayBanners.length],
-                          outputRange: [0, (displayBanners.length - 1) * 12],
+                          inputRange: [1, gameDisplayBanners.length],
+                          outputRange: [0, (gameDisplayBanners.length - 1) * 12],
                         }),
                       },
                     ],
