@@ -90,7 +90,6 @@ import { MyListsScreen } from '../screens/MyListsScreen';
 import { MyPageScreen, MyPageScrollState } from '../screens/MyPageScreen';
 import { MyReviewsScreen } from '../screens/MyReviewsScreen';
 import { NewsScreen } from '../screens/NewsScreen';
-import { OnboardingIntroScreen } from '../screens/OnboardingIntroScreen';
 import { OnboardingLoginScreen } from '../screens/OnboardingLoginScreen';
 import { RankingDetailScreen } from '../screens/RankingDetailScreen';
 import { RankingTabScreen, RankingTabScrollState } from '../screens/RankingTabScreen';
@@ -135,7 +134,6 @@ type FlowScreen =
   | 'login'
   | 'signup-nickname'
   | 'signup-profile'
-  | 'intro'
   | 'taste'
   | 'taste-list-name'
   | 'rating'
@@ -667,6 +665,7 @@ export function AppRoot() {
     selectedUserProfileId
       ? visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ?? null
       : null;
+  const selectedRepresentativeListId = selectedVisibleUserProfile?.representativeListId ?? null;
   const fallbackSelectedUserProfile: UserProfile | null = selectedUserProfileId
     ? {
         id: selectedUserProfileId,
@@ -973,15 +972,6 @@ export function AppRoot() {
         representativeRestaurants,
       };
 
-      if (representativeList) {
-        const representativeListId = String(representativeList.id);
-        setMyListLikeStateById((current) => ({
-          ...current,
-          [representativeListId]:
-            representativeList.isLiked ?? current[representativeListId] ?? false,
-        }));
-      }
-
       if (userReviews !== null) {
         setRemoteUserReviewsByUserId((current) => ({
           ...current,
@@ -1136,7 +1126,7 @@ export function AppRoot() {
     const representativeListId =
       myLists.find((item) => item.isRepresentative)?.id ?? myLists[0]?.id;
 
-    if (!representativeListId || myListLikeCountById[representativeListId] !== undefined) {
+    if (!representativeListId) {
       return;
     }
 
@@ -1220,11 +1210,9 @@ export function AppRoot() {
       return;
     }
 
-    const selectedProfile =
-      visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ?? null;
-    const representativeListId = selectedProfile?.representativeListId;
+    const representativeListId = selectedRepresentativeListId;
 
-    if (!representativeListId || myListLikeCountById[representativeListId] !== undefined) {
+    if (!representativeListId) {
       return;
     }
 
@@ -1238,7 +1226,10 @@ export function AppRoot() {
 
     const hydrateSelectedProfileRepresentativeListLikeCount = async () => {
       try {
-        const likeCount = await getListLikeCount(session.accessToken!, parsedListId);
+        const [likeCount, detail] = await Promise.all([
+          getListLikeCount(session.accessToken!, parsedListId),
+          getListDetail(session.accessToken!, parsedListId).catch(() => null),
+        ]);
 
         if (cancelled) {
           return;
@@ -1248,6 +1239,25 @@ export function AppRoot() {
           ...current,
           [representativeListId]: likeCount,
         }));
+
+        if (typeof detail?.isLiked === 'boolean') {
+          setMyListLikeStateById((current) => ({
+            ...current,
+            [representativeListId]: detail.isLiked ?? current[representativeListId] ?? false,
+          }));
+
+          const applyNextLikeState = (profile: UserProfile) =>
+            profile.id === selectedUserProfileId
+              ? {
+                  ...profile,
+                  representativeListIsLiked: detail.isLiked,
+                }
+              : profile;
+
+          setRemoteUserProfiles((current) => current.map(applyNextLikeState));
+          setSearchResultUserProfiles((current) => current.map(applyNextLikeState));
+          setRecommendedUserProfiles((current) => current.map(applyNextLikeState));
+        }
       } catch {
         if (cancelled) {
           return;
@@ -1265,13 +1275,7 @@ export function AppRoot() {
     return () => {
       cancelled = true;
     };
-  }, [
-    myListLikeCountById,
-    screen,
-    selectedUserProfileId,
-    session?.accessToken,
-    visibleUserProfiles,
-  ]);
+  }, [screen, selectedRepresentativeListId, selectedUserProfileId, session?.accessToken]);
 
   const handleToggleUserProfileFollow = async (userId: string, nextIsFollowing: boolean) => {
     if (!session?.accessToken) {
@@ -2610,7 +2614,14 @@ export function AppRoot() {
       return;
     }
 
-    const isCurrentlyLiked = myListLikeStateById[listId] ?? false;
+    const hasStoredLikeState = Object.prototype.hasOwnProperty.call(myListLikeStateById, listId);
+    const profileBackedLikeState =
+      selectedVisibleUserProfile?.representativeListId === listId
+        ? selectedVisibleUserProfile.representativeListIsLiked ?? false
+        : false;
+    const isCurrentlyLiked = hasStoredLikeState
+      ? myListLikeStateById[listId]
+      : profileBackedLikeState;
 
     setMyListLikePendingIds((current) =>
       current.includes(listId) ? current : [...current, listId],
@@ -2631,6 +2642,19 @@ export function AppRoot() {
         ...current,
         [listId]: Math.max(0, (current[listId] ?? 0) + (isCurrentlyLiked ? -1 : 1)),
       }));
+      if (selectedUserProfileId && selectedVisibleUserProfile?.representativeListId === listId) {
+        const applyNextLikeState = (profile: UserProfile) =>
+          profile.id === selectedUserProfileId
+            ? {
+                ...profile,
+                representativeListIsLiked: !isCurrentlyLiked,
+              }
+            : profile;
+
+        setRemoteUserProfiles((current) => current.map(applyNextLikeState));
+        setSearchResultUserProfiles((current) => current.map(applyNextLikeState));
+        setRecommendedUserProfiles((current) => current.map(applyNextLikeState));
+      }
     } catch (error) {
       if (error instanceof ApiError) {
         if (!isCurrentlyLiked && (error.status === 400 || error.status === 409)) {
@@ -2638,6 +2662,19 @@ export function AppRoot() {
             ...current,
             [listId]: true,
           }));
+          if (selectedUserProfileId && selectedVisibleUserProfile?.representativeListId === listId) {
+            const applyNextLikeState = (profile: UserProfile) =>
+              profile.id === selectedUserProfileId
+                ? {
+                    ...profile,
+                    representativeListIsLiked: true,
+                  }
+                : profile;
+
+            setRemoteUserProfiles((current) => current.map(applyNextLikeState));
+            setSearchResultUserProfiles((current) => current.map(applyNextLikeState));
+            setRecommendedUserProfiles((current) => current.map(applyNextLikeState));
+          }
 
           try {
             const likeCount = await getListLikeCount(session.accessToken, parsedListId);
@@ -2657,6 +2694,19 @@ export function AppRoot() {
             ...current,
             [listId]: false,
           }));
+          if (selectedUserProfileId && selectedVisibleUserProfile?.representativeListId === listId) {
+            const applyNextLikeState = (profile: UserProfile) =>
+              profile.id === selectedUserProfileId
+                ? {
+                    ...profile,
+                    representativeListIsLiked: false,
+                  }
+                : profile;
+
+            setRemoteUserProfiles((current) => current.map(applyNextLikeState));
+            setSearchResultUserProfiles((current) => current.map(applyNextLikeState));
+            setRecommendedUserProfiles((current) => current.map(applyNextLikeState));
+          }
 
           try {
             const likeCount = await getListLikeCount(session.accessToken, parsedListId);
@@ -2689,6 +2739,47 @@ export function AppRoot() {
 
   const convertFiveStarToTenPoint = (value: number) => value * 2;
 
+  const delay = (ms: number) =>
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
+
+  const isUserNotFoundApiError = (error: unknown) =>
+    error instanceof ApiError && error.message.includes('유저를 찾을 수 없습니다');
+
+  const getReadableApiErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof ApiError && error.message) {
+      return error.message;
+    }
+
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    return fallback;
+  };
+
+  const waitForServerUserReady = async (token: string, attempts = 3) => {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        await getMyInfo(token);
+        return true;
+      } catch (error) {
+        if (attempt === attempts - 1) {
+          return false;
+        }
+
+        if (!isUserNotFoundApiError(error) && !isAuthError(error)) {
+          return false;
+        }
+
+        await delay(450 * (attempt + 1));
+      }
+    }
+
+    return false;
+  };
+
   const createTasteList = async (
     title: string,
     selected: Restaurant[],
@@ -2701,85 +2792,146 @@ export function AppRoot() {
     createTasteListLockRef.current = true;
 
     try {
-    if (!session?.accessToken) {
-      if (tasteFlowSource === 'my-lists' && title.trim()) {
-        appendNewList(title.trim(), selected);
+      if (!session?.accessToken) {
+        if (tasteFlowSource === 'my-lists' && title.trim()) {
+          appendNewList(title.trim(), selected);
+        }
+        return;
       }
-      return;
-    }
 
-    const internalRestaurants = selected.filter((restaurant) => !restaurant.externalPlaceId);
-    const externalRestaurants = selected.filter(
-      (restaurant): restaurant is Restaurant & { externalPlaceId: string } =>
-        Boolean(restaurant.externalPlaceId),
-    );
+      const internalRestaurants = selected.filter((restaurant) => !restaurant.externalPlaceId);
+      const externalRestaurants = selected.filter(
+        (restaurant): restaurant is Restaurant & { externalPlaceId: string } =>
+          Boolean(restaurant.externalPlaceId),
+      );
 
-    if (internalRestaurants.length === 0) {
-      throw new Error('리스트를 만들려면 검색된 가게를 한 곳 이상 선택해 주세요.');
-    }
+      if (internalRestaurants.length === 0) {
+        throw new Error('리스트를 만들려면 검색된 가게를 한 곳 이상 선택해 주세요.');
+      }
 
-    const resolvedRestaurants = await Promise.all(
-      internalRestaurants.map(async (restaurant) => {
-        const candidates = await searchRestaurants(session.accessToken, restaurant.name);
-        const matched =
-          candidates.find((item) => item.name === restaurant.name) ??
-          candidates.find((item) => item.name === restaurant.shortName) ??
-          candidates[0];
+      if (internalRestaurants.length < 5) {
+        const missingCount = 5 - internalRestaurants.length;
+        throw new Error(
+          `외부 식당은 첫 리스트 생성의 최소 개수에 포함되지 않아요. 일반 가게를 ${missingCount}곳 더 선택해 주세요.`,
+        );
+      }
 
-        if (!matched) {
-          throw new Error(`${restaurant.name} ?앸떦???쒕쾭?먯꽌 李얠? 紐삵뻽?댁슂.`);
+      const resolvedRestaurants = await Promise.all(
+        internalRestaurants.map(async (restaurant) => {
+          const candidates = await searchRestaurants(session.accessToken, restaurant.name);
+          const matched =
+            candidates.find((item) => item.name === restaurant.name) ??
+            candidates.find((item) => item.name === restaurant.shortName) ??
+            candidates[0];
+
+          if (!matched) {
+            throw new Error(`${restaurant.name} 식당을 서버에서 찾지 못했어요.`);
+          }
+
+          return matched;
+        }),
+      );
+
+      const regionName =
+        resolvedRestaurants[0]?.regionName ??
+        selected[0]?.address?.split(' ')[0] ??
+        '용인';
+
+      const existingListCount = myLists.length;
+
+      let createdList: Awaited<ReturnType<typeof createList>> | null = null;
+
+      try {
+        const createListBody = {
+          isPublic: true,
+          title: title.trim(),
+          regionName,
+          restaurants: internalRestaurants.map((restaurant, index) => {
+            const rating = ratings[restaurant.id];
+            const resolvedRestaurant = resolvedRestaurants[index];
+
+            return {
+              restaurantId: resolvedRestaurant.id,
+              tasteScore: convertFiveStarToTenPoint(rating['맛']),
+              valueScore: convertFiveStarToTenPoint(rating['가성비']),
+              moodScore: convertFiveStarToTenPoint(rating['서비스']),
+            };
+          }),
+        };
+
+        let lastCreateListError: unknown = null;
+
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            createdList = await createList(session.accessToken, createListBody);
+            lastCreateListError = null;
+            break;
+          } catch (error) {
+            lastCreateListError = error;
+
+            if (!isUserNotFoundApiError(error) || attempt === 2) {
+              throw error;
+            }
+
+            console.warn(
+              `[TasteList] createList user-not-found retry ${attempt + 1}/3`,
+              error,
+            );
+            await waitForServerUserReady(session.accessToken, 2);
+            await delay(500 * (attempt + 1));
+          }
         }
 
-        return matched;
-      }),
-    );
+        if (lastCreateListError || !createdList) {
+          throw lastCreateListError;
+        }
+      } catch (error) {
+        console.error('[TasteList] createList failed', error);
+        Alert.alert(
+          '안내',
+          `리스트 생성 중 문제가 발생했어요.\n${getReadableApiErrorMessage(
+            error,
+            '다시 시도해 주세요.',
+          )}`,
+        );
+        return;
+      }
 
-    const regionName =
-      resolvedRestaurants[0]?.regionName ??
-      selected[0]?.address?.split(' ')[0] ??
-      '?⑹씤';
+      if (!createdList.isPublic) {
+        await toggleListVisibility(session.accessToken, createdList.id);
+      }
 
-    const existingListCount = myLists.length;
-    const createdList = await createList(session.accessToken, {
-      isPublic: true,
-      title: title.trim(),
-      regionName,
-      restaurants: internalRestaurants.map((restaurant, index) => {
-        const rating = ratings[restaurant.id];
-        const resolvedRestaurant = resolvedRestaurants[index];
+      try {
+        await Promise.all(
+          externalRestaurants.map((restaurant) => {
+            const rating = ratings[restaurant.id];
 
-        return {
-          restaurantId: resolvedRestaurant.id,
-          tasteScore: convertFiveStarToTenPoint(rating['맛']),
-          valueScore: convertFiveStarToTenPoint(rating['가성비']),
-          moodScore: convertFiveStarToTenPoint(rating['서비스']),
-        };
-      }),
-    });
+            return addExternalRestaurantToListFallback(session.accessToken!, createdList.id, {
+              externalPlaceId: restaurant.externalPlaceId,
+              searchQuery: restaurant.externalSearchQuery ?? restaurant.name,
+              tasteScore: convertFiveStarToTenPoint(rating['맛']),
+              valueScore: convertFiveStarToTenPoint(rating['가성비']),
+              moodScore: convertFiveStarToTenPoint(rating['서비스']),
+            });
+          }),
+        );
+      } catch (error) {
+        console.error('[TasteList] addExternalRestaurantToListFallback failed', error);
+        Alert.alert(
+          '안내',
+          `외부 가게 평점 저장 중 문제가 발생했어요.\n${getReadableApiErrorMessage(
+            error,
+            '다시 시도해 주세요.',
+          )}`,
+        );
+        return;
+      }
 
-    if (!createdList.isPublic) {
-      await toggleListVisibility(session.accessToken, createdList.id);
-    }
+      if (existingListCount === 0) {
+        await setRepresentativeList(session.accessToken, createdList.id);
+      }
 
-    await Promise.all(
-      externalRestaurants.map((restaurant) => {
-        const rating = ratings[restaurant.id];
-
-        return addExternalRestaurantToListFallback(session.accessToken!, createdList.id, {
-          externalPlaceId: restaurant.externalPlaceId,
-          searchQuery: restaurant.name,
-          tasteScore: convertFiveStarToTenPoint(rating['맛']),
-          valueScore: convertFiveStarToTenPoint(rating['가성비']),
-          moodScore: convertFiveStarToTenPoint(rating['서비스']),
-        });
-      }),
-    );
-
-    if (existingListCount === 0) {
-      await setRepresentativeList(session.accessToken, createdList.id);
-    }
-
-    await refreshMyLists(session.accessToken);
+      await refreshMyLists(session.accessToken);
     } finally {
       createTasteListLockRef.current = false;
     }
@@ -2954,8 +3106,15 @@ export function AppRoot() {
             }),
           ),
         );
-      } catch {
-        Alert.alert('?덈궡', '由ъ뒪?몄뿉 ?앸떦??異붽??섏? 紐삵뻽?듬땲??');
+      } catch (error) {
+        console.error('[AddToList] addRestaurantToList failed', error);
+        Alert.alert(
+          '안내',
+          `리스트에 가게 점수를 저장하지 못했어요.\n${getReadableApiErrorMessage(
+            error,
+            '다시 시도해 주세요.',
+          )}`,
+        );
         return;
       }
     }
@@ -3324,7 +3483,15 @@ export function AppRoot() {
       }
     }
 
-    setScreen(requiresProfileSetup ? 'signup-profile' : 'intro');
+    if (requiresProfileSetup) {
+      setScreen('signup-profile');
+      return;
+    }
+
+    setTasteFlowSource('onboarding');
+    setTasteListName('');
+    setSelectedRestaurants([]);
+    setScreen('taste-list-name');
   };
 
   const handleSignupProfileSubmit = async (profile: {
@@ -3350,10 +3517,18 @@ export function AppRoot() {
     setBirthDateLabel(`${profile.birthYear}년 ${profile.birthMonth}월 ${profile.birthDay}일`);
     setGenderLabel(profile.gender === 'MALE' ? '남성' : '여성');
     setRequiresProfileSetup(false);
+    await waitForServerUserReady(session.accessToken, 4);
     await hydrateHomeRecommendations(session.accessToken, { retryOnEmpty: true });
     const lists = await getMyLists(session.accessToken);
     setTasteFlowSource('onboarding');
-    setScreen(lists.length === 0 ? 'intro' : 'tabs');
+    if (lists.length === 0) {
+      setTasteListName('');
+      setSelectedRestaurants([]);
+      setScreen('taste-list-name');
+      return;
+    }
+
+    setScreen('tabs');
   };
 
   const handleLogout = async () => {
@@ -3401,21 +3576,13 @@ export function AppRoot() {
           onBack={() => setScreen('signup-nickname')}
           onSubmit={handleSignupProfileSubmit}
         />
-      ) : screen === 'intro' ? (
-        <OnboardingIntroScreen
-          onPressNext={() => {
-            setTasteFlowSource('onboarding');
-            setTasteListName('');
-            setSelectedRestaurants([]);
-            setScreen('taste-list-name');
-          }}
-          userName={nickname}
-        />
       ) : screen === 'taste-list-name' ? (
         <TasteListNameScreen
           nickname={nickname}
           mode={tasteFlowSource === 'my-lists' ? 'new-list' : 'first-list'}
-          onBack={() => setScreen(tasteFlowSource === 'my-lists' ? 'my-lists' : 'intro')}
+          onBack={() =>
+            setScreen(tasteFlowSource === 'my-lists' ? 'my-lists' : 'signup-profile')
+          }
           onSubmit={(name) => {
             setTasteListName(name);
             setScreen('taste');
@@ -3919,10 +4086,16 @@ export function AppRoot() {
               (() => {
                 const selectedProfile = selectedVisibleUserProfile;
                 const representativeListId = selectedProfile?.representativeListId;
+                const hasStoredLikeState = representativeListId
+                  ? Object.prototype.hasOwnProperty.call(
+                      myListLikeStateById,
+                      representativeListId,
+                    )
+                  : false;
                 return representativeListId
-                  ? myListLikeStateById[representativeListId] ??
-                      selectedProfile?.representativeListIsLiked ??
-                      false
+                  ? hasStoredLikeState
+                    ? myListLikeStateById[representativeListId]
+                    : selectedProfile?.representativeListIsLiked ?? false
                   : selectedProfile?.representativeListIsLiked ?? false;
               })()
             }

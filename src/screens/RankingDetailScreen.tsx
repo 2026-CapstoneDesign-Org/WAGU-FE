@@ -168,12 +168,14 @@ export function RankingDetailScreen({
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.list}>
-            {filteredItems.map((item) => (
+            {filteredItems.map((item, index) => (
               <Pressable
                 key={item.id}
                 style={styles.listItem}
                 onPress={() => onOpenRestaurantDetail?.(item.name)}
               >
+                <Text style={styles.rankNumber}>{index + 1}.</Text>
+
                 <View style={styles.thumbnail}>
                   {item.imageUri ? (
                     <Image source={{ uri: item.imageUri }} style={styles.thumbnailImage} />
@@ -262,6 +264,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 15,
+  },
+  rankNumber: {
+    width: 18,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    textAlign: 'right',
   },
   thumbnail: {
     width: 58,

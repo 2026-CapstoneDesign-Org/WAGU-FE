@@ -268,7 +268,7 @@ export function TasteSelectionScreen({
           const mappedExternalFallbackRestaurants = (unifiedSearch.restaurants ?? [])
             .filter((restaurant) => restaurant.externalPlaceId)
             .map((restaurant) => ({
-              id: `external:${restaurant.externalPlaceId}`,
+              id: String(restaurant.restaurantId),
               name: restaurant.restaurantName,
               shortName: restaurant.restaurantName,
               category:
@@ -278,7 +278,6 @@ export function TasteSelectionScreen({
                 '외부 장소',
               imageUri: restaurant.imageUrl,
               address: restaurant.address,
-              externalPlaceId: restaurant.externalPlaceId,
               isExternalFallback: true,
               source: restaurant.source,
             }))

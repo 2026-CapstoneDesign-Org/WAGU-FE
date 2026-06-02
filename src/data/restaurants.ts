@@ -19,6 +19,7 @@ export type Restaurant = {
   features?: string;
   menuItems?: RestaurantMenuItem[];
   externalPlaceId?: string;
+  externalSearchQuery?: string;
   isExternalFallback?: boolean;
   source?: string;
 };
