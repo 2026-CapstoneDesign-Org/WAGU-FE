@@ -3396,7 +3396,8 @@ export function AppRoot() {
     setScreen('snail-race-play');
   };
 
-  const handleConfirmWorldCup = () => {
+  const handleStartWorldCup = (category: WorldCupCategory) => {
+    setWorldCupCategory(category);
     setWorldCupWinner(null);
     setScreen('worldcup-battle');
   };
@@ -4021,15 +4022,13 @@ export function AppRoot() {
         />
       ) : screen === 'worldcup-start' ? (
         <WorldCupStartScreen
-          category={worldCupCategory}
           onBack={() => {
             setActiveTab('home');
             setHomeRestoreAnimated(false);
             setHomeRestoreKey((current) => current + 1);
             setScreen('tabs');
           }}
-          onChangeCategory={setWorldCupCategory}
-          onConfirm={handleConfirmWorldCup}
+          onSelectCategory={handleStartWorldCup}
         />
       ) : screen === 'worldcup-battle' ? (
         <WorldCupBattleScreen

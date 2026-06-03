@@ -153,7 +153,7 @@ export function SnailRacePlayScreen({
           <Pressable style={styles.backButton} onPress={onBack}>
             <ArrowLeftIcon width={24} height={24} />
           </Pressable>
-          <Text style={styles.headerTitle}>달팽이 레이스</Text>
+          <Text style={styles.headerTitle}>곰돌이 레이스</Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -185,7 +185,7 @@ export function SnailRacePlayScreen({
                 {distance === 100 ? '더 길게 달리기 모드' : '기본 레이스'}
               </Text>
               <Text style={styles.boardDescription}>
-                달리기 전에 원하는 색의 캐릭터를 골라 레이스를 시작해보세요.
+                역전에 역전, 끝까지 몰라요.
               </Text>
             </View>
 
@@ -251,8 +251,8 @@ export function SnailRacePlayScreen({
 
           {winner && !isRunning ? (
             <View style={styles.resultCard}>
-              <Text style={styles.resultEyebrow}>우승 달팽이</Text>
-              <Text style={styles.resultTitle}>{winner.label} 달팽이</Text>
+              <Text style={styles.resultEyebrow}>우승 곰돌이</Text>
+              <Text style={styles.resultTitle}>{winner.label} 곰돌이</Text>
               <View style={styles.resultListWrap}>
                 {results.map((result, index) => (
                   <View
@@ -266,7 +266,7 @@ export function SnailRacePlayScreen({
                       <View style={[styles.resultListDot, { backgroundColor: result.color }]} />
                       <Text style={styles.resultListLabel}>{result.rank}위</Text>
                     </View>
-                    <Text style={styles.resultListOutcome}>{result.label} 달팽이</Text>
+                    <Text style={styles.resultListOutcome}>{result.label} 곰돌이</Text>
                   </View>
                 ))}
               </View>

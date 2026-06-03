@@ -73,8 +73,8 @@ const displayBanners: BannerItem[] = [
   banners[0],
   {
     id: 'banner-snail-race',
-    title: '달팽이 레이스',
-    subtitle: '누가 먼저 도착할지 랜덤으로 겨뤄보세요',
+    title: '곰돌이 레이스',
+    subtitle: '역전에 역전, 끝까지 몰라요.',
     type: 'snail',
   },
   ...banners.slice(2),
@@ -101,6 +101,33 @@ const gameLoopedBanners = [
   gameDisplayBanners[gameDisplayBanners.length - 1],
   ...gameDisplayBanners,
   gameDisplayBanners[0],
+];
+
+const visibleGameBanners: BannerItem[] = [
+  {
+    id: 'banner-ladder-game',
+    title: '사다리타기',
+    subtitle: '누가 걸릴지 바로 정해보세요',
+    type: 'ladder',
+  },
+  {
+    id: 'banner-snail-race',
+    title: '곰돌이 레이스',
+    subtitle: '역전에 역전, 끝까지 몰라요.',
+    type: 'snail',
+  },
+  {
+    id: 'banner-worldcup',
+    title: '메뉴 월드컵',
+    subtitle: '끌리는 메뉴를 골라 오늘의 우승 메뉴를 정해보세요',
+    type: 'worldcup',
+  },
+];
+
+const visibleGameLoopedBanners = [
+  visibleGameBanners[visibleGameBanners.length - 1],
+  ...visibleGameBanners,
+  visibleGameBanners[0],
 ];
 
 const influencers = [
@@ -502,7 +529,7 @@ export function MainHomeScreen({
 
   const dots = useMemo(
     () =>
-      gameDisplayBanners.map((banner, index) => ({ id: banner.id, active: index === activeBanner })),
+      visibleGameBanners.map((banner, index) => ({ id: banner.id, active: index === activeBanner })),
     [activeBanner]
   );
 
@@ -545,12 +572,12 @@ export function MainHomeScreen({
                 let nextLoopIndex = rawIndex;
 
                 if (rawIndex === 0) {
-                  nextLoopIndex = gameDisplayBanners.length;
+                  nextLoopIndex = visibleGameBanners.length;
                   bannerScrollRef.current?.scrollTo({
                     x: nextLoopIndex * bannerWidth,
                     animated: false,
                   });
-                } else if (rawIndex === gameLoopedBanners.length - 1) {
+                } else if (rawIndex === visibleGameLoopedBanners.length - 1) {
                   nextLoopIndex = 1;
                   bannerScrollRef.current?.scrollTo({
                     x: nextLoopIndex * bannerWidth,
@@ -571,7 +598,7 @@ export function MainHomeScreen({
                 scheduleNextAutoSlide();
               }}
             >
-              {gameLoopedBanners.map((banner, index) => {
+              {visibleGameLoopedBanners.map((banner, index) => {
                 const isLadderBanner = banner.type === 'ladder';
                 const isSnailBanner = banner.type === 'snail';
                 const isWorldCupBanner = banner.type === 'worldcup';
@@ -642,8 +669,8 @@ export function MainHomeScreen({
                     transform: [
                       {
                         translateX: indicatorPosition.interpolate({
-                          inputRange: [1, gameDisplayBanners.length],
-                          outputRange: [0, (gameDisplayBanners.length - 1) * 12],
+                          inputRange: [1, visibleGameBanners.length],
+                          outputRange: [0, (visibleGameBanners.length - 1) * 12],
                         }),
                       },
                     ],

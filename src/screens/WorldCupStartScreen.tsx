@@ -1,24 +1,45 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import { WorldCupCategory } from '../types/worldCup';
-import { WORLD_CUP_CATEGORY_LABELS } from '../utils/worldCup';
 
 type WorldCupStartScreenProps = {
-  category: WorldCupCategory;
   onBack: () => void;
-  onChangeCategory: (category: WorldCupCategory) => void;
-  onConfirm: () => void;
+  onSelectCategory: (category: Exclude<WorldCupCategory, 'all'>) => void;
 };
 
-const CATEGORY_ORDER: WorldCupCategory[] = ['all', 'korean', 'night', 'dessert'];
+type CategoryCard = {
+  accent: string;
+  category: Exclude<WorldCupCategory, 'all'>;
+  eyebrow: string;
+  title: string;
+};
+
+const CATEGORY_CARDS: CategoryCard[] = [
+  {
+    accent: '#FF7B54',
+    category: 'korean',
+    eyebrow: 'KOREAN',
+    title: '한식',
+  },
+  {
+    accent: '#6D5DF6',
+    category: 'night',
+    eyebrow: 'LATE NIGHT',
+    title: '야식',
+  },
+  {
+    accent: '#FF8FB1',
+    category: 'dessert',
+    eyebrow: 'DESSERT',
+    title: '디저트',
+  },
+];
 
 export function WorldCupStartScreen({
-  category,
   onBack,
-  onChangeCategory,
-  onConfirm,
+  onSelectCategory,
 }: WorldCupStartScreenProps) {
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
@@ -28,48 +49,33 @@ export function WorldCupStartScreen({
             <ArrowLeftIcon height={24} width={24} />
           </Pressable>
           <Text style={styles.headerTitle}>메뉴 월드컵</Text>
-          <View style={styles.headerSpacer} />
         </View>
 
-        <View style={styles.centerWrap}>
-          <View style={styles.card}>
-            <Text style={styles.eyebrow}>WORLD CUP</Text>
-            <Text style={styles.title}>더 끌리는 메뉴를 골라보세요</Text>
-            <Text style={styles.description}>원하는 주제를 먼저 고른 뒤 8강 토너먼트를 시작합니다.</Text>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+        >
+          <View style={styles.cardList}>
+            {CATEGORY_CARDS.map((card) => (
+              <Pressable
+                key={card.category}
+                onPress={() => onSelectCategory(card.category)}
+                style={[styles.categoryCard, { borderColor: card.accent }]}
+              >
+                <View style={styles.cardCopy}>
+                  <Text style={[styles.cardEyebrow, { color: card.accent }]}>{card.eyebrow}</Text>
+                  <Text style={styles.cardTitle}>{card.title}</Text>
+                </View>
 
-            <View style={styles.categoryWrap}>
-              {CATEGORY_ORDER.map((item) => {
-                const isActive = item === category;
-
-                return (
-                  <Pressable
-                    key={item}
-                    onPress={() => onChangeCategory(item)}
-                    style={[styles.categoryChip, isActive && styles.categoryChipActive]}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryChipLabel,
-                        isActive && styles.categoryChipLabelActive,
-                      ]}
-                    >
-                      {WORLD_CUP_CATEGORY_LABELS[item]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <View style={styles.metaRow}>
-              <Text style={styles.metaTitle}>진행 방식</Text>
-              <Text style={styles.metaValue}>8강 토너먼트</Text>
-            </View>
-
-            <Pressable onPress={onConfirm} style={styles.confirmButton}>
-              <Text style={styles.confirmButtonLabel}>월드컵 시작</Text>
-            </Pressable>
+                <View style={styles.cardMeta}>
+                  <View style={[styles.accentDot, { backgroundColor: card.accent }]} />
+                  <Text style={styles.cardMetaLabel}>탭하면 바로 시작</Text>
+                  <Text style={styles.cardMetaValue}>8강</Text>
+                </View>
+              </Pressable>
+            ))}
           </View>
-        </View>
+        </ScrollView>
       </View>
     </SafeAreaView>
   );
@@ -78,19 +84,19 @@ export function WorldCupStartScreen({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFF9F5',
+    backgroundColor: '#F8F1EA',
   },
   screen: {
     flex: 1,
-    backgroundColor: '#FFF9F5',
-    paddingHorizontal: 16,
+    backgroundColor: '#F8F1EA',
     paddingTop: 24,
-    paddingBottom: 24,
   },
   header: {
+    minHeight: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 16,
   },
   backButton: {
     width: 24,
@@ -99,104 +105,66 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '800',
     color: '#111111',
   },
-  headerSpacer: {
-    width: 24,
-    height: 24,
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 28,
   },
-  centerWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  cardList: {
+    gap: 14,
   },
-  card: {
-    width: '100%',
+  categoryCard: {
+    minHeight: 164,
     borderRadius: 28,
+    borderWidth: 2,
     backgroundColor: '#111111',
-    paddingHorizontal: 24,
-    paddingVertical: 28,
-    gap: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 18,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
   },
-  eyebrow: {
+  cardCopy: {
+    gap: 8,
+    paddingRight: 24,
+  },
+  cardEyebrow: {
     fontSize: 11,
     lineHeight: 14,
-    fontWeight: '700',
-    color: '#FFB4AB',
+    fontWeight: '800',
     letterSpacing: 1,
   },
-  title: {
+  cardTitle: {
     fontSize: 30,
-    lineHeight: 36,
-    fontWeight: '800',
+    lineHeight: 34,
+    fontWeight: '900',
     color: '#FFFFFF',
   },
-  description: {
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '500',
-    color: '#D9D9D9',
-  },
-  categoryWrap: {
+  cardMeta: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  categoryChip: {
-    minHeight: 42,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#454545',
-    paddingHorizontal: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1A1A1A',
+    gap: 8,
   },
-  categoryChipActive: {
-    borderColor: '#FF3B30',
-    backgroundColor: '#FF3B30',
+  accentDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
   },
-  categoryChipLabel: {
-    fontSize: 14,
+  cardMetaLabel: {
+    flex: 1,
+    fontSize: 13,
     lineHeight: 18,
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  categoryChipLabelActive: {
-    color: '#FFFFFF',
-  },
-  metaRow: {
-    borderRadius: 20,
-    backgroundColor: '#1B1B1B',
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    gap: 6,
-  },
-  metaTitle: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-    color: '#8B8B8B',
-  },
-  metaValue: {
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  confirmButton: {
-    minHeight: 58,
-    borderRadius: 20,
-    backgroundColor: '#FF3B30',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmButtonLabel: {
-    fontSize: 17,
-    lineHeight: 22,
+  cardMetaValue: {
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: '800',
     color: '#FFFFFF',
   },

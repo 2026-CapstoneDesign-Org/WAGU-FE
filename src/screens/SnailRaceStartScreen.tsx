@@ -32,14 +32,14 @@ export function SnailRaceStartScreen({
           <Pressable style={styles.backButton} onPress={onBack}>
             <ArrowLeftIcon width={24} height={24} />
           </Pressable>
-          <Text style={styles.headerTitle}>달팽이 레이스</Text>
+          <Text style={styles.headerTitle}>곰돌이 레이스</Text>
           <View style={styles.headerSpacer} />
         </View>
 
         <View style={styles.centerWrap}>
           <View style={styles.countCard}>
-            <Text style={styles.cardEyebrow}>SNAIL RACE</Text>
-            <Text style={styles.cardTitle}>달팽이 수를 정해주세요</Text>
+            <Text style={styles.cardEyebrow}>BEAR RACE</Text>
+            <Text style={styles.cardTitle}>곰돌이 수를 정해주세요</Text>
             <View style={styles.counterRow}>
               <Pressable style={styles.counterButton} onPress={decreaseCount}>
                 <Text style={styles.counterButtonLabel}>-</Text>
