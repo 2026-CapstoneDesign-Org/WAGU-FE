@@ -354,6 +354,7 @@ function createSearchResultUserProfile(user: {
     nickname: user.nickname,
     profileImageUrl: user.profileImageUrl,
     reliabilityGrade: user.reliabilityGrade,
+    reviewCount: '0',
     representativeAccentColor: accentColor,
     representativeListIsLiked: false,
     representativeListId: undefined,
@@ -666,11 +667,19 @@ export function AppRoot() {
     selectedUserProfileId
       ? visibleUserProfiles.find((item) => item.id === selectedUserProfileId) ?? null
       : null;
+  const selectedUserProfileKnownFollowing =
+    selectedUserProfileId !== null &&
+    myFollowingUsers.some((user) => user.id === selectedUserProfileId);
+  const selectedUserProfileIsFollowing =
+    selectedUserProfileId !== null
+      ? userProfileFollowStateById[selectedUserProfileId] ?? selectedUserProfileKnownFollowing
+      : false;
   const selectedRepresentativeListId = selectedVisibleUserProfile?.representativeListId ?? null;
   const fallbackSelectedUserProfile: UserProfile | null = selectedUserProfileId
     ? {
         id: selectedUserProfileId,
         nickname: '',
+        reviewCount: '0',
         representativeAccentColor:
           HOME_PROFILE_ACCENT_COLORS[
             Math.abs(Number(selectedUserProfileId) || 0) % HOME_PROFILE_ACCENT_COLORS.length
@@ -961,7 +970,7 @@ export function AppRoot() {
             ? String(followCount.followingCount)
             : baseProfile?.followingCount,
         reviewCount:
-          userReviews !== null ? String(userReviews.length) : baseProfile?.reviewCount,
+          userReviews !== null ? String(userReviews.length) : baseProfile?.reviewCount ?? '0',
         representativeListIsLiked:
           representativeList?.isLiked ?? baseProfile?.representativeListIsLiked ?? false,
         representativeListId: representativeList
@@ -1053,6 +1062,15 @@ export function AppRoot() {
           ...current,
           [selectedUserProfileId]: followStatus,
         }));
+      } else {
+        setUserProfileFollowStateById((current) =>
+          current[selectedUserProfileId] !== undefined
+            ? current
+            : {
+                ...current,
+                [selectedUserProfileId]: selectedUserProfileKnownFollowing,
+              },
+        );
       }
     };
 
@@ -1067,9 +1085,133 @@ export function AppRoot() {
     recommendedUserProfiles,
     remoteUserProfiles,
     searchResultUserProfiles,
+    selectedUserProfileKnownFollowing,
     selectedUserProfileId,
     session?.accessToken,
   ]);
+
+  useEffect(() => {
+    if (!session?.accessToken || !selectedUserProfileId || screen !== 'user-friends') {
+      return;
+    }
+
+    const parsedUserId = Number(selectedUserProfileId);
+
+    if (Number.isNaN(parsedUserId)) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateUserFriendConnections = async () => {
+      const [followingsResult, followersResult] = await Promise.allSettled([
+        getFollowings(session.accessToken!, parsedUserId),
+        getFollowers(session.accessToken!, parsedUserId),
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      if (hasRejectedAuthError([followingsResult, followersResult])) {
+        await clearAuthSession();
+        return;
+      }
+
+      const followings = followingsResult.status === 'fulfilled' ? followingsResult.value : null;
+      const followers = followersResult.status === 'fulfilled' ? followersResult.value : null;
+
+      if (followings === null && followers === null) {
+        return;
+      }
+
+      const myFollowingIdSet = new Set(
+        myFollowingUsers
+          .map((user) => Number(user.id))
+          .filter((followedUserId) => Number.isFinite(followedUserId)),
+      );
+
+      const [hydratedFollowings, hydratedFollowers] = await Promise.all([
+        followings !== null
+          ? hydrateFriendUsersWithReliability(
+              session.accessToken!,
+              followings,
+              myFollowingIdSet,
+            )
+          : Promise.resolve<FriendUser[] | null>(null),
+        followers !== null
+          ? hydrateFriendUsersWithReliability(
+              session.accessToken!,
+              followers,
+              myFollowingIdSet,
+            )
+          : Promise.resolve<FriendUser[] | null>(null),
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      setRemoteUserFriendConnectionsByUserId((current) => ({
+        ...current,
+        [selectedUserProfileId]: {
+          following:
+            hydratedFollowings !== null
+              ? hydratedFollowings
+              : current[selectedUserProfileId]?.following ?? [],
+          followers:
+            hydratedFollowers !== null
+              ? hydratedFollowers
+              : current[selectedUserProfileId]?.followers ?? [],
+        },
+      }));
+    };
+
+    void hydrateUserFriendConnections();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [myFollowingUsers, screen, selectedUserProfileId, session?.accessToken]);
+
+  useEffect(() => {
+    if (!session?.accessToken || !selectedUserProfileId || screen !== 'user-reviews') {
+      return;
+    }
+
+    const parsedUserId = Number(selectedUserProfileId);
+
+    if (Number.isNaN(parsedUserId)) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateUserReviews = async () => {
+      try {
+        const reviews = await getUserReviews(session.accessToken!, parsedUserId);
+
+        if (cancelled) {
+          return;
+        }
+
+        setRemoteUserReviewsByUserId((current) => ({
+          ...current,
+          [selectedUserProfileId]: reviews.map(mapApiReviewToMyReview),
+        }));
+      } catch (error) {
+        if (!cancelled && isAuthError(error)) {
+          await clearAuthSession();
+        }
+      }
+    };
+
+    void hydrateUserReviews();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, selectedUserProfileId, session?.accessToken]);
 
   useEffect(() => {
     if (!session?.accessToken || !selectedMyListId || screen !== 'my-list-detail') {
@@ -1910,29 +2052,40 @@ export function AppRoot() {
           setHasUnreadNews(unreadNotificationCountResult.value > 0);
         }
 
-        if (followingsResult.status === 'fulfilled' && followersResult.status === 'fulfilled') {
-          const followingUserIds = new Set(
-            followingsResult.value.map((user) => user.userId),
-          );
+        const followingUserIds = new Set(
+          followingsResult.status === 'fulfilled'
+            ? followingsResult.value.map((user) => user.userId)
+            : myFollowingUsers
+                .map((user) => Number(user.id))
+                .filter((userId) => Number.isFinite(userId)),
+        );
 
-          const [nextFollowingUsers, nextFollowerUsers] = await Promise.all([
-            hydrateFriendUsersWithReliability(
-              session.accessToken,
-              followingsResult.value,
-              followingUserIds,
-            ),
-            hydrateFriendUsersWithReliability(
-              session.accessToken,
-              followersResult.value,
-              followingUserIds,
-            ),
-          ]);
+        const [nextFollowingUsers, nextFollowerUsers] = await Promise.all([
+          followingsResult.status === 'fulfilled'
+            ? hydrateFriendUsersWithReliability(
+                session.accessToken,
+                followingsResult.value,
+                followingUserIds,
+              )
+            : Promise.resolve<FriendUser[] | null>(null),
+          followersResult.status === 'fulfilled'
+            ? hydrateFriendUsersWithReliability(
+                session.accessToken,
+                followersResult.value,
+                followingUserIds,
+              )
+            : Promise.resolve<FriendUser[] | null>(null),
+        ]);
 
-          if (cancelled) {
-            return;
-          }
+        if (cancelled) {
+          return;
+        }
 
+        if (nextFollowingUsers !== null) {
           setMyFollowingUsers(nextFollowingUsers);
+        }
+
+        if (nextFollowerUsers !== null) {
           setMyFollowerUsers(
             sortFollowersForInitialView(
               nextFollowerUsers,
@@ -3940,6 +4093,7 @@ export function AppRoot() {
         />
       ) : screen === 'my-friends' ? (
           <MyFriendsScreen
+            currentUserId={myUserId !== null ? String(myUserId) : null}
             followerUsersData={myFollowerUsers}
             followingUsersData={myFollowingUsers}
             initialTab={myFriendsInitialTab}
@@ -3954,6 +4108,7 @@ export function AppRoot() {
         />
       ) : screen === 'user-friends' && selectedUserProfileId ? (
         <MyFriendsScreen
+          currentUserId={myUserId !== null ? String(myUserId) : null}
           initialTab={myFriendsInitialTab}
           preserveListOnToggle
           title={
@@ -4069,7 +4224,7 @@ export function AppRoot() {
       ) : screen === 'user-profile' && selectedUserProfileId ? (
         <UserProfileScreen
           isFollowLoading={userProfileFollowPendingIds.includes(selectedUserProfileId)}
-          isFollowing={userProfileFollowStateById[selectedUserProfileId]}
+          isFollowing={selectedUserProfileIsFollowing}
           isOwnProfile={myUserId !== null && Number(selectedUserProfileId) === myUserId}
           onOpenReliabilityGuide={() =>
             openReliabilityGuide(

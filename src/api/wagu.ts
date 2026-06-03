@@ -1226,9 +1226,21 @@ export async function getFollowings(token: string, userId: number) {
 }
 
 export async function getFollowStatus(token: string, userId: number) {
-  return apiRequest<boolean>(`/users/${userId}/follow/status`, {
+  const response = await apiRequest<unknown>(`/users/${userId}/follow/status`, {
     token,
   });
+
+  if (typeof response === 'boolean') {
+    return response;
+  }
+
+  return (
+    getBooleanField(response, 'isFollowing') ??
+    getBooleanField(response, 'following') ??
+    getBooleanField(response, 'followed') ??
+    getBooleanField(response, 'value') ??
+    false
+  );
 }
 
 export async function getReliabilityScore(token: string, userId: number) {

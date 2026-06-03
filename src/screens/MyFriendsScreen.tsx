@@ -24,6 +24,7 @@ import {
 } from '../data/myFriends';
 
 type MyFriendsScreenProps = {
+  currentUserId?: string | null;
   followerUsersData?: FriendUser[];
   initialTab?: FriendTabKey;
   followingUsersData?: FriendUser[];
@@ -135,6 +136,7 @@ function FriendList({
 }
 
 export function MyFriendsScreen({
+  currentUserId,
   followerUsersData,
   initialTab = 'following',
   followingUsersData,
@@ -203,8 +205,10 @@ export function MyFriendsScreen({
           followOverrides[user.id] !== undefined
             ? followOverrides[user.id]
             : user.isFollowing,
+        showFollowAction:
+          user.id === currentUserId ? false : user.showFollowAction,
       })),
-    [followOverrides, followingUsers],
+    [currentUserId, followOverrides, followingUsers],
   );
 
   const displayedFollowerUsers = useMemo(
@@ -216,9 +220,11 @@ export function MyFriendsScreen({
             followOverrides[user.id] !== undefined
               ? followOverrides[user.id]
               : user.isFollowing,
+          showFollowAction:
+            user.id === currentUserId ? false : user.showFollowAction,
         })),
       ),
-    [followOverrides, followerUsers],
+    [currentUserId, followOverrides, followerUsers],
   );
 
   const tabs = useMemo(

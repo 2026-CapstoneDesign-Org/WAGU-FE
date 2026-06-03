@@ -65,7 +65,8 @@ export function UserProfileScreen({
     [],
   );
 
-  const hasMetrics = Boolean(profile.reviewCount || profile.followingCount || profile.followerCount);
+  const reviewCountLabel = profile.reviewCount ?? '0';
+  const hasMetrics = Boolean(profile.followerCount || reviewCountLabel);
   const hasReliability = Boolean(profile.reliabilityGrade);
 
   const handlePressMore = () => {
@@ -141,22 +142,12 @@ export function UserProfileScreen({
 
             {hasMetrics ? (
               <View style={styles.metricsRow}>
-                {profile.reviewCount ? (
-                  <Pressable hitSlop={8} onPress={onOpenReviews} style={styles.metricPressable}>
-                    <View style={styles.metricGroup}>
-                      <Text style={styles.metricLabel}>리뷰</Text>
-                      <Text style={styles.metricValue}>{profile.reviewCount}</Text>
-                    </View>
-                  </Pressable>
-                ) : null}
-                {profile.followingCount ? (
-                  <Pressable hitSlop={8} onPress={onOpenFollowing} style={styles.metricPressable}>
-                    <View style={styles.metricGroup}>
-                      <Text style={styles.metricLabel}>팔로잉</Text>
-                      <Text style={styles.metricValue}>{profile.followingCount}</Text>
-                    </View>
-                  </Pressable>
-                ) : null}
+                <Pressable hitSlop={8} onPress={onOpenReviews} style={styles.metricPressable}>
+                  <View style={styles.metricGroup}>
+                    <Text style={styles.metricLabel}>리뷰</Text>
+                    <Text style={styles.metricValue}>{reviewCountLabel}</Text>
+                  </View>
+                </Pressable>
                 {profile.followerCount ? (
                   <Pressable hitSlop={8} onPress={onOpenFollowers} style={styles.metricPressable}>
                     <View style={styles.metricGroup}>

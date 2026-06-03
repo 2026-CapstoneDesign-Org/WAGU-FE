@@ -19,6 +19,7 @@ import {
 } from '@mj-studio/react-native-naver-map';
 
 import FilterIcon from '../../assets/icons/filter.svg';
+import MapPinIcon from '../../assets/icons/mappin.svg';
 import MyLocationIcon from '../../assets/icons/mylocation.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import StarIcon from '../../assets/icons/star.svg';
@@ -56,6 +57,24 @@ const DEFAULT_CAMERA = {
   longitude: 127.1896,
   zoom: 15.2,
 };
+
+function darkenHexColor(color: string, amount = 0.12) {
+  const normalized = color.replace('#', '');
+
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return color;
+  }
+
+  const next = [0, 2, 4]
+    .map((offset) => {
+      const channel = parseInt(normalized.slice(offset, offset + 2), 16);
+      const darkened = Math.max(0, Math.round(channel * (1 - amount)));
+      return darkened.toString(16).padStart(2, '0');
+    })
+    .join('');
+
+  return `#${next}`;
+}
 
 type SheetStage = 'collapsed' | 'expanded' | 'medium';
 
@@ -786,25 +805,22 @@ export function MapScreen({
               >
                 {baseFilteredRestaurants.map((restaurant) => {
                   const active = restaurant.id === focusedRestaurantId;
-                  const hiddenGemMarkerWidth = active ? 50 : 44;
-                  const hiddenGemMarkerHeight = active ? 60 : 54;
                   const markerColor = restaurant.isHiddenGem
                     ? '#111111'
-                    : active
-                      ? ACTIVE_MARKER_RED
-                      : DEFAULT_MARKER_RED;
-                  const markerImage = restaurant.isHiddenGem ? {} : { symbol: 'red' as const };
+                    : getFavoriteColor?.(restaurant.name) ?? DEFAULT_MARKER_RED;
+                  const activeMarkerColor = restaurant.isHiddenGem
+                    ? '#111111'
+                    : darkenHexColor(markerColor);
 
                   return (
                     <NaverMapMarkerOverlay
                       key={restaurant.id}
                       latitude={restaurant.latitude}
                       longitude={restaurant.longitude}
-                      width={restaurant.isHiddenGem ? hiddenGemMarkerWidth : active ? 34 : 28}
-                      height={restaurant.isHiddenGem ? hiddenGemMarkerHeight : active ? 42 : 34}
+                      width={restaurant.isHiddenGem ? (active ? 50 : 44) : active ? 36 : 30}
+                      height={restaurant.isHiddenGem ? (active ? 60 : 54) : active ? 46 : 40}
                       anchor={{ x: 0.5, y: 1 }}
-                      image={markerImage}
-                      tintColor={restaurant.isHiddenGem ? undefined : markerColor}
+                      image={{}}
                       onTap={() => handlePressMarker(restaurant)}
                     >
                       {restaurant.isHiddenGem ? (
@@ -842,9 +858,21 @@ export function MapScreen({
                               styles.hiddenGemMapMarkerTip,
                               active && styles.hiddenGemMapMarkerTipActive,
                             ]}
+                            />
+                        </View>
+                      ) : (
+                        <View
+                          key={`map-marker-${restaurant.id}-${active ? 'active' : 'idle'}`}
+                          collapsable={false}
+                          style={styles.mapMarker}
+                        >
+                          <MapPinIcon
+                            width={active ? 36 : 30}
+                            height={active ? 46 : 40}
+                            color={active ? activeMarkerColor : markerColor}
                           />
                         </View>
-                      ) : null}
+                      )}
                     </NaverMapMarkerOverlay>
                   );
                 })}
@@ -854,6 +882,12 @@ export function MapScreen({
             <Pressable style={styles.mapFallback} onPress={handlePressMapBackground}>
               {baseFilteredRestaurants.map((restaurant) => {
                 const active = restaurant.id === focusedRestaurantId;
+                const markerColor = restaurant.isHiddenGem
+                  ? '#111111'
+                  : getFavoriteColor?.(restaurant.name) ?? DEFAULT_MARKER_RED;
+                const activeMarkerColor = restaurant.isHiddenGem
+                  ? '#111111'
+                  : darkenHexColor(markerColor);
 
                 return (
                   <Pressable
@@ -867,19 +901,10 @@ export function MapScreen({
                     ]}
                     onPress={() => handlePressMarker(restaurant)}
                   >
-                    <View
-                      style={[
-                        styles.fallbackMarkerStem,
-                        active && styles.fallbackMarkerStemActive,
-                        restaurant.isHiddenGem && styles.fallbackHiddenMarkerStem,
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.fallbackMarkerHead,
-                        active && styles.fallbackMarkerHeadActive,
-                        restaurant.isHiddenGem && styles.fallbackHiddenMarkerHead,
-                      ]}
+                    <MapPinIcon
+                      width={active ? 26 : 22}
+                      height={active ? 37 : 33}
+                      color={active ? activeMarkerColor : markerColor}
                     />
                   </Pressable>
                 );
@@ -1162,17 +1187,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 24,
   },
-  fallbackHiddenMarkerHead: {
-    backgroundColor: '#111111',
-  },
-  fallbackHiddenMarkerStem: {
-    backgroundColor: '#111111',
-  },
   fallbackMarkerHead: {
-    backgroundColor: DEFAULT_MARKER_RED,
-    borderColor: '#FFFFFF',
     borderRadius: 11,
-    borderWidth: 4,
     height: 22,
     width: 22,
   },
@@ -1182,14 +1198,23 @@ const styles = StyleSheet.create({
     width: 26,
   },
   fallbackMarkerStem: {
-    backgroundColor: DEFAULT_MARKER_RED,
     borderRadius: 99,
-    height: 28,
-    marginBottom: -4,
+    height: 14,
+    marginBottom: -2,
     width: 5,
   },
   fallbackMarkerStemActive: {
-    height: 32,
+    height: 16,
+  },
+  fallbackMarkerTip: {
+    borderRadius: 99,
+    height: 10,
+    marginTop: -2,
+    width: 10,
+  },
+  fallbackMarkerTipActive: {
+    height: 11,
+    width: 11,
   },
   fallbackMarkerWrap: {
     alignItems: 'center',
@@ -1305,6 +1330,46 @@ const styles = StyleSheet.create({
     width: 10,
   },
   hiddenGemMapMarkerTipActive: {
+    height: 11,
+    width: 11,
+  },
+  mapMarker: {
+    alignItems: 'center',
+    height: 40,
+    justifyContent: 'flex-end',
+    width: 30,
+  },
+  mapMarkerActive: {
+    height: 46,
+    width: 36,
+  },
+  mapMarkerHead: {
+    borderRadius: 12,
+    height: 24,
+    width: 24,
+  },
+  mapMarkerHeadActive: {
+    borderRadius: 14,
+    height: 28,
+    width: 28,
+  },
+  mapMarkerStem: {
+    borderRadius: 99,
+    height: 14,
+    marginTop: -2,
+    width: 6,
+  },
+  mapMarkerStemActive: {
+    height: 16,
+    width: 7,
+  },
+  mapMarkerTip: {
+    borderRadius: 99,
+    height: 10,
+    marginTop: -2,
+    width: 10,
+  },
+  mapMarkerTipActive: {
     height: 11,
     width: 11,
   },
