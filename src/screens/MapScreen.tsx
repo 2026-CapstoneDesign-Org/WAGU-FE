@@ -200,17 +200,7 @@ async function buildMapRestaurantsFromMyLists(accessToken: string, restaurants: 
     .filter((item) => Number.isFinite(item.numericId));
 
   const results = await Promise.allSettled(
-    candidates.map(async (item) => {
-      const [detail, reviews] = await Promise.all([
-        getRestaurant(accessToken, item.numericId),
-        getRestaurantReviews(accessToken, item.numericId).catch(() => []),
-      ]);
-
-      return {
-        detail,
-        reviews,
-      };
-    }),
+    candidates.map((item) => getRestaurant(accessToken, item.numericId)),
   );
 
   return results.flatMap((result, index) => {
@@ -218,7 +208,7 @@ async function buildMapRestaurantsFromMyLists(accessToken: string, restaurants: 
       return [];
     }
 
-    const { detail, reviews } = result.value;
+    const detail = result.value;
     const sourceRestaurant = candidates[index]?.source;
 
     if (typeof detail.lat !== 'number' || typeof detail.lng !== 'number') {
@@ -253,7 +243,7 @@ async function buildMapRestaurantsFromMyLists(accessToken: string, restaurants: 
           detail.roadAddress,
           sourceRestaurant?.address,
         ),
-        reviews: extractLatestReviewSnippets(reviews),
+        reviews: [],
         status: detail.regionName ?? '내 리스트',
       },
     ];
@@ -262,23 +252,7 @@ async function buildMapRestaurantsFromMyLists(accessToken: string, restaurants: 
 
 async function buildMapRestaurantsFromSearch(accessToken: string, keyword: string) {
   const restaurants = await searchRestaurants(accessToken, keyword);
-
-  const results = await Promise.allSettled(
-    restaurants.map(async (restaurant) => ({
-      restaurant,
-      reviews:
-        typeof restaurant.id === 'number'
-          ? await getRestaurantReviews(accessToken, restaurant.id).catch(() => [])
-          : [],
-    })),
-  );
-
-  return results.flatMap((result, index) => {
-    if (result.status !== 'fulfilled') {
-      return [];
-    }
-
-    const { restaurant, reviews } = result.value;
+  return restaurants.flatMap((restaurant, index) => {
 
     if (typeof restaurant.lat !== 'number' || typeof restaurant.lng !== 'number') {
       return [];
@@ -308,7 +282,7 @@ async function buildMapRestaurantsFromSearch(accessToken: string, keyword: strin
           restaurant.roadAddress,
           restaurant.lotAddress,
         ),
-        reviews: extractLatestReviewSnippets(reviews),
+        reviews: [],
         status: restaurant.regionName ?? '검색 결과',
       },
     ];
@@ -343,23 +317,12 @@ async function buildHiddenGemRestaurants(accessToken: string, regionTownCandidat
   const regionItems = await fetchHiddenGemItems(accessToken, regionTownCandidates);
 
   const results = await Promise.allSettled(
-    regionItems.map(async (item) => {
-      const [detail, reviews] = await Promise.all([
-        getRestaurant(accessToken, item.restaurantId),
-        getRestaurantReviews(accessToken, item.restaurantId).catch(() => []),
-      ]);
-
-      return {
-        detail,
-        reviews,
-      };
-    }),
+    regionItems.map((item) => getRestaurant(accessToken, item.restaurantId)),
   );
 
   return results.flatMap((result, index) => {
     const hiddenGem = regionItems[index];
-    const detail = result.status === 'fulfilled' ? result.value.detail : null;
-    const reviews = result.status === 'fulfilled' ? result.value.reviews : [];
+    const detail = result.status === 'fulfilled' ? result.value : null;
     const latitude =
       typeof hiddenGem?.lat === 'number'
         ? hiddenGem.lat
@@ -399,7 +362,7 @@ async function buildHiddenGemRestaurants(accessToken: string, regionTownCandidat
           detail?.address,
           detail?.roadAddress,
         ),
-        reviews: extractLatestReviewSnippets(reviews),
+        reviews: [],
         status:
           hiddenGem?.regionTownName ??
           hiddenGem?.regionName ??
@@ -444,6 +407,12 @@ export function MapScreen({
   const [selectedMarkerRestaurantId, setSelectedMarkerRestaurantId] = useState<string | null>(null);
   const [mapDataRestaurants, setMapDataRestaurants] = useState<MapRestaurant[]>([]);
   const [hiddenGemRestaurants, setHiddenGemRestaurants] = useState<MapRestaurant[]>([]);
+  const [reviewSnippetsByRestaurantId, setReviewSnippetsByRestaurantId] = useState<
+    Record<string, string[]>
+  >({});
+  const [reviewPendingRestaurantIds, setReviewPendingRestaurantIds] = useState<string[]>([]);
+  const reviewSnippetsByRestaurantIdRef = useRef<Record<string, string[]>>({});
+  const reviewPendingRestaurantIdsRef = useRef<string[]>([]);
   const contentScrollOffsetRef = useRef(0);
   const panStartTopRef = useRef(snapTops.medium);
   const contentPanStartStageRef = useRef<SheetStage>('medium');
@@ -474,6 +443,10 @@ export function MapScreen({
     if (!accessToken) {
       setHiddenGemRestaurants([]);
       setMapDataRestaurants([]);
+      setReviewSnippetsByRestaurantId({});
+      setReviewPendingRestaurantIds([]);
+      reviewSnippetsByRestaurantIdRef.current = {};
+      reviewPendingRestaurantIdsRef.current = [];
       return;
     }
 
@@ -498,6 +471,13 @@ export function MapScreen({
         ),
       );
 
+      if (cancelled) {
+        return;
+      }
+
+      setMapDataRestaurants(nextMapRestaurants);
+      setHiddenGemRestaurants([]);
+
       let nextHiddenGemRestaurants: MapRestaurant[] = [];
 
       try {
@@ -510,7 +490,6 @@ export function MapScreen({
         return;
       }
 
-      setMapDataRestaurants(nextMapRestaurants);
       setHiddenGemRestaurants(nextHiddenGemRestaurants);
     };
 
@@ -520,6 +499,14 @@ export function MapScreen({
       cancelled = true;
     };
   }, [accessToken, mapRestaurantsData, trimmedSearchQuery]);
+
+  useEffect(() => {
+    reviewSnippetsByRestaurantIdRef.current = reviewSnippetsByRestaurantId;
+  }, [reviewSnippetsByRestaurantId]);
+
+  useEffect(() => {
+    reviewPendingRestaurantIdsRef.current = reviewPendingRestaurantIds;
+  }, [reviewPendingRestaurantIds]);
 
   const mergedRestaurants = useMemo(
     () =>
@@ -578,6 +565,93 @@ export function MapScreen({
       setSelectedMarkerRestaurantId(null);
     }
   }, [baseFilteredRestaurants, selectedMarkerRestaurantId]);
+
+  useEffect(() => {
+    if (!accessToken || visibleRestaurants.length === 0) {
+      return;
+    }
+
+    const reviewTargetIds = (selectedMarkerRestaurantId
+      ? visibleRestaurants.filter((restaurant) => restaurant.id === selectedMarkerRestaurantId)
+      : visibleRestaurants.slice(0, 6)
+    )
+      .map((restaurant) => restaurant.id)
+      .filter(
+        (restaurantId) =>
+          !Object.prototype.hasOwnProperty.call(
+            reviewSnippetsByRestaurantIdRef.current,
+            restaurantId,
+          ) && !reviewPendingRestaurantIdsRef.current.includes(restaurantId),
+      );
+
+    if (reviewTargetIds.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    const pendingTargetIds = [...reviewTargetIds];
+
+    setReviewPendingRestaurantIds((current) => {
+      const next = [
+        ...current,
+        ...reviewTargetIds.filter((restaurantId) => !current.includes(restaurantId)),
+      ];
+      reviewPendingRestaurantIdsRef.current = next;
+      return next;
+    });
+
+    const loadReviewSnippets = async () => {
+      const reviewResults = await Promise.allSettled(
+        reviewTargetIds.map(async (restaurantId) => {
+          const numericRestaurantId = Number(restaurantId);
+          const reviews = Number.isFinite(numericRestaurantId)
+            ? await getRestaurantReviews(accessToken, numericRestaurantId).catch(() => [])
+            : [];
+
+          return {
+            restaurantId,
+            reviews: extractLatestReviewSnippets(reviews),
+          };
+        }),
+      );
+
+      if (cancelled) {
+        setReviewPendingRestaurantIds((current) => {
+          const next = current.filter((restaurantId) => !pendingTargetIds.includes(restaurantId));
+          reviewPendingRestaurantIdsRef.current = next;
+          return next;
+        });
+        return;
+      }
+
+      setReviewSnippetsByRestaurantId((current) => {
+        const next = { ...current };
+
+        reviewResults.forEach((result) => {
+          if (result.status !== 'fulfilled') {
+            return;
+          }
+
+          next[result.value.restaurantId] = result.value.reviews;
+        });
+
+        reviewSnippetsByRestaurantIdRef.current = next;
+        return next;
+      });
+
+      setReviewPendingRestaurantIds((current) => {
+        const next = current.filter((restaurantId) => !pendingTargetIds.includes(restaurantId));
+        reviewPendingRestaurantIdsRef.current = next;
+        return next;
+      });
+    };
+
+    void loadReviewSnippets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, selectedMarkerRestaurantId, visibleRestaurants]);
 
   useEffect(() => {
     const previousTrimmedSearchQuery = previousTrimmedSearchQueryRef.current;
@@ -1063,6 +1137,9 @@ export function MapScreen({
                 {visibleRestaurants.map((restaurant) => {
                   const accentColor = getFavoriteColor?.(restaurant.name) ?? '#D9D9D9';
                   const active = restaurant.id === focusedRestaurantId;
+                  const restaurantReviews =
+                    reviewSnippetsByRestaurantId[restaurant.id] ?? restaurant.reviews;
+                  const isReviewsLoading = reviewPendingRestaurantIds.includes(restaurant.id);
 
                   return (
                     <View key={restaurant.id} style={styles.restaurantBlock}>
@@ -1117,8 +1194,8 @@ export function MapScreen({
                           showsHorizontalScrollIndicator={false}
                           contentContainerStyle={styles.reviewScrollContent}
                         >
-                          {restaurant.reviews.length > 0 ? (
-                            restaurant.reviews.map((review, index) => (
+                          {restaurantReviews.length > 0 ? (
+                            restaurantReviews.map((review, index) => (
                               <View
                                 key={`${restaurant.id}-review-${index}`}
                                 style={styles.reviewBox}
@@ -1131,7 +1208,9 @@ export function MapScreen({
                           ) : (
                             <View style={styles.reviewBox}>
                               <Text numberOfLines={2} style={styles.reviewText}>
-                                아직 등록된 리뷰가 없어요.
+                                {isReviewsLoading
+                                  ? '리뷰를 불러오는 중이에요.'
+                                  : '아직 등록된 리뷰가 없어요.'}
                               </Text>
                             </View>
                           )}
