@@ -170,12 +170,26 @@ type FlowScreen =
   | 'worldcup-battle'
   | 'worldcup-result'
   | 'reliability-guide'
+  | 'ranking-detail'
   | 'user-profile';
 
-type RankingDetailState = {
-  sourceTab: AppTab;
-  variant: 'local' | 'national';
-} | null;
+type RankingDetailState =
+  | {
+      items: RankingEntry[];
+      source: 'tabs';
+      sourceTab: AppTab;
+      title: string;
+      variant: 'local' | 'national';
+    }
+  | {
+      isLoading: boolean;
+      items: RankingEntry[];
+      regionName: string;
+      source: 'search-result';
+      title: string;
+      variant: 'region';
+    }
+  | null;
 
 function AuthLoadingScreen() {
   return (
@@ -691,6 +705,81 @@ export function AppRoot() {
         representativeRestaurants: [],
       }
     : null;
+
+  useEffect(() => {
+    if (
+      screen !== 'ranking-detail' ||
+      !session?.accessToken ||
+      !rankingDetail ||
+      rankingDetail.variant !== 'region' ||
+      !rankingDetail.isLoading
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const targetRegionName = rankingDetail.regionName;
+
+    const loadRegionRanking = async () => {
+      try {
+        const result = await getRestaurantRankings(session.accessToken!, {
+          limit: 40,
+          regionName: targetRegionName,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setRankingDetail((current) => {
+          if (
+            !current ||
+            current.variant !== 'region' ||
+            current.regionName !== targetRegionName
+          ) {
+            return current;
+          }
+
+          return {
+            ...current,
+            isLoading: false,
+            items: mapRankingItems(result.items),
+          };
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        console.log('[ranking detail] failed to load region ranking', {
+          error,
+          regionName: targetRegionName,
+        });
+
+        setRankingDetail((current) => {
+          if (
+            !current ||
+            current.variant !== 'region' ||
+            current.regionName !== targetRegionName
+          ) {
+            return current;
+          }
+
+          return {
+            ...current,
+            isLoading: false,
+            items: [],
+          };
+        });
+      }
+    };
+
+    void loadRegionRanking();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rankingDetail, screen, session?.accessToken]);
   const mapListRestaurants = useMemo(() => {
     const restaurantsById = new Map<string, Restaurant>();
 
@@ -992,49 +1081,6 @@ export function AppRoot() {
         }));
       }
 
-      if (followings !== null || followers !== null) {
-        const myFollowingIdSet = new Set(
-          myFollowingUsers
-            .map((user) => Number(user.id))
-            .filter((followedUserId) => Number.isFinite(followedUserId)),
-        );
-
-        const [hydratedFollowings, hydratedFollowers] = await Promise.all([
-          followings !== null
-            ? hydrateFriendUsersWithReliability(
-                session.accessToken,
-                followings,
-                myFollowingIdSet,
-              )
-            : Promise.resolve<FriendUser[] | null>(null),
-          followers !== null
-            ? hydrateFriendUsersWithReliability(
-                session.accessToken,
-                followers,
-                myFollowingIdSet,
-              )
-            : Promise.resolve<FriendUser[] | null>(null),
-        ]);
-
-        if (cancelled) {
-          return;
-        }
-
-        setRemoteUserFriendConnectionsByUserId((current) => ({
-          ...current,
-          [selectedUserProfileId]: {
-            following:
-              hydratedFollowings !== null
-                ? hydratedFollowings
-                : current[selectedUserProfileId]?.following ?? [],
-            followers:
-              hydratedFollowers !== null
-                ? hydratedFollowers
-                : current[selectedUserProfileId]?.followers ?? [],
-          },
-        }));
-      }
-
       setRemoteUserProfiles((current) => {
         const existing = current.find((item) => item.id === selectedUserProfileId);
 
@@ -1075,9 +1121,57 @@ export function AppRoot() {
               },
         );
       }
+
+      if (followings !== null || followers !== null) {
+        const myFollowingIdSet = new Set(
+          myFollowingUsers
+            .map((user) => Number(user.id))
+            .filter((followedUserId) => Number.isFinite(followedUserId)),
+        );
+
+        const [hydratedFollowingsResult, hydratedFollowersResult] = await Promise.allSettled([
+          followings !== null
+            ? hydrateFriendUsersWithReliability(
+                session.accessToken,
+                followings,
+                myFollowingIdSet,
+              )
+            : Promise.resolve<FriendUser[] | null>(null),
+          followers !== null
+            ? hydrateFriendUsersWithReliability(
+                session.accessToken,
+                followers,
+                myFollowingIdSet,
+              )
+            : Promise.resolve<FriendUser[] | null>(null),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setRemoteUserFriendConnectionsByUserId((current) => ({
+          ...current,
+          [selectedUserProfileId]: {
+            following:
+              hydratedFollowingsResult.status === 'fulfilled'
+                ? hydratedFollowingsResult.value ?? current[selectedUserProfileId]?.following ?? []
+                : current[selectedUserProfileId]?.following ?? [],
+            followers:
+              hydratedFollowersResult.status === 'fulfilled'
+                ? hydratedFollowersResult.value ?? current[selectedUserProfileId]?.followers ?? []
+                : current[selectedUserProfileId]?.followers ?? [],
+          },
+        }));
+      }
     };
 
-    void hydrateUserProfile();
+    void hydrateUserProfile().catch((error) => {
+      console.log('[user profile] hydrate failed', {
+        selectedUserProfileId,
+        error,
+      });
+    });
 
     return () => {
       cancelled = true;
@@ -3293,9 +3387,34 @@ export function AppRoot() {
 
   const openRankingDetail = (variant: 'local' | 'national') => {
     setRankingDetail({
+      items:
+        variant === 'local' ? rankingEntries.local.slice(0, 40) : rankingEntries.national.slice(0, 40),
+      source: 'tabs',
       sourceTab: activeTab,
+      title: variant === 'local' ? `${localRankingRegion} 맛집 추천` : '전국 맛집 추천',
       variant,
     });
+    setScreen('ranking-detail');
+  };
+
+  const openRegionRankingDetail = (regionName?: string, regionDisplayName?: string) => {
+    const trimmedRegionName = regionName?.trim() ?? '';
+
+    if (!trimmedRegionName) {
+      return;
+    }
+
+    const trimmedDisplayName = regionDisplayName?.trim();
+
+    setRankingDetail({
+      isLoading: true,
+      items: [],
+      regionName: trimmedRegionName,
+      source: 'search-result',
+      title: `${trimmedDisplayName || trimmedRegionName} 맛집 추천`,
+      variant: 'region',
+    });
+    setScreen('ranking-detail');
   };
 
   const handleBackFromRankingDetail = () => {
@@ -3303,7 +3422,14 @@ export function AppRoot() {
       return;
     }
 
+    if (rankingDetail.source === 'search-result') {
+      setScreen('search-result');
+      setRankingDetail(null);
+      return;
+    }
+
     setActiveTab(rankingDetail.sourceTab);
+    setScreen('tabs');
     setRankingDetail(null);
   };
 
@@ -3593,9 +3719,11 @@ export function AppRoot() {
       return;
     }
 
-    setActiveTab(restaurantDetailSource.detail.sourceTab);
+    if (restaurantDetailSource.detail.source === 'tabs') {
+      setActiveTab(restaurantDetailSource.detail.sourceTab);
+    }
     setRankingDetail(restaurantDetailSource.detail);
-    setScreen('tabs');
+    setScreen('ranking-detail');
   };
 
   const handleLoginSuccess = async (
@@ -3888,18 +4016,26 @@ export function AppRoot() {
         ) : screen === 'search-result' ? (
           <SearchResultScreen
             accessToken={session?.accessToken}
+            onClearSearchBar={() => {
+              setSearchScreenInitialQuery('');
+              setSearchQuery('');
+              setScreen('search');
+            }}
             myUserId={myUserId}
             query={searchQuery}
             initialTab={searchResultTab}
             onBack={() => {
-              setSearchScreenInitialQuery(searchQuery);
-              setScreen('search');
+              setActiveTab('home');
+              setHomeRestoreAnimated(false);
+              setHomeRestoreKey((current) => current + 1);
+              setScreen('tabs');
             }}
             onPressSearchBar={() => {
               setSearchScreenInitialQuery(searchQuery);
               setScreen('search');
             }}
             onChangeTab={setSearchResultTab}
+            onOpenRegionRanking={openRegionRankingDetail}
             onOpenRestaurantDetail={(restaurantName, restaurantId) =>
               openRestaurantDetail(restaurantName, { type: 'search-result' }, restaurantId)
             }
@@ -4346,20 +4482,18 @@ export function AppRoot() {
               : undefined
           }
         />
-      ) : rankingDetail ? (
+      ) : screen === 'ranking-detail' && rankingDetail ? (
         <RankingDetailScreen
           onBack={handleBackFromRankingDetail}
-          items={
-            rankingDetail.variant === 'local'
-              ? rankingEntries.local.slice(0, 40)
-              : rankingEntries.national.slice(0, 40)
-          }
+          isLoading={rankingDetail.variant === 'region' ? rankingDetail.isLoading : false}
+          items={rankingDetail.items}
           onOpenRestaurantDetail={(restaurantName) =>
             openRestaurantDetail(restaurantName, {
               type: 'ranking-detail',
               detail: rankingDetail,
             })
           }
+          title={rankingDetail.title}
           variant={rankingDetail.variant}
         />
       ) : activeTab === 'home' ? (

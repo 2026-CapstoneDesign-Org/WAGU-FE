@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Image,
   Pressable,
@@ -16,19 +17,23 @@ import SearchIcon from '../../assets/icons/search.svg';
 import { MOCK_DATA_ENABLED } from '../config/mockData';
 import { localRankingEntries, nationalRankingEntries } from '../data/rankings';
 
-type RankingDetailVariant = 'local' | 'national';
+type RankingDetailVariant = 'local' | 'national' | 'region';
 
 type RankingDetailScreenProps = {
+  isLoading?: boolean;
   items?: typeof localRankingEntries;
   onBack: () => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
+  title?: string;
   variant: RankingDetailVariant;
 };
 
 export function RankingDetailScreen({
+  isLoading = false,
   items,
   onBack,
   onOpenRestaurantDetail,
+  title,
   variant,
 }: RankingDetailScreenProps) {
   const [query, setQuery] = useState('');
@@ -43,8 +48,18 @@ export function RankingDetailScreen({
     (MOCK_DATA_ENABLED
       ? variant === 'local'
         ? localRankingEntries.slice(0, 40)
-        : nationalRankingEntries.slice(0, 40)
+        : variant === 'national'
+          ? nationalRankingEntries.slice(0, 40)
+          : []
       : []);
+
+  const headerTitle =
+    title ??
+    (variant === 'local'
+      ? '용인 맛집 추천'
+      : variant === 'national'
+        ? '전국 맛집 추천'
+        : '지역 맛집 추천');
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim();
@@ -126,16 +141,7 @@ export function RankingDetailScreen({
             <Pressable hitSlop={10} onPress={onBack} style={styles.backButton}>
               <ArrowLeftIcon width={24} height={24} />
             </Pressable>
-            <Text style={styles.headerTitle}>
-              {variant === 'local' ? (
-                <>
-                  <Text style={styles.headerAccent}>용인</Text>
-                  <Text> 맛집 순위</Text>
-                </>
-              ) : (
-                '전국 맛집 순위'
-              )}
-            </Text>
+            <Text style={styles.headerTitle}>{headerTitle}</Text>
           </View>
 
           <Animated.View style={[styles.searchWrapper, searchContainerStyle]}>
@@ -167,30 +173,42 @@ export function RankingDetailScreen({
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.list}>
-            {filteredItems.map((item, index) => (
-              <Pressable
-                key={item.id}
-                style={styles.listItem}
-                onPress={() => onOpenRestaurantDetail?.(item.name)}
-              >
-                <Text style={styles.rankNumber}>{index + 1}.</Text>
+          {isLoading ? (
+            <View style={styles.loadingState}>
+              <ActivityIndicator size="small" color="#FF3B30" />
+              <Text style={styles.loadingText}>랭킹을 불러오는 중이에요.</Text>
+            </View>
+          ) : filteredItems.length > 0 ? (
+            <View style={styles.list}>
+              {filteredItems.map((item, index) => (
+                <Pressable
+                  key={item.id}
+                  style={styles.listItem}
+                  onPress={() => onOpenRestaurantDetail?.(item.name)}
+                >
+                  <Text style={styles.rankNumber}>{index + 1}.</Text>
 
-                <View style={styles.thumbnail}>
-                  {item.imageUri ? (
-                    <Image source={{ uri: item.imageUri }} style={styles.thumbnailImage} />
-                  ) : (
-                    <View style={styles.thumbnailFallback} />
-                  )}
-                </View>
+                  <View style={styles.thumbnail}>
+                    {item.imageUri ? (
+                      <Image source={{ uri: item.imageUri }} style={styles.thumbnailImage} />
+                    ) : (
+                      <View style={styles.thumbnailFallback} />
+                    )}
+                  </View>
 
-                <View style={styles.itemCopy}>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemMeta}>{item.meta}</Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
+                  <View style={styles.itemCopy}>
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    <Text style={styles.itemMeta}>{item.meta}</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateTitle}>표시할 랭킹이 없어요.</Text>
+              <Text style={styles.emptyStateDescription}>다른 지역으로 다시 찾아보세요.</Text>
+            </View>
+          )}
         </Animated.ScrollView>
       </View>
     </SafeAreaView>
@@ -260,13 +278,24 @@ const styles = StyleSheet.create({
   list: {
     gap: 15,
   },
+  loadingState: {
+    alignItems: 'center',
+    gap: 10,
+    paddingTop: 48,
+  },
+  loadingText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    color: '#6B6B6B',
+  },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 15,
   },
   rankNumber: {
-    width: 18,
+    width: 28,
     fontSize: 14,
     lineHeight: 18,
     fontWeight: '700',
@@ -303,5 +332,22 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '500',
     color: '#838383',
+  },
+  emptyState: {
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 48,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  emptyStateDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    color: '#7A7A7A',
   },
 });

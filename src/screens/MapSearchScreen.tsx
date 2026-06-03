@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
@@ -40,12 +41,8 @@ const MAP_SEARCH_SUGGESTIONS = [
   '수지 브런치',
 ] as const;
 
-const INITIAL_HISTORY: SearchHistoryItem[] = [
-  { id: 'map-history-1', label: '와이앤웍' },
-  { id: 'map-history-2', label: '용인 중식' },
-  { id: 'map-history-3', label: '수지 브런치' },
-  { id: 'map-history-4', label: '기흥 파스타' },
-];
+const MAP_SEARCH_HISTORY_STORAGE_KEY = '@wagu/map-search-history';
+const MAX_HISTORY_COUNT = 12;
 
 export function MapSearchScreen({
   initialQuery = '',
@@ -54,7 +51,7 @@ export function MapSearchScreen({
 }: MapSearchScreenProps) {
   const inputRef = useRef<TextInput | null>(null);
   const [query, setQuery] = useState(initialQuery);
-  const [history, setHistory] = useState<SearchHistoryItem[]>(INITIAL_HISTORY);
+  const [history, setHistory] = useState<SearchHistoryItem[]>([]);
   const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
@@ -67,6 +64,45 @@ export function MapSearchScreen({
     }, 80);
 
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadHistory = async () => {
+      try {
+        const storedValue = await AsyncStorage.getItem(MAP_SEARCH_HISTORY_STORAGE_KEY);
+        if (!storedValue || cancelled) {
+          return;
+        }
+
+        const parsedValue = JSON.parse(storedValue);
+        if (!Array.isArray(parsedValue)) {
+          return;
+        }
+
+        const nextHistory = parsedValue.filter(
+          (item): item is SearchHistoryItem =>
+            Boolean(item) &&
+            typeof item.id === 'string' &&
+            typeof item.label === 'string',
+        );
+
+        if (!cancelled) {
+          setHistory(nextHistory);
+        }
+      } catch {
+        if (!cancelled) {
+          setHistory([]);
+        }
+      }
+    };
+
+    void loadHistory();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const trimmedQuery = query.trim();
@@ -84,14 +120,23 @@ export function MapSearchScreen({
         label,
       };
 
-      return [target, ...current.filter((item) => item.label !== label)];
+      const nextHistory = [target, ...current.filter((item) => item.label !== label)].slice(
+        0,
+        MAX_HISTORY_COUNT,
+      );
+      void AsyncStorage.setItem(MAP_SEARCH_HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+      return nextHistory;
     });
     Keyboard.dismiss();
     onSearch?.(label);
   };
 
   const handleDeleteHistory = (id: string) => {
-    setHistory((current) => current.filter((item) => item.id !== id));
+    setHistory((current) => {
+      const nextHistory = current.filter((item) => item.id !== id);
+      void AsyncStorage.setItem(MAP_SEARCH_HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+      return nextHistory;
+    });
   };
 
   return (
@@ -178,7 +223,12 @@ export function MapSearchScreen({
               <>
                 <View style={styles.historyHeader}>
                   <Text style={styles.historyTitle}>최근 검색</Text>
-                  <Pressable onPress={() => setHistory([])}>
+                  <Pressable
+                    onPress={() => {
+                      setHistory([]);
+                      void AsyncStorage.setItem(MAP_SEARCH_HISTORY_STORAGE_KEY, JSON.stringify([]));
+                    }}
+                  >
                     <Text style={styles.clearAllLabel}>전체 삭제</Text>
                   </Pressable>
                 </View>

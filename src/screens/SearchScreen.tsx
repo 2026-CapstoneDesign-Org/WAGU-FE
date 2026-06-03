@@ -27,13 +27,6 @@ type SearchScreenProps = {
   onSearch?: (query: string) => void;
 };
 
-const INITIAL_HISTORY: SearchHistoryItem[] = [
-  { id: 'history-1', label: 'ㄹㄹㅇ' },
-  { id: 'history-2', label: 'ㅁㅇㄴㄹ' },
-  { id: 'history-3', label: 'ㄴㅁㅇㄹ' },
-  { id: 'history-4', label: 'ㅇㄹㄴ' },
-];
-
 const SEARCH_HISTORY_STORAGE_KEY = '@wagu/search-history';
 const MAX_HISTORY_COUNT = 12;
 
@@ -157,6 +150,18 @@ export function SearchScreen({
                   }}
                 />
               </View>
+              {query.length > 0 ? (
+                <Pressable
+                  style={styles.clearQueryButton}
+                  onPress={() => {
+                    setQuery('');
+                    inputRef.current?.focus();
+                  }}
+                  hitSlop={8}
+                >
+                  <Text style={styles.clearQueryLabel}>×</Text>
+                </Pressable>
+              ) : null}
             </Pressable>
           </View>
 
@@ -266,6 +271,18 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
     justifyContent: 'center',
+  },
+  clearQueryButton: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearQueryLabel: {
+    fontSize: 24,
+    lineHeight: 24,
+    fontWeight: '300',
+    color: '#9B9B9B',
   },
   historySection: {
     flex: 1,

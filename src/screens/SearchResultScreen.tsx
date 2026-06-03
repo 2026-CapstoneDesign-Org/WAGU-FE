@@ -27,10 +27,12 @@ type SearchResultTab = 'restaurant' | 'user' | 'region';
 
 type SearchResultScreenProps = {
   accessToken?: string | null;
+  onClearSearchBar?: () => void;
   initialTab?: SearchResultTab;
   myUserId?: number | null;
   onBack: () => void;
   onChangeTab?: (tab: SearchResultTab) => void;
+  onOpenRegionRanking?: (regionName?: string, regionDisplayName?: string) => void;
   onOpenRestaurantDetail?: (restaurantName: string, restaurantId?: number) => void;
   onOpenUserProfile?: (user: {
     id: string;
@@ -63,6 +65,7 @@ type RegionResult = {
   id: string;
   meta: string;
   name: string;
+  regionName: string;
 };
 
 type ResultListItem = {
@@ -88,6 +91,31 @@ function getSearchResultCacheKey(query: string, myUserId?: number | null) {
 
 function getCachedSearchResults(query: string, myUserId?: number | null) {
   return searchResultCache.get(getSearchResultCacheKey(query, myUserId));
+}
+
+function dedupeRegionResults(items: RegionResult[]) {
+  const uniqueItems = new Map<string, RegionResult>();
+
+  items.forEach((item) => {
+    const normalizedKey = (item.name || item.regionName || item.id).trim().toLowerCase();
+
+    if (!normalizedKey) {
+      return;
+    }
+
+    const existingItem = uniqueItems.get(normalizedKey);
+
+    if (!existingItem) {
+      uniqueItems.set(normalizedKey, item);
+      return;
+    }
+
+    if (!existingItem.regionName.trim() && item.regionName.trim()) {
+      uniqueItems.set(normalizedKey, item);
+    }
+  });
+
+  return Array.from(uniqueItems.values());
 }
 
 function getSearchRestaurantResultKey(
@@ -204,10 +232,12 @@ function LoadingState() {
 
 export function SearchResultScreen({
   accessToken,
+  onClearSearchBar,
   initialTab = 'restaurant',
   myUserId,
   onBack,
   onChangeTab,
+  onOpenRegionRanking,
   onOpenRestaurantDetail,
   onOpenUserProfile,
   onPressSearchBar,
@@ -225,7 +255,7 @@ export function SearchResultScreen({
   );
   const [userResults, setUserResults] = useState<UserResult[]>(initialCachedResults?.userResults ?? []);
   const [regionResults, setRegionResults] = useState<RegionResult[]>(
-    initialCachedResults?.regionResults ?? [],
+    dedupeRegionResults(initialCachedResults?.regionResults ?? []),
   );
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [hasSettledResults, setHasSettledResults] = useState(Boolean(initialCachedResults));
@@ -278,7 +308,7 @@ export function SearchResultScreen({
     if (cachedResults) {
       setRestaurantResults(cachedResults.restaurantResults);
       setUserResults(cachedResults.userResults);
-      setRegionResults(cachedResults.regionResults);
+      setRegionResults(dedupeRegionResults(cachedResults.regionResults));
       setIsSearchLoading(false);
       setHasSettledResults(true);
       return;
@@ -339,11 +369,14 @@ export function SearchResultScreen({
 
         setUserResults(nextUserResults);
         setRegionResults(
-          (result.regions ?? []).map((region) => ({
-            id: region.regionName ?? region.displayName ?? region.rankingPath ?? 'region',
-            meta: region.regionKeyword ?? region.regionName ?? '지역',
-            name: region.displayName ?? region.regionName ?? '지역',
-          })),
+          dedupeRegionResults(
+            (result.regions ?? []).map((region) => ({
+              id: region.regionName ?? region.displayName ?? region.rankingPath ?? 'region',
+              meta: region.regionKeyword ?? region.regionName ?? '지역',
+              name: region.displayName ?? region.regionName ?? '지역',
+              regionName: region.regionName ?? region.displayName ?? '',
+            })),
+          ),
         );
       } catch {
         if (!cancelled) {
@@ -407,6 +440,18 @@ export function SearchResultScreen({
     inputRef.current?.focus();
   };
 
+  const handleClearSearchBar = () => {
+    setValue('');
+
+    if (onClearSearchBar) {
+      onClearSearchBar();
+      return;
+    }
+
+    onSearch?.('');
+    inputRef.current?.focus();
+  };
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -435,6 +480,11 @@ export function SearchResultScreen({
                   onSubmitEditing={handleSearchSubmit}
                 />
               </View>
+              {value.length > 0 ? (
+                <Pressable style={styles.clearQueryButton} onPress={handleClearSearchBar} hitSlop={8}>
+                  <Text style={styles.clearQueryLabel}>×</Text>
+                </Pressable>
+              ) : null}
             </Pressable>
           </View>
 
@@ -545,6 +595,18 @@ export function SearchResultScreen({
                       meta: item.meta,
                       name: item.name,
                     }))}
+                    onPressItem={(id) => {
+                      const selectedRegion = regionResults.find((item) => item.id === id);
+
+                      if (!selectedRegion) {
+                        return;
+                      }
+
+                      onOpenRegionRanking?.(
+                        selectedRegion.regionName || selectedRegion.name,
+                        selectedRegion.name,
+                      );
+                    }}
                   />
                 ) : (
                   <EmptyTabState
@@ -615,6 +677,18 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
     justifyContent: 'center',
+  },
+  clearQueryButton: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearQueryLabel: {
+    fontSize: 24,
+    lineHeight: 24,
+    fontWeight: '300',
+    color: '#9B9B9B',
   },
   tabSection: {
     marginTop: 25,
