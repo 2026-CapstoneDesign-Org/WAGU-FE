@@ -31,7 +31,7 @@ type SearchResultScreenProps = {
   myUserId?: number | null;
   onBack: () => void;
   onChangeTab?: (tab: SearchResultTab) => void;
-  onOpenRestaurantDetail?: (restaurantName: string) => void;
+  onOpenRestaurantDetail?: (restaurantName: string, restaurantId?: number) => void;
   onOpenUserProfile?: (user: {
     id: string;
     nickname: string;
@@ -48,6 +48,7 @@ type RestaurantResult = {
   id: string;
   imageUri?: string;
   name: string;
+  restaurantId?: number;
 };
 
 type UserResult = {
@@ -70,6 +71,7 @@ type ResultListItem = {
   meta: string;
   name: string;
   reliabilityGrade?: string;
+  restaurantId?: number;
 };
 
 type SearchResultCacheEntry = {
@@ -86,6 +88,40 @@ function getSearchResultCacheKey(query: string, myUserId?: number | null) {
 
 function getCachedSearchResults(query: string, myUserId?: number | null) {
   return searchResultCache.get(getSearchResultCacheKey(query, myUserId));
+}
+
+function getSearchRestaurantResultKey(
+  restaurant: {
+    address?: string;
+    externalPlaceId?: string;
+    matchedBy?: string;
+    primaryCategoryName?: string;
+    regionName?: string;
+    restaurantId?: number | null;
+    restaurantName: string;
+    source?: string;
+  },
+  index: number,
+) {
+  if (typeof restaurant.restaurantId === 'number' && Number.isFinite(restaurant.restaurantId)) {
+    return `restaurant-${restaurant.restaurantId}`;
+  }
+
+  if (typeof restaurant.externalPlaceId === 'string' && restaurant.externalPlaceId.trim()) {
+    return `external-${restaurant.externalPlaceId.trim()}`;
+  }
+
+  const fallbackParts = [
+    restaurant.restaurantName,
+    restaurant.address,
+    restaurant.regionName,
+    restaurant.primaryCategoryName,
+    restaurant.matchedBy,
+    restaurant.source,
+    String(index),
+  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+  return `search-${fallbackParts.join('-')}`;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -267,15 +303,19 @@ export function SearchResultScreen({
         setHasSettledResults(true);
 
         setRestaurantResults(
-          (result.restaurants ?? []).map((restaurant) => ({
+          (result.restaurants ?? []).map((restaurant, index) => ({
             category:
               restaurant.primaryCategoryName ??
               restaurant.categories?.[0] ??
               restaurant.regionName ??
               '맛집',
-            id: String(restaurant.restaurantId),
+            id: getSearchRestaurantResultKey(restaurant, index),
             imageUri: restaurant.imageUrl,
             name: restaurant.restaurantName,
+            restaurantId:
+              typeof restaurant.restaurantId === 'number' && Number.isFinite(restaurant.restaurantId)
+                ? restaurant.restaurantId
+                : undefined,
           })),
         );
         const filteredUsers = (result.users ?? []).filter((user) => user.userId !== myUserId);
@@ -449,8 +489,13 @@ export function SearchResultScreen({
                       imageUri: item.imageUri,
                       meta: item.category,
                       name: item.name,
+                      restaurantId: item.restaurantId,
                     }))}
-                    onPressItem={(_, name) => onOpenRestaurantDetail?.(name)}
+                    onPressItem={(id, name) => {
+                      const selectedRestaurant = restaurantResults.find((item) => item.id === id);
+
+                      onOpenRestaurantDetail?.(name, selectedRestaurant?.restaurantId);
+                    }}
                   />
                 ) : (
                   <EmptyTabState

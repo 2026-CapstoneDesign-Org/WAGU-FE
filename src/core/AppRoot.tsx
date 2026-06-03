@@ -508,6 +508,7 @@ export function AppRoot() {
         local: [] as RankingEntry[],
         national: [] as RankingEntry[],
       };
+  const fallbackLocalRankingRegion = '용인';
   const initialHomeScrollState: HomeScrollState = {
     bannerLoopIndex: 1,
     influencersX: 0,
@@ -582,6 +583,7 @@ export function AppRoot() {
     local: RankingEntry[];
     national: RankingEntry[];
   }>(fallbackRankingEntries);
+  const [localRankingRegion, setLocalRankingRegion] = useState(fallbackLocalRankingRegion);
   const [recommendedMealFriendItems, setRecommendedMealFriendItems] = useState<
     HomeProfileCardItem[]
   >([]);
@@ -755,6 +757,7 @@ export function AppRoot() {
       local: [],
       national: [],
     });
+    setLocalRankingRegion(fallbackLocalRankingRegion);
     setScreen('login');
     await clearStoredSession();
   };
@@ -1982,11 +1985,17 @@ export function AppRoot() {
             });
 
             if (result.items.length > 0) {
-              return result;
+              return { items: result.items, regionName };
             }
           }
 
-          return getRestaurantRankings(session.accessToken, { regionName: '용인시 처인구', limit: 40 });
+          const fallbackRegionName = '용인시 처인구';
+          const fallbackResult = await getRestaurantRankings(session.accessToken, {
+            regionName: fallbackRegionName,
+            limit: 40,
+          });
+
+          return { items: fallbackResult.items, regionName: fallbackRegionName };
         };
 
           const [
@@ -2098,6 +2107,7 @@ export function AppRoot() {
             local: mapRankingItems(localRankingResult.value.items),
             national: mapRankingItems(nationalRankingResult.value.items),
           });
+          setLocalRankingRegion(localRankingResult.value.regionName);
         }
 
         if (listsResult.status === 'fulfilled') {
@@ -2171,6 +2181,7 @@ export function AppRoot() {
             local: [],
             national: [],
           });
+          setLocalRankingRegion(fallbackLocalRankingRegion);
           setMyLists([]);
         }
 
@@ -3889,8 +3900,8 @@ export function AppRoot() {
               setScreen('search');
             }}
             onChangeTab={setSearchResultTab}
-            onOpenRestaurantDetail={(restaurantName) =>
-              openRestaurantDetail(restaurantName, { type: 'search-result' })
+            onOpenRestaurantDetail={(restaurantName, restaurantId) =>
+              openRestaurantDetail(restaurantName, { type: 'search-result' }, restaurantId)
             }
           onOpenUserProfile={(user) => {
             setSearchResultUserProfiles((current) => {
@@ -4357,6 +4368,7 @@ export function AppRoot() {
           hasUnreadNews={hasUnreadNews}
           initialScrollState={homeScrollState}
           localRankingItems={rankingEntries.local}
+          localRankingRegion={localRankingRegion}
           mealFriendItems={recommendedMealFriendItems}
           nationalRankingItems={rankingEntries.national}
           onOpenRestaurantDetail={(restaurantName, restaurantId) =>

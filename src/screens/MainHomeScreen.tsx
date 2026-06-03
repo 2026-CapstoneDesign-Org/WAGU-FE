@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -186,6 +186,7 @@ type MainHomeScreenProps = {
   featuredRestaurantItems?: HomeRestaurantCardItem[];
   initialScrollState?: HomeScrollState;
   localRankingItems?: RankingEntry[];
+  localRankingRegion?: string;
   mealFriendItems?: HomeProfileCardItem[];
   nationalRankingItems?: RankingEntry[];
   hasUnreadNews?: boolean;
@@ -448,6 +449,7 @@ export function MainHomeScreen({
   hasUnreadNews = false,
   initialScrollState,
   localRankingItems,
+  localRankingRegion = '용인',
   mealFriendItems,
   nationalRankingItems,
   onOpenUserProfile,
@@ -474,6 +476,7 @@ export function MainHomeScreen({
 
   const featuredRestaurants = featuredRestaurantItems ?? [];
   const localRanking = (localRankingItems ?? localRankingEntries).slice(0, 20);
+  const localRankingTitle = `${localRankingRegion} 맛집 추천`;
   const mealFriendProfiles = mealFriendItems ?? (MOCK_DATA_ENABLED ? mealFriends : []);
   const nationalRanking = (nationalRankingItems ?? nationalRankingEntries).slice(0, 20);
 
@@ -682,8 +685,7 @@ export function MainHomeScreen({
 
           <View style={styles.sectionsGroup}>
             <RankingSection
-              accentTitle="용인"
-              title=" 맛집 순위"
+              title={localRankingTitle}
               initialScrollX={initialScrollState?.localRankingX ?? 0}
               items={localRanking}
               onScrollPositionChange={(x) => onScrollStateChange?.({ localRankingX: x })}
@@ -692,7 +694,7 @@ export function MainHomeScreen({
               restoreScrollKey={restoreScrollKey}
             />
             <RankingSection
-              title="전국 맛집 순위"
+              title="전국 맛집 추천"
               initialScrollX={initialScrollState?.nationalRankingX ?? 0}
               items={nationalRanking}
               onScrollPositionChange={(x) => onScrollStateChange?.({ nationalRankingX: x })}
@@ -1020,3 +1022,4 @@ const styles = StyleSheet.create({
     color: '#838383',
   },
 });
+
