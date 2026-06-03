@@ -3974,6 +3974,12 @@ export function AppRoot() {
           draft={aiReservationDraft}
           result={aiReservationResult}
           onBack={() => setScreen('restaurant-detail')}
+          onGoHome={() => {
+            setActiveTab('home');
+            setHomeRestoreAnimated(false);
+            setHomeRestoreKey((current) => current + 1);
+            setScreen('tabs');
+          }}
           onRetry={() => {
             setAiReservationResult(null);
             setScreen('ai-reservation-form');

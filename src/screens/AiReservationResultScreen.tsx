@@ -8,6 +8,7 @@ import { AiReservationDraft, AiReservationResult } from '../types/aiReservation'
 type AiReservationResultScreenProps = {
   draft: AiReservationDraft;
   onBack: () => void;
+  onGoHome: () => void;
   onRetry: () => void;
   result: AiReservationResult;
 };
@@ -90,7 +91,7 @@ function getStatusAccent(status: AiReservationResult['status']) {
 export function AiReservationResultScreen({
   draft,
   onBack,
-  onRetry,
+  onGoHome,
   result,
 }: AiReservationResultScreenProps) {
   const accent = getStatusAccent(result.status);
@@ -142,8 +143,11 @@ export function AiReservationResultScreen({
 
         <View style={styles.bottomBar}>
           {!isConfirmed ? (
-            <Pressable style={[styles.primaryButton, { backgroundColor: accent.button }]} onPress={onRetry}>
-              <Text style={styles.primaryButtonLabel}>다시 시도하기</Text>
+            <Pressable
+              style={[styles.primaryButton, { backgroundColor: accent.button }]}
+              onPress={onGoHome}
+            >
+              <Text style={styles.primaryButtonLabel}>홈으로</Text>
             </Pressable>
           ) : (
             <Pressable
@@ -258,37 +262,36 @@ const styles = StyleSheet.create({
   restaurantName: {
     fontSize: 20,
     lineHeight: 26,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#111111',
   },
   infoList: {
-    gap: 12,
+    gap: 10,
   },
   infoRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 16,
+    alignItems: 'center',
+    gap: 12,
   },
   infoLabel: {
-    width: 72,
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: '600',
-    color: '#8A8A8A',
+    color: '#666666',
   },
   infoValue: {
     flex: 1,
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 14,
+    lineHeight: 20,
     fontWeight: '600',
-    color: '#222222',
+    color: '#111111',
     textAlign: 'right',
   },
   noteBox: {
-    borderRadius: 18,
+    marginTop: 4,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     gap: 6,
   },
@@ -296,20 +299,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '700',
-    color: '#777777',
+    color: '#666666',
   },
   noteValue: {
     fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500',
-    color: '#333333',
+    lineHeight: 21,
+    color: '#222222',
   },
   bottomBar: {
-    gap: 10,
+    paddingTop: 12,
   },
   primaryButton: {
-    height: 54,
-    borderRadius: 27,
+    minHeight: 56,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -320,21 +322,18 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   secondaryButton: {
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 1,
-    borderColor: '#E6E6E6',
+    minHeight: 56,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F3F4F6',
   },
   secondaryButtonSuccess: {
-    backgroundColor: '#FF0000',
-    borderColor: '#FF0000',
+    backgroundColor: '#111111',
   },
   secondaryButtonLabel: {
-    fontSize: 16,
-    lineHeight: 21,
+    fontSize: 17,
+    lineHeight: 22,
     fontWeight: '700',
     color: '#111111',
   },

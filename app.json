@@ -16,8 +16,9 @@
       "bundleIdentifier": "com.wagu.app",
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "프로필 사진을 촬영하기 위해 카메라 접근 권한이 필요합니다.",
-        "NSPhotoLibraryUsageDescription": "프로필 사진을 변경하기 위해 사진 보관함 접근 권한이 필요합니다."
+        "NSCameraUsageDescription": "Allow WAGU to access your camera when taking profile or review photos.",
+        "NSPhotoLibraryUsageDescription": "Allow WAGU to access your photo library when selecting profile or review photos.",
+        "NSLocationWhenInUseUsageDescription": "Allow WAGU to access your location while you use the map."
       }
     },
     "android": {
@@ -49,8 +50,14 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "프로필 사진을 변경하기 위해 사진 보관함 접근 권한이 필요합니다.",
-          "cameraPermission": "프로필 사진을 촬영하기 위해 카메라 접근 권한이 필요합니다."
+          "photosPermission": "Allow WAGU to access your photo library when selecting profile or review photos.",
+          "cameraPermission": "Allow WAGU to access your camera when taking profile or review photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow WAGU to access your location while you use the map."
         }
       ]
     ],

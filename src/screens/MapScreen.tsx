@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   PanResponder,
@@ -10,6 +11,7 @@ import {
   UIManager,
   View,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -653,10 +655,36 @@ export function MapScreen({
     setSelectedMarkerRestaurantId(null);
   };
 
-  const handlePressLocationButton = () => {
-    setFocusedRestaurantId(null);
-    setSelectedMarkerRestaurantId(null);
-    animateMapToRestaurant(null);
+  const handlePressLocationButton = async () => {
+    try {
+      const currentPermission = await Location.getForegroundPermissionsAsync();
+      const permission =
+        currentPermission.granted
+          ? currentPermission
+          : await Location.requestForegroundPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert('권한 필요', '현재 위치를 확인하려면 위치 권한이 필요합니다.');
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      setFocusedRestaurantId(null);
+      setSelectedMarkerRestaurantId(null);
+      mapRef.current?.animateCameraTo({
+        duration: 360,
+        easing: 'EaseOut',
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        zoom: currentZoomRef.current || DEFAULT_CAMERA.zoom,
+      });
+    } catch (error) {
+      console.log('[map][location] failed', error);
+      Alert.alert('안내', '현재 위치를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    }
   };
 
   const panResponder = useMemo(
