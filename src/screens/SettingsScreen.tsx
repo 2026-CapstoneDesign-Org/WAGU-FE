@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,7 +15,7 @@ type SettingsScreenProps = {
 type SettingRowProps = {
   label: string;
   onPress?: () => void;
-  right?: React.ReactNode;
+  right?: ReactNode;
 };
 
 function SettingRow({ label, onPress, right }: SettingRowProps) {
@@ -103,17 +103,6 @@ export function SettingsScreen({
                   />
                 }
               />
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>고객센터</Text>
-            <View style={styles.sectionRows}>
-              <SettingRow label="공지사항" />
-              <SettingRow label="1:1 문의하기" />
-              <SettingRow label="약관 및 정책" />
             </View>
           </View>
 

@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     width: '100%',
     gap: 12,
@@ -459,14 +459,18 @@ const styles = StyleSheet.create({
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
+    flex: 1,
     flexShrink: 1,
+    minWidth: 0,
   },
   sectionTitle: {
     fontSize: 20,
     lineHeight: 22,
     fontWeight: '600',
     color: '#000000',
+    flexShrink: 1,
   },
   likeButton: {
     minWidth: 64,
@@ -480,6 +484,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
     backgroundColor: '#FFFFFF',
+    flexShrink: 0,
   },
   likeButtonActive: {
     backgroundColor: '#FFF1F0',

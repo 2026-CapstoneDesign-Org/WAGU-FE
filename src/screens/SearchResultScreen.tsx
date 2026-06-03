@@ -72,6 +72,22 @@ type ResultListItem = {
   reliabilityGrade?: string;
 };
 
+type SearchResultCacheEntry = {
+  regionResults: RegionResult[];
+  restaurantResults: RestaurantResult[];
+  userResults: UserResult[];
+};
+
+const searchResultCache = new Map<string, SearchResultCacheEntry>();
+
+function getSearchResultCacheKey(query: string, myUserId?: number | null) {
+  return `${myUserId ?? 'guest'}::${query.trim().toLowerCase()}`;
+}
+
+function getCachedSearchResults(query: string, myUserId?: number | null) {
+  return searchResultCache.get(getSearchResultCacheKey(query, myUserId));
+}
+
 const { width: screenWidth } = Dimensions.get('window');
 const HORIZONTAL_PADDING = 16;
 const CONTENT_WIDTH = screenWidth - HORIZONTAL_PADDING * 2;
@@ -165,12 +181,18 @@ export function SearchResultScreen({
   const inputRef = useRef<TextInput | null>(null);
   const pagerRef = useRef<ScrollView | null>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
+  const initialCachedResults = getCachedSearchResults(query, myUserId);
   const [value, setValue] = useState(query);
   const [activeTab, setActiveTab] = useState<SearchResultTab>(initialTab);
-  const [restaurantResults, setRestaurantResults] = useState<RestaurantResult[]>([]);
-  const [userResults, setUserResults] = useState<UserResult[]>([]);
-  const [regionResults, setRegionResults] = useState<RegionResult[]>([]);
+  const [restaurantResults, setRestaurantResults] = useState<RestaurantResult[]>(
+    initialCachedResults?.restaurantResults ?? [],
+  );
+  const [userResults, setUserResults] = useState<UserResult[]>(initialCachedResults?.userResults ?? []);
+  const [regionResults, setRegionResults] = useState<RegionResult[]>(
+    initialCachedResults?.regionResults ?? [],
+  );
   const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [hasSettledResults, setHasSettledResults] = useState(Boolean(initialCachedResults));
 
   useEffect(() => {
     setValue(query);
@@ -186,17 +208,53 @@ export function SearchResultScreen({
   }, [initialTab, scrollX]);
 
   useEffect(() => {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery || isSearchLoading || !hasSettledResults) {
+      return;
+    }
+
+    searchResultCache.set(getSearchResultCacheKey(trimmedQuery, myUserId), {
+      regionResults,
+      restaurantResults,
+      userResults,
+    });
+  }, [
+    hasSettledResults,
+    isSearchLoading,
+    myUserId,
+    query,
+    regionResults,
+    restaurantResults,
+    userResults,
+  ]);
+
+  useEffect(() => {
     if (!accessToken || !query.trim()) {
       setRestaurantResults([]);
       setUserResults([]);
       setRegionResults([]);
       setIsSearchLoading(false);
+      setHasSettledResults(false);
+      return;
+    }
+
+    const cachedResults = getCachedSearchResults(query, myUserId);
+    if (cachedResults) {
+      setRestaurantResults(cachedResults.restaurantResults);
+      setUserResults(cachedResults.userResults);
+      setRegionResults(cachedResults.regionResults);
+      setIsSearchLoading(false);
+      setHasSettledResults(true);
       return;
     }
 
     let cancelled = false;
 
     const loadResults = async () => {
+      setHasSettledResults(false);
+      setRestaurantResults([]);
+      setUserResults([]);
+      setRegionResults([]);
       setIsSearchLoading(true);
 
       try {
@@ -205,6 +263,8 @@ export function SearchResultScreen({
         if (cancelled) {
           return;
         }
+
+        setHasSettledResults(true);
 
         setRestaurantResults(
           (result.restaurants ?? []).map((restaurant) => ({
