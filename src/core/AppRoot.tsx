@@ -608,6 +608,7 @@ export function AppRoot() {
   const [pendingNickname, setPendingNickname] = useState<string | null>(null);
   const [nickname, setNickname] = useState('먹부림');
   const [selectedRestaurantName, setSelectedRestaurantName] = useState('와이앤웍');
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<number | undefined>(undefined);
   const [restaurantDetailInitialTab, setRestaurantDetailInitialTab] = useState<'home' | 'review'>(
     'home',
   );
@@ -1552,6 +1553,7 @@ export function AppRoot() {
           id: `recommended-restaurant-${item.restaurantId}`,
           imageUri: item.imageUrl,
           name: item.restaurantName,
+          restaurantId: item.restaurantId,
           restaurantName: item.restaurantName,
         })),
       );
@@ -3178,8 +3180,10 @@ export function AppRoot() {
   const openRestaurantDetail = (
     restaurantName: string,
     source: Exclude<RestaurantDetailSource, null>,
+    restaurantId?: number,
   ) => {
     setSelectedRestaurantName(restaurantName);
+    setSelectedRestaurantId(restaurantId);
     setRestaurantDetailInitialTab('home');
     setRestaurantDetailSource(source);
     setScreen('restaurant-detail');
@@ -3506,28 +3510,41 @@ export function AppRoot() {
 
     if (pendingNickname) {
       try {
+        console.log('[signup profile] syncing pending nickname');
         await updateMyUser(session.accessToken, { nickname: pendingNickname });
         setPendingNickname(null);
+        console.log('[signup profile] pending nickname synced');
       } catch {
+        console.log('[signup profile] pending nickname sync failed');
         // Proceed with profile save even if nickname sync needs to be retried later.
       }
     }
 
+    console.log('[signup profile] submitting profile');
     await signupProfile(session.accessToken, profile);
+    console.log('[signup profile] profile submitted');
     setBirthDateLabel(`${profile.birthYear}년 ${profile.birthMonth}월 ${profile.birthDay}일`);
     setGenderLabel(profile.gender === 'MALE' ? '남성' : '여성');
     setRequiresProfileSetup(false);
+    console.log('[signup profile] waiting for server user ready');
     await waitForServerUserReady(session.accessToken, 4);
+    console.log('[signup profile] server user ready');
+    console.log('[signup profile] hydrating home recommendations');
     await hydrateHomeRecommendations(session.accessToken, { retryOnEmpty: true });
+    console.log('[signup profile] home recommendations hydrated');
+    console.log('[signup profile] loading lists');
     const lists = await getMyLists(session.accessToken);
+    console.log('[signup profile] lists loaded', { count: lists.length });
     setTasteFlowSource('onboarding');
     if (lists.length === 0) {
       setTasteListName('');
       setSelectedRestaurants([]);
+      console.log('[signup profile] routing to taste-list-name');
       setScreen('taste-list-name');
       return;
     }
 
+    console.log('[signup profile] routing to tabs');
     setScreen('tabs');
   };
 
@@ -3756,6 +3773,7 @@ export function AppRoot() {
             .map((user) => Number(user.id))
             .filter((userId) => Number.isFinite(userId))}
           initialTab={restaurantDetailInitialTab}
+          restaurantId={selectedRestaurantId}
           restaurantName={selectedRestaurantName}
           onBack={handleBackFromRestaurantDetail}
           favoriteColor={getFavoriteColor(selectedRestaurantName)}
@@ -4181,8 +4199,8 @@ export function AppRoot() {
           localRankingItems={rankingEntries.local}
           mealFriendItems={recommendedMealFriendItems}
           nationalRankingItems={rankingEntries.national}
-          onOpenRestaurantDetail={(restaurantName) =>
-            openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'home' })
+          onOpenRestaurantDetail={(restaurantName, restaurantId) =>
+            openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'home' }, restaurantId)
           }
           onOpenUserProfile={(userId) => {
             setUserProfileSource({ type: 'home' });

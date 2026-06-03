@@ -371,6 +371,297 @@ type ApiHiddenGemRestaurantResponse = {
   regionTownName?: string;
 };
 
+type UnknownRecord = Record<string, unknown>;
+
+function isUnknownRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null;
+}
+
+function getNestedRecord(source: unknown, key: string) {
+  if (!isUnknownRecord(source)) {
+    return undefined;
+  }
+
+  const candidate = source[key];
+  return isUnknownRecord(candidate) ? candidate : undefined;
+}
+
+function getNumberField(source: unknown, key: string) {
+  if (!isUnknownRecord(source)) {
+    return undefined;
+  }
+
+  const candidate = source[key];
+  if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+    return candidate;
+  }
+
+  if (typeof candidate === 'string') {
+    const parsed = Number(candidate);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function getStringField(source: unknown, key: string) {
+  if (!isUnknownRecord(source)) {
+    return undefined;
+  }
+
+  const candidate = source[key];
+  if (typeof candidate !== 'string') {
+    return undefined;
+  }
+
+  const normalized = candidate.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function getBooleanField(source: unknown, key: string) {
+  if (!isUnknownRecord(source)) {
+    return undefined;
+  }
+
+  const candidate = source[key];
+  return typeof candidate === 'boolean' ? candidate : undefined;
+}
+
+function getStringArrayField(source: unknown, key: string) {
+  if (!isUnknownRecord(source)) {
+    return undefined;
+  }
+
+  const candidate = source[key];
+  if (!Array.isArray(candidate)) {
+    return undefined;
+  }
+
+  const normalized = candidate.filter(
+    (item): item is string => typeof item === 'string' && item.trim().length > 0,
+  );
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function extractWrappedItems(source: unknown) {
+  if (Array.isArray(source)) {
+    return source;
+  }
+
+  if (!isUnknownRecord(source)) {
+    return [];
+  }
+
+  const items = source.items;
+  if (Array.isArray(items)) {
+    return items;
+  }
+
+  const content = source.content;
+  if (Array.isArray(content)) {
+    return content;
+  }
+
+  return [];
+}
+
+function normalizeRestaurantRecommendationItem(
+  source: unknown,
+  index: number,
+): ApiRestaurantRecommendationItem {
+  const nestedRestaurant = getNestedRecord(source, 'restaurant');
+
+  return {
+    categories:
+      getStringArrayField(source, 'categories') ??
+      getStringArrayField(nestedRestaurant, 'categories'),
+    categoryFitScore: getNumberField(source, 'categoryFitScore'),
+    collaborativeScore: getNumberField(source, 'collaborativeScore'),
+    fallbackRegion: getBooleanField(source, 'fallbackRegion'),
+    finalScore: getNumberField(source, 'finalScore'),
+    imageUrl:
+      getStringField(source, 'imageUrl') ?? getStringField(nestedRestaurant, 'imageUrl'),
+    rank: getNumberField(source, 'rank') ?? index + 1,
+    rankingAdjustmentScore: getNumberField(source, 'rankingAdjustmentScore'),
+    regionName:
+      getStringField(source, 'regionName') ??
+      getStringField(nestedRestaurant, 'regionName') ??
+      '',
+    regionScore: getNumberField(source, 'regionScore'),
+    restaurantId:
+      getNumberField(source, 'restaurantId') ??
+      getNumberField(source, 'id') ??
+      getNumberField(nestedRestaurant, 'id') ??
+      index + 1,
+    restaurantName:
+      getStringField(source, 'restaurantName') ??
+      getStringField(source, 'name') ??
+      getStringField(nestedRestaurant, 'name') ??
+      `추천 맛집 ${index + 1}`,
+    userPreferenceScore: getNumberField(source, 'userPreferenceScore'),
+  };
+}
+
+function normalizeRestaurantRankingItem(source: unknown, index: number): ApiRestaurantRankingItem {
+  const nestedRestaurant = getNestedRecord(source, 'restaurant');
+
+  return {
+    adjustedScore: getNumberField(source, 'adjustedScore') ?? 0,
+    averageAutoScore: getNumberField(source, 'averageAutoScore'),
+    categories:
+      getStringArrayField(source, 'categories') ??
+      getStringArrayField(nestedRestaurant, 'categories'),
+    evaluationCount: getNumberField(source, 'evaluationCount'),
+    imageUrl:
+      getStringField(source, 'imageUrl') ?? getStringField(nestedRestaurant, 'imageUrl'),
+    rank: getNumberField(source, 'rank') ?? index + 1,
+    regionName:
+      getStringField(source, 'regionName') ??
+      getStringField(nestedRestaurant, 'regionName') ??
+      '',
+    restaurantId:
+      getNumberField(source, 'restaurantId') ??
+      getNumberField(source, 'id') ??
+      getNumberField(nestedRestaurant, 'id') ??
+      index + 1,
+    restaurantName:
+      getStringField(source, 'restaurantName') ??
+      getStringField(source, 'name') ??
+      getStringField(nestedRestaurant, 'name') ??
+      `랭킹 맛집 ${index + 1}`,
+  };
+}
+
+function normalizeListRecommendationOwner(source: unknown, index: number): ApiRecommendationOwner {
+  const nestedOwner =
+    getNestedRecord(source, 'owner') ??
+    getNestedRecord(source, 'user') ??
+    getNestedRecord(source, 'author');
+  const nestedProfile = getNestedRecord(nestedOwner, 'profile');
+
+  return {
+    nickname:
+      getStringField(nestedOwner, 'nickname') ??
+      getStringField(source, 'ownerNickname') ??
+      getStringField(source, 'nickname') ??
+      `추천 유저 ${index + 1}`,
+    ownerId:
+      getNumberField(nestedOwner, 'ownerId') ??
+      getNumberField(nestedOwner, 'userId') ??
+      getNumberField(nestedOwner, 'id') ??
+      getNumberField(source, 'ownerId') ??
+      getNumberField(source, 'userId') ??
+      index + 1,
+    profileImageUrl:
+      getStringField(nestedOwner, 'profileImageUrl') ??
+      getStringField(nestedOwner, 'imageUrl') ??
+      getStringField(nestedOwner, 'avatarUrl') ??
+      getStringField(nestedProfile, 'profileImageUrl') ??
+      getStringField(nestedProfile, 'imageUrl') ??
+      getStringField(source, 'ownerProfileImageUrl') ??
+      getStringField(source, 'profileImageUrl') ??
+      getStringField(source, 'ownerImageUrl') ??
+      getStringField(source, 'avatarUrl'),
+  };
+}
+
+function normalizeListRecommendationItem(source: unknown, index: number): ApiListRecommendationItem {
+  return {
+    categorySummary: getStringArrayField(source, 'categorySummary'),
+    description: getStringField(source, 'description'),
+    fallbackRegion: getBooleanField(source, 'fallbackRegion'),
+    isLiked: getBooleanField(source, 'isLiked'),
+    listId:
+      getNumberField(source, 'listId') ??
+      getNumberField(source, 'id') ??
+      index + 1,
+    owner: normalizeListRecommendationOwner(source, index),
+    rank: getNumberField(source, 'rank') ?? index + 1,
+    recommendationScore: getNumberField(source, 'recommendationScore'),
+    regionName: getStringField(source, 'regionName') ?? '',
+    restaurantCount: getNumberField(source, 'restaurantCount'),
+    title:
+      getStringField(source, 'title') ??
+      getStringField(source, 'listTitle') ??
+      `추천 리스트 ${index + 1}`,
+  };
+}
+
+function normalizeUserListSummaryItem(source: unknown, index: number): ApiUserListSummary {
+  return {
+    createdAt: getStringField(source, 'createdAt'),
+    description: getStringField(source, 'description'),
+    id:
+      getNumberField(source, 'id') ??
+      getNumberField(source, 'listId') ??
+      index + 1,
+    isLiked: getBooleanField(source, 'isLiked'),
+    isPublic: getBooleanField(source, 'isPublic') ?? true,
+    isRepresentative: getBooleanField(source, 'isRepresentative') ?? false,
+    regionName: getStringField(source, 'regionName') ?? '',
+    title:
+      getStringField(source, 'title') ??
+      getStringField(source, 'listTitle') ??
+      `리스트 ${index + 1}`,
+  };
+}
+
+function normalizeRestaurantForListItem(source: unknown, index: number): ApiRestaurant {
+  return {
+    address: getStringField(source, 'address') ?? '',
+    categories: getStringArrayField(source, 'categories'),
+    id:
+      getNumberField(source, 'id') ??
+      getNumberField(source, 'restaurantId') ??
+      index + 1,
+    imageUrl: getStringField(source, 'imageUrl'),
+    imageUrls: getStringArrayField(source, 'imageUrls'),
+    name:
+      getStringField(source, 'name') ??
+      getStringField(source, 'restaurantName') ??
+      `식당 ${index + 1}`,
+    photoUrls: getStringArrayField(source, 'photoUrls'),
+    primaryCategoryName: getStringField(source, 'primaryCategoryName'),
+    regionName: getStringField(source, 'regionName') ?? '',
+  };
+}
+
+function normalizeUserListDetail(source: unknown): ApiUserListDetail {
+  const summary = normalizeUserListSummaryItem(source, 0);
+  const rawRestaurants = extractWrappedItems(
+    getNestedRecord(source, 'restaurants') ??
+      getNestedRecord(source, 'listRestaurants') ??
+      getNestedRecord(source, 'items') ??
+      (isUnknownRecord(source)
+        ? (source.restaurants ??
+            source.listRestaurants ??
+            source.items)
+        : undefined),
+  );
+
+  return {
+    ...summary,
+    restaurants: rawRestaurants.map((item, index) => {
+      const nestedRestaurant = getNestedRecord(item, 'restaurant') ?? item;
+
+      return {
+        autoScore: getNumberField(item, 'autoScore'),
+        id:
+          getNumberField(item, 'id') ??
+          getNumberField(item, 'listItemId') ??
+          index + 1,
+        moodScore: getNumberField(item, 'moodScore'),
+        restaurant: normalizeRestaurantForListItem(nestedRestaurant, index),
+        tasteScore: getNumberField(item, 'tasteScore'),
+        valueScore: getNumberField(item, 'valueScore'),
+      };
+    }),
+  };
+}
+
 type ApiTokenResponse = {
   accessToken: string;
   refreshToken?: string | null;
@@ -399,6 +690,57 @@ type ApiUserListDetail = ApiUserListSummary & {
 };
 
 const LIST_ACCENT_COLORS = ['#F46A67', '#56CDB5', '#8361C8', '#F6B033', '#5D8DF4', '#E96DC0'];
+const DEFAULT_PAGE_SIZE = 50;
+
+async function fetchPaginatedArray<T>(
+  path: string,
+  options: {
+    query?: Record<string, string | number | boolean | undefined>;
+    token: string;
+  },
+) {
+  const aggregated: T[] = [];
+  let page = 0;
+
+  while (true) {
+    const response = await apiRequest<unknown>(path, {
+      token: options.token,
+      query: {
+        ...options.query,
+        page,
+        size: DEFAULT_PAGE_SIZE,
+      },
+    });
+
+    if (Array.isArray(response)) {
+      return response as T[];
+    }
+
+    const items = extractWrappedItems(response) as T[];
+    aggregated.push(...items);
+
+    const hasNext = getBooleanField(response, 'hasNext');
+    const currentPage = getNumberField(response, 'page');
+    const totalPages = getNumberField(response, 'totalPages');
+
+    if (hasNext === true) {
+      page += 1;
+      continue;
+    }
+
+    if (
+      hasNext === undefined &&
+      currentPage !== undefined &&
+      totalPages !== undefined &&
+      currentPage + 1 < totalPages
+    ) {
+      page += 1;
+      continue;
+    }
+
+    return aggregated;
+  }
+}
 
 export function getOAuthAuthorizationUrl(provider: AuthProvider) {
   return `${getApiBaseUrl()}/oauth2/authorization/${provider}`;
@@ -434,14 +776,20 @@ export async function getRestaurantRankings(
     regionName?: string;
   },
 ) {
-  return apiRequest<ApiRestaurantRankingResponse>('/rankings/restaurants', {
+  const response = await apiRequest<unknown>('/rankings/restaurants', {
     token,
     query,
   });
+
+  return {
+    items: extractWrappedItems(response).map((item, index) =>
+      normalizeRestaurantRankingItem(item, index),
+    ),
+  } satisfies ApiRestaurantRankingResponse;
 }
 
 export async function searchRestaurants(token: string, keyword: string) {
-  return apiRequest<ApiRestaurant[]>('/restaurants', {
+  return fetchPaginatedArray<ApiRestaurant>('/restaurants', {
     token,
     query: { keyword },
   });
@@ -475,15 +823,27 @@ export async function getRestaurantParkingLots(
 }
 
 export async function getListRecommendations(token: string) {
-  return apiRequest<ApiListRecommendationResponse>('/recommendations/lists', {
+  const response = await apiRequest<unknown>('/recommendations/lists', {
     token,
   });
+
+  return {
+    items: extractWrappedItems(response).map((item, index) =>
+      normalizeListRecommendationItem(item, index),
+    ),
+  } satisfies ApiListRecommendationResponse;
 }
 
 export async function getRestaurantRecommendations(token: string) {
-  return apiRequest<ApiRestaurantRecommendationResponse>('/recommendations/restaurants', {
+  const response = await apiRequest<unknown>('/recommendations/restaurants', {
     token,
   });
+
+  return {
+    items: extractWrappedItems(response).map((item, index) =>
+      normalizeRestaurantRecommendationItem(item, index),
+    ),
+  } satisfies ApiRestaurantRecommendationResponse;
 }
 
 export async function createAiCallReservation(
@@ -533,7 +893,7 @@ export async function getHiddenGemRestaurants(
 }
 
 export async function getRestaurantReviews(token: string, restaurantId: number) {
-  return apiRequest<ApiReview[]>(`/restaurants/${restaurantId}/reviews`, {
+  return fetchPaginatedArray<ApiReview>(`/restaurants/${restaurantId}/reviews`, {
     token,
   });
 }
@@ -671,15 +1031,17 @@ export async function getUserInfo(token: string, userId: number) {
 }
 
 export async function getUserReviews(token: string, userId: number) {
-  return apiRequest<ApiReview[]>(`/users/${userId}/reviews`, {
+  return fetchPaginatedArray<ApiReview>(`/users/${userId}/reviews`, {
     token,
   });
 }
 
 export async function getMyLists(token: string) {
-  return apiRequest<ApiUserListSummary[]>('/lists', {
+  const items = await fetchPaginatedArray<unknown>('/lists', {
     token,
   });
+
+  return items.map((item, index) => normalizeUserListSummaryItem(item, index));
 }
 
 export async function createList(
@@ -712,15 +1074,31 @@ export async function setRepresentativeList(token: string, listId: number) {
 }
 
 export async function getListDetail(token: string, listId: number) {
-  return apiRequest<ApiUserListDetail>(`/lists/${listId}`, {
+  const response = await apiRequest<unknown>(`/lists/${listId}`, {
     token,
   });
+
+  const normalized = normalizeUserListDetail(response);
+
+  if (normalized.restaurants.length === 0 && isUnknownRecord(response)) {
+    console.log('[getListDetail] empty restaurants after normalize', {
+      keys: Object.keys(response),
+      listId,
+      rawRestaurantsKeys: ['restaurants', 'listRestaurants', 'items'].filter(
+        (key) => key in response,
+      ),
+    });
+  }
+
+  return normalized;
 }
 
 export async function getUserRepresentativeList(token: string, userId: number) {
-  return apiRequest<ApiUserListDetail>(`/lists/users/${userId}/representative`, {
+  const response = await apiRequest<unknown>(`/lists/users/${userId}/representative`, {
     token,
   });
+
+  return normalizeUserListDetail(response);
 }
 
 export async function updateList(
@@ -842,7 +1220,7 @@ export async function getFollowCount(token: string, userId: number) {
 }
 
 export async function getFollowings(token: string, userId: number) {
-  return apiRequest<ApiFollowUser[]>(`/users/${userId}/followings`, {
+  return fetchPaginatedArray<ApiFollowUser>(`/users/${userId}/followings`, {
     token,
   });
 }
@@ -860,7 +1238,7 @@ export async function getReliabilityScore(token: string, userId: number) {
 }
 
 export async function getFollowers(token: string, userId: number) {
-  return apiRequest<ApiFollowUser[]>(`/users/${userId}/followers`, {
+  return fetchPaginatedArray<ApiFollowUser>(`/users/${userId}/followers`, {
     token,
   });
 }
@@ -880,7 +1258,7 @@ export async function unfollowUser(token: string, userId: number) {
 }
 
 export async function getNotifications(token: string) {
-  return apiRequest<ApiNotification[]>('/notifications', {
+  return fetchPaginatedArray<ApiNotification>('/notifications', {
     token,
   });
 }
@@ -929,8 +1307,8 @@ function convertTenPointToFiveStar(value: number) {
 }
 
 export function mapRankingItems(items: ApiRestaurantRankingItem[]): RankingEntry[] {
-  return items.map((item) => ({
-    id: `ranking-${item.restaurantId}`,
+  return items.map((item, index) => ({
+    id: `ranking-${item.restaurantId ?? index + 1}-${index}`,
     name: item.restaurantName,
     meta: [item.categories?.[0], item.regionName].filter(Boolean).join(' · '),
     imageUri: item.imageUrl,

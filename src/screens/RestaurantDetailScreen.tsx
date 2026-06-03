@@ -62,6 +62,7 @@ type RestaurantDetailScreenProps = {
   followingUserIds?: number[];
   initialTab?: RestaurantDetailTab;
   onBack: () => void;
+  restaurantId?: number;
   restaurantName?: string;
   onAddToList?: (restaurant: Restaurant) => void;
   onOpenAiReservation?: (restaurant: Restaurant) => void;
@@ -1589,6 +1590,7 @@ export function RestaurantDetailScreen({
   followingUserIds,
   initialTab = 'home',
   onBack,
+  restaurantId,
   restaurantName = '와이앤웍',
   onAddToList,
   onOpenAiReservation,
@@ -1694,35 +1696,47 @@ export function RestaurantDetailScreen({
       setHasRestaurantLoadError(false);
 
       try {
-        const candidates = await searchRestaurants(accessToken, restaurantName);
-        const normalizedTargetName = normalizeRestaurantName(restaurantName);
-        const matchedCandidate =
-          candidates.find((item) => normalizeRestaurantName(item.name) === normalizedTargetName) ??
-          candidates.find((item) =>
-            normalizeRestaurantName(item.name).includes(normalizedTargetName),
-          ) ??
-          candidates.find((item) =>
-            normalizedTargetName.includes(normalizeRestaurantName(item.name)),
-          ) ??
-          candidates[0];
+        let matchedCandidate: ApiRestaurant | undefined;
 
-          if (!matchedCandidate) {
-            if (!cancelled) {
-              setRemoteRestaurant(null);
-              setRemoteReviews([]);
-              setRemoteReviewSummary(null);
-              setHasRestaurantLoadError(true);
-              setIsRestaurantLoading(false);
-            }
+        if (restaurantId) {
+          try {
+            matchedCandidate = await getRestaurant(accessToken, restaurantId);
+          } catch {
+            matchedCandidate = undefined;
+          }
+        }
+
+        if (!matchedCandidate) {
+          const candidates = await searchRestaurants(accessToken, restaurantName);
+          const normalizedTargetName = normalizeRestaurantName(restaurantName);
+          matchedCandidate =
+            candidates.find((item) => normalizeRestaurantName(item.name) === normalizedTargetName) ??
+            candidates.find((item) =>
+              normalizeRestaurantName(item.name).includes(normalizedTargetName),
+            ) ??
+            candidates.find((item) =>
+              normalizedTargetName.includes(normalizeRestaurantName(item.name)),
+            ) ??
+            candidates[0];
+        }
+
+        if (!matchedCandidate) {
+          if (!cancelled) {
+            setRemoteRestaurant(null);
+            setRemoteReviews([]);
+            setRemoteReviewSummary(null);
+            setHasRestaurantLoadError(true);
+            setIsRestaurantLoading(false);
+          }
           return;
         }
 
         try {
           const detail = await getRestaurant(accessToken, Number(matchedCandidate.id));
-          const restaurantId = Number(matchedCandidate.id);
+          const resolvedRestaurantId = Number(matchedCandidate.id);
           const [reviews, reviewSummary] = await Promise.all([
-            getRestaurantReviews(accessToken, restaurantId),
-            getRestaurantReviewSummary(accessToken, restaurantId).catch(() => null),
+            getRestaurantReviews(accessToken, resolvedRestaurantId),
+            getRestaurantReviewSummary(accessToken, resolvedRestaurantId).catch(() => null),
           ]);
 
           if (!cancelled) {
@@ -1760,7 +1774,7 @@ export function RestaurantDetailScreen({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, restaurantName]);
+  }, [accessToken, restaurantId, restaurantName]);
 
   const restaurantMeta = useMemo(
     () => {

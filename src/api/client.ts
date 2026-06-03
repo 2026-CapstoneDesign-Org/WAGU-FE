@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://ec2-13-209-162-63.ap-northeast-2.compute.amazonaws.com:8080';
+const API_BASE_URL = 'https://wagu.uk';
 
 type QueryValue = string | number | boolean | null | undefined;
 

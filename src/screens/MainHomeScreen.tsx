@@ -132,6 +132,7 @@ export type HomeRestaurantCardItem = {
   imageUri?: string;
   name: string;
   restaurantName: string;
+  restaurantId?: number;
 };
 
 type RankingSectionProps = {
@@ -139,7 +140,7 @@ type RankingSectionProps = {
   initialScrollX?: number;
   items: RankingEntry[];
   onScrollPositionChange?: (x: number) => void;
-  onPressItem?: (restaurantName: string) => void;
+  onPressItem?: (restaurantName: string, restaurantId?: number) => void;
   onPressMore?: () => void;
   restoreScrollKey?: number;
   title: string;
@@ -162,7 +163,7 @@ type MainHomeScreenProps = {
   nationalRankingItems?: RankingEntry[];
   hasUnreadNews?: boolean;
   onOpenUserProfile?: (userId: string) => void;
-  onOpenRestaurantDetail?: (restaurantName: string) => void;
+  onOpenRestaurantDetail?: (restaurantName: string, restaurantId?: number) => void;
   onPressAi?: () => void;
   onPressLadderGame?: () => void;
   onPressSnailRace?: () => void;
@@ -350,7 +351,7 @@ function HorizontalRestaurantSection({
 }: {
   initialScrollX?: number;
   items: HomeRestaurantCardItem[];
-  onPressItem?: (restaurantName: string) => void;
+  onPressItem?: (restaurantName: string, restaurantId?: number) => void;
   onScrollPositionChange?: (x: number) => void;
   restoreScrollKey?: number;
   title: string;
@@ -393,7 +394,7 @@ function HorizontalRestaurantSection({
             <Pressable
               key={item.id}
               style={styles.profileCard}
-              onPress={() => onPressItem?.(item.restaurantName)}
+              onPress={() => onPressItem?.(item.restaurantName, item.restaurantId)}
             >
               {item.imageUri ? (
                 <Image
