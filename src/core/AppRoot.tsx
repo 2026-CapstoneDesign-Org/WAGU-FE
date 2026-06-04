@@ -3192,6 +3192,12 @@ export function AppRoot() {
       }
 
       await refreshMyLists(session.accessToken);
+
+      try {
+        await hydrateHomeRecommendations(session.accessToken, { retryOnEmpty: true });
+      } catch (error) {
+        console.log('[TasteList] home recommendations refresh failed', error);
+      }
     } finally {
       createTasteListLockRef.current = false;
     }
