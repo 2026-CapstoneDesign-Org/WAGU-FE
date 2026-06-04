@@ -1,7 +1,7 @@
 import { RankingEntry } from '../data/rankings';
 import { MyList } from '../data/myLists';
 
-import { apiRequest, getApiBaseUrl } from './client';
+import { ApiError, apiRequest, getApiBaseUrl } from './client';
 
 export type AuthProvider = 'google' | 'kakao' | 'naver';
 
@@ -284,6 +284,23 @@ export type ApiSearchUserItem = {
   nickname: string;
   profileImageUrl?: string;
   userId: number;
+};
+
+export type ApiWorldCupCandidateCategory = 'dessert' | 'korean' | 'night';
+
+export type ApiWorldCupCandidateItem = {
+  id: string;
+  imageUrl?: string;
+  kind?: string;
+  name: string;
+};
+
+export type ApiWorldCupCandidatesResponse = {
+  category: string;
+  categoryLabel?: string;
+  generatedAt?: string;
+  items: ApiWorldCupCandidateItem[];
+  roundSize: number;
 };
 
 export type ApiSearchRegionItem = {
@@ -849,6 +866,62 @@ export async function getRestaurantRecommendations(token: string) {
       normalizeRestaurantRecommendationItem(item, index),
     ),
   } satisfies ApiRestaurantRecommendationResponse;
+}
+
+export async function getWorldCupCandidates(
+  token: string,
+  query: {
+    category: ApiWorldCupCandidateCategory;
+    roundSize: number;
+  },
+) {
+  const request = async (category: string) => {
+    const response = await apiRequest<unknown>('/world-cups/candidates', {
+      token,
+      query: {
+        category,
+        roundSize: query.roundSize,
+      },
+    });
+
+    const root =
+      getNestedRecord(response, 'data') ??
+      getNestedRecord(response, 'result') ??
+      getNestedRecord(response, 'payload') ??
+      response;
+
+    return {
+      category: getStringField(root, 'category') ?? category,
+      categoryLabel: getStringField(root, 'categoryLabel'),
+      generatedAt: getStringField(root, 'generatedAt'),
+      items: extractWrappedItems(
+        getNestedRecord(root, 'items') ?? (isUnknownRecord(root) ? root.items : undefined),
+      ).map((item, index) => ({
+        id: getStringField(item, 'id') ?? `world-cup-item-${index + 1}`,
+        imageUrl: getStringField(item, 'imageUrl'),
+        kind: getStringField(item, 'kind'),
+        name:
+          getStringField(item, 'name') ??
+          getStringField(item, 'title') ??
+          `후보 ${index + 1}`,
+      })),
+      roundSize: getNumberField(root, 'roundSize') ?? query.roundSize,
+    } satisfies ApiWorldCupCandidatesResponse;
+  };
+
+  try {
+    return await request(query.category);
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      error.status === 400 &&
+      query.category === query.category.toLowerCase()
+    ) {
+      return request(query.category.toUpperCase());
+    }
+
+    throw error;
+  }
 }
 
 export async function createAiCallReservation(

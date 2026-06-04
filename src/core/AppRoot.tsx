@@ -4179,6 +4179,7 @@ export function AppRoot() {
         />
       ) : screen === 'worldcup-battle' ? (
         <WorldCupBattleScreen
+          accessToken={session?.accessToken}
           category={worldCupCategory}
           onBack={() => setScreen('worldcup-start')}
           onComplete={(winner) => {

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
+import { getWorldCupCandidates } from '../api/wagu';
 import { WorldCupChoiceCard } from '../components/worldcup/WorldCupChoiceCard';
 import { WorldCupSelectionEffect } from '../components/worldcup/WorldCupSelectionEffect';
 import { worldCupMenus } from '../data/worldCupMenus';
@@ -13,16 +14,19 @@ type MatchPhase = 'enter' | 'idle' | 'selected' | 'exit';
 type SelectedSide = 'left' | 'right' | null;
 
 type WorldCupBattleScreenProps = {
+  accessToken?: string;
   category: WorldCupCategory;
   onBack: () => void;
   onComplete: (winner: WorldCupEntry) => void;
 };
 
 export function WorldCupBattleScreen({
+  accessToken,
   category,
   onBack,
   onComplete,
 }: WorldCupBattleScreenProps) {
+  const [isLoading, setIsLoading] = useState(true);
   const [bracketState, setBracketState] = useState<WorldCupBracketState>(() =>
     createInitialWorldCupState(worldCupMenus, category, 8),
   );
@@ -41,6 +45,8 @@ export function WorldCupBattleScreen({
   const rightTranslateX = useRef(new Animated.Value(24)).current;
   const rightTranslateY = useRef(new Animated.Value(12)).current;
   const rightRotate = useRef(new Animated.Value(0)).current;
+
+  const buildFallbackState = () => createInitialWorldCupState(worldCupMenus, category, 8);
 
   const currentMatch = useMemo(() => getCurrentWorldCupMatch(bracketState), [bracketState]);
   const progressRatio =
@@ -128,6 +134,70 @@ export function WorldCupBattleScreen({
     resetAnimatedValues();
     runEnterAnimation();
   }, [bracketState.currentMatchIndex, bracketState.roundLabel]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const normalizeCategory = (value: string | undefined): Exclude<WorldCupCategory, 'all'> => {
+      const normalized = value?.trim().toLowerCase();
+
+      if (normalized === 'dessert' || normalized === 'korean' || normalized === 'night') {
+        return normalized;
+      }
+
+      return category === 'all' ? 'korean' : category;
+    };
+
+    const hydrateCandidates = async () => {
+      if (!accessToken || category === 'all') {
+        setBracketState(buildFallbackState());
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+
+      try {
+        const response = await getWorldCupCandidates(accessToken, {
+          category,
+          roundSize: 8,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        const mappedEntries: WorldCupEntry[] = response.items.map((item) => ({
+          category: normalizeCategory(response.category),
+          id: item.id,
+          imageUri: item.imageUrl,
+          kind: 'menu',
+          title: item.name,
+        }));
+
+        const nextState =
+          mappedEntries.length >= 2
+            ? createInitialWorldCupState(mappedEntries, normalizeCategory(response.category), 8)
+            : buildFallbackState();
+
+        setBracketState(nextState);
+      } catch {
+        if (!cancelled) {
+          setBracketState(buildFallbackState());
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void hydrateCandidates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, category]);
 
   const handleSelectionFinish = (winner: WorldCupEntry) => {
     const { champion, nextState } = advanceWorldCup(bracketState, winner);
@@ -244,6 +314,17 @@ export function WorldCupBattleScreen({
     }, 220);
   };
 
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingScreen}>
+          <ActivityIndicator size="small" color="#FF3B30" />
+          <Text style={styles.loadingLabel}>월드컵 후보를 불러오는 중이에요.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!currentMatch) {
     return null;
   }
@@ -341,6 +422,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFF9F5',
     paddingTop: 12,
+  },
+  loadingScreen: {
+    flex: 1,
+    backgroundColor: '#FFF9F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingLabel: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '600',
+    color: '#5C5C5C',
   },
   header: {
     flexDirection: 'row',
