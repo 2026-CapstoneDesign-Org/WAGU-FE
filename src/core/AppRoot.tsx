@@ -1815,7 +1815,7 @@ export function AppRoot() {
       const recommendedProfiles = await Promise.all(
         uniqueRecommendations.map(async (item, index) => {
           const [detailResult, followCountForOwnerResult, reliabilityResult] = await Promise.allSettled([
-            getListDetail(token, item.listId),
+            getUserRepresentativeList(token, item.owner.ownerId),
             getFollowCount(token, item.owner.ownerId),
             getReliabilityScore(token, item.owner.ownerId),
           ]);

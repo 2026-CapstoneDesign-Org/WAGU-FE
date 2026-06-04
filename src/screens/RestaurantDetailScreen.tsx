@@ -2616,7 +2616,9 @@ export function RestaurantDetailScreen({
             style={styles.aiReservationFloatingButton}
             onPress={handlePressAiReservation}
           >
-            <Text style={styles.aiReservationFloatingButtonLabel}>AI 예약</Text>
+            <Text numberOfLines={1} style={styles.aiReservationFloatingButtonLabel}>
+              AI 예약
+            </Text>
           </Pressable>
         ) : null}
 
@@ -3143,9 +3145,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 20,
     bottom: 24,
-    minWidth: 98,
+    minWidth: 124,
     height: 44,
-    paddingHorizontal: 18,
+    paddingHorizontal: 24,
     borderRadius: 22,
     backgroundColor: '#FF0000',
     alignItems: 'center',
@@ -3161,6 +3163,8 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: '700',
     color: '#FFFFFF',
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   reviewCard: {
     gap: 12,

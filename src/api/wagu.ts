@@ -630,15 +630,20 @@ function normalizeRestaurantForListItem(source: unknown, index: number): ApiRest
 }
 
 function normalizeUserListDetail(source: unknown): ApiUserListDetail {
-  const summary = normalizeUserListSummaryItem(source, 0);
+  const root =
+    getNestedRecord(source, 'data') ??
+    getNestedRecord(source, 'result') ??
+    getNestedRecord(source, 'payload') ??
+    source;
+  const summary = normalizeUserListSummaryItem(root, 0);
   const rawRestaurants = extractWrappedItems(
-    getNestedRecord(source, 'restaurants') ??
-      getNestedRecord(source, 'listRestaurants') ??
-      getNestedRecord(source, 'items') ??
-      (isUnknownRecord(source)
-        ? (source.restaurants ??
-            source.listRestaurants ??
-            source.items)
+    getNestedRecord(root, 'restaurants') ??
+      getNestedRecord(root, 'listRestaurants') ??
+      getNestedRecord(root, 'items') ??
+      (isUnknownRecord(root)
+        ? (root.restaurants ??
+            root.listRestaurants ??
+            root.items)
         : undefined),
   );
 
@@ -1098,7 +1103,19 @@ export async function getUserRepresentativeList(token: string, userId: number) {
     token,
   });
 
-  return normalizeUserListDetail(response);
+  const normalized = normalizeUserListDetail(response);
+
+  if (normalized.restaurants.length === 0 && isUnknownRecord(response)) {
+    console.log('[getUserRepresentativeList] empty restaurants after normalize', {
+      keys: Object.keys(response),
+      nestedDataKeys: getNestedRecord(response, 'data')
+        ? Object.keys(getNestedRecord(response, 'data')!)
+        : undefined,
+      userId,
+    });
+  }
+
+  return normalized;
 }
 
 export async function updateList(

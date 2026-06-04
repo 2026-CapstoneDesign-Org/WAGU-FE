@@ -21,7 +21,7 @@ const TRACK_WORLD_WIDTH_FACTOR_50M = 3.2;
 const TRACK_WORLD_WIDTH_FACTOR_100M = 6.4;
 const MIN_WORLD_TRACK_WIDTH_50M = 1200;
 const MIN_WORLD_TRACK_WIDTH_100M = 2400;
-const CAMERA_FOLLOW_RATIO = 0.42;
+const CAMERA_FOLLOW_RATIO = 0.28;
 
 type RaceDistance = 50 | 100;
 
@@ -198,6 +198,9 @@ export function SnailRacePlayScreen({
                   <View key={racer.id} style={styles.trackRow}>
                     <Text style={styles.trackLabel}>{racer.label}</Text>
                     <View style={styles.trackLane} onLayout={handleTrackLayout}>
+                      <View style={styles.trackLaneBed} />
+                      <View style={styles.trackLaneRailTop} />
+                      <View style={styles.trackLaneRailBottom} />
                       <View
                         style={[
                           styles.trackWorld,
@@ -207,6 +210,9 @@ export function SnailRacePlayScreen({
                           },
                         ]}
                       >
+                        <View style={styles.startLine} />
+                        <View style={styles.trackGrooveTop} />
+                        <View style={styles.trackGrooveBottom} />
                         <View style={styles.trackLine} />
                         <View style={styles.trackDashWrap}>
                           {Array.from(
@@ -383,12 +389,66 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#EBC8B8',
+    borderWidth: 1,
+    borderColor: '#D9AE99',
+  },
+  trackLaneBed: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#EBC8B8',
+  },
+  trackLaneRailTop: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    top: 7,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: '#F7E2D7',
+    opacity: 0.9,
+  },
+  trackLaneRailBottom: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    bottom: 7,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: '#C58F79',
+    opacity: 0.75,
   },
   trackWorld: {
     position: 'absolute',
     top: 0,
     bottom: 0,
+  },
+  startLine: {
+    position: 'absolute',
+    top: 6,
+    bottom: 6,
+    left: TRACK_LEFT_PADDING + 10,
+    width: 6,
+    borderRadius: 999,
+    backgroundColor: '#FFF7F2',
+    opacity: 0.95,
+  },
+  trackGrooveTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 15,
+    height: 1,
+    backgroundColor: '#D6A792',
+    opacity: 0.7,
+  },
+  trackGrooveBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 15,
+    height: 1,
+    backgroundColor: '#D6A792',
+    opacity: 0.7,
   },
   trackLine: {
     position: 'absolute',
@@ -396,7 +456,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 25,
     height: 4,
-    backgroundColor: '#E6DDD8',
+    backgroundColor: '#F7EDE7',
   },
   trackDashWrap: {
     position: 'absolute',
@@ -412,8 +472,8 @@ const styles = StyleSheet.create({
     width: 20,
     height: 2,
     borderRadius: 999,
-    backgroundColor: '#D8CDC7',
-    opacity: 0.85,
+    backgroundColor: '#C68F78',
+    opacity: 0.9,
   },
   finishLine: {
     position: 'absolute',
@@ -422,7 +482,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: FINISH_LINE_WIDTH,
     borderRadius: 4,
-    backgroundColor: '#111111',
+    backgroundColor: '#1A1A1A',
   },
   racerWrap: {
     position: 'absolute',
