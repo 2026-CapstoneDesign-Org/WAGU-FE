@@ -1,4 +1,4 @@
-import type { ReviewMediaItem } from '../types/reviews';
+import type { ReviewMediaItem } from './reviews';
 
 export type RestaurantReview = {
   id: string;

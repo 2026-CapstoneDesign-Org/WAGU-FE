@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
 import { RatingStars } from '../../components/RatingStars';
-import type { Restaurant } from '../../data/restaurants';
+import type { Restaurant } from '../../types/restaurants';
 
 const ratingLabels = ['맛', '서비스', '가성비'] as const;
 type RatingLabel = (typeof ratingLabels)[number];

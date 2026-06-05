@@ -6,7 +6,7 @@ import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
 import HeartIcon from '../../../assets/icons/heart.svg';
 import { RatingStars } from '../../components/RatingStars';
 import { restaurants as allRestaurants } from '../../fixtures/restaurants';
-import type { MyList, MyListRestaurant } from '../../data/myLists';
+import type { MyList, MyListRestaurant } from '../../types/myLists';
 
 type MyListDetailScreenProps = {
   list: MyList;

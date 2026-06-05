@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
 import { restaurants as allRestaurants } from '../../fixtures/restaurants';
-import type { MyList, MyListRestaurant } from '../../data/myLists';
+import type { MyList, MyListRestaurant } from '../../types/myLists';
 
 type MyListPlaceEditScreenProps = {
   list: MyList;

@@ -18,7 +18,7 @@ import SearchIcon from '../../../assets/icons/search.svg';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../../components/BottomTabBar';
 import { ReliabilityBadge } from '../../components/ReliabilityBadge';
 import { localRankingEntries, nationalRankingEntries } from '../../fixtures/rankings';
-import type { RankingEntry } from '../../data/rankings';
+import type { RankingEntry } from '../../types/rankings';
 
 const { width: screenWidth } = Dimensions.get('window');
 const bannerWidth = screenWidth - 32;

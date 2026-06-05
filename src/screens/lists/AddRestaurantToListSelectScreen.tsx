@@ -3,8 +3,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
-import type { MyList } from '../../data/myLists';
-import type { Restaurant } from '../../data/restaurants';
+import type { MyList } from '../../types/myLists';
+import type { Restaurant } from '../../types/restaurants';
 
 type AddRestaurantToListSelectScreenProps = {
   restaurant: Restaurant;

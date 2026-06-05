@@ -12,7 +12,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
-import { MyList } from '../../data/myLists';
+import type { MyList } from '../../types/myLists';
 
 type MyListsScreenProps = {
   lists: MyList[];

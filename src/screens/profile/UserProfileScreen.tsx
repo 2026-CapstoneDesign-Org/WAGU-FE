@@ -6,7 +6,7 @@ import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
 import HeartIcon from '../../../assets/icons/heart.svg';
 import { ReliabilityBadge } from '../../components/ReliabilityBadge';
 import { restaurants as allRestaurants } from '../../fixtures/restaurants';
-import type { UserProfile } from '../../data/userProfiles';
+import type { UserProfile } from '../../types/userProfiles';
 
 const { width: screenWidth } = Dimensions.get('window');
 const HORIZONTAL_PADDING = 16;

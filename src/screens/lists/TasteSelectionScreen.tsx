@@ -24,7 +24,7 @@ import {
 } from '../../api/wagu';
 import SearchIcon from '../../../assets/icons/search.svg';
 import { restaurants } from '../../fixtures/restaurants';
-import type { Restaurant } from '../../data/restaurants';
+import type { Restaurant } from '../../types/restaurants';
 
 const { width: screenWidth } = Dimensions.get('window');
 const CARD_GAP = 6;

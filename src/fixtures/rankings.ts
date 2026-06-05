@@ -1,4 +1,4 @@
-import type { RankingEntry } from '../data/rankings';
+import type { RankingEntry } from '../types/rankings';
 
 const LOCAL_IMAGE_1 = 'https://www.figma.com/api/mcp/asset/efda1f95-4806-4032-946a-9080ab061060';
 const LOCAL_IMAGE_2 = 'https://www.figma.com/api/mcp/asset/6d910bfb-8291-4881-b2ca-e41e968f4078';

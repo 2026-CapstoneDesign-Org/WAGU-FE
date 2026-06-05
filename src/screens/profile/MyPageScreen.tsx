@@ -10,7 +10,7 @@ import SettingIcon from '../../../assets/icons/setting.svg';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../../components/BottomTabBar';
 import { ReliabilityBadge } from '../../components/ReliabilityBadge';
 import { restaurants as allRestaurants } from '../../fixtures/restaurants';
-import type { MyList } from '../../data/myLists';
+import type { MyList } from '../../types/myLists';
 
 const { width: screenWidth } = Dimensions.get('window');
 const HORIZONTAL_PADDING = 16;

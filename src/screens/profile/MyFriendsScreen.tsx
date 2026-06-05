@@ -18,7 +18,7 @@ import type {
   FollowTogglePayload,
   FriendTabKey,
   FriendUser,
-} from '../../data/myFriends';
+} from '../../types/myFriends';
 
 type MyFriendsScreenProps = {
   currentUserId?: string | null;

@@ -1,4 +1,4 @@
-import type { Restaurant, RestaurantMenuItem } from '../data/restaurants';
+import type { Restaurant, RestaurantMenuItem } from '../types/restaurants';
 
 const chineseMenuItems: RestaurantMenuItem[] = [
   {

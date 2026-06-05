@@ -47,8 +47,8 @@ import PhoneIcon from '../../../assets/icons/phone.svg';
 import ShopIcon from '../../../assets/icons/shop.svg';
 import StarIcon from '../../../assets/icons/star.svg';
 import TrashIcon from '../../../assets/icons/trash.svg';
-import type { Restaurant, RestaurantMenuItem } from '../../data/restaurants';
-import type { RestaurantReview } from '../../data/restaurantReviews';
+import type { Restaurant, RestaurantMenuItem } from '../../types/restaurants';
+import type { RestaurantReview } from '../../types/restaurantReviews';
 import { ReviewMediaItem } from '../../types/reviews';
 
 type RestaurantDetailTab = 'home' | 'menu' | 'review' | 'photo';

@@ -3,7 +3,7 @@ import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../../components/BottomTabBar';
-import type { RankingEntry } from '../../data/rankings';
+import type { RankingEntry } from '../../types/rankings';
 
 const { width: screenWidth } = Dimensions.get('window');
 const rankingPageWidth = screenWidth - 32;
