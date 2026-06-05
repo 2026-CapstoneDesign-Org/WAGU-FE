@@ -13,7 +13,7 @@ import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
-import { MyReview } from '../../data/myReviews';
+import type { MyReview } from '../../data/myReviews';
 
 const { width: windowWidth, height: windowHeight } = Dimensions.get('window');
 const REVIEW_IMAGE_SIZE = 172;

@@ -17,7 +17,8 @@ import HeartIcon from '../../../assets/icons/heart.svg';
 import SearchIcon from '../../../assets/icons/search.svg';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../../components/BottomTabBar';
 import { ReliabilityBadge } from '../../components/ReliabilityBadge';
-import { localRankingEntries, nationalRankingEntries, RankingEntry } from '../../data/rankings';
+import { localRankingEntries, nationalRankingEntries } from '../../fixtures/rankings';
+import type { RankingEntry } from '../../data/rankings';
 
 const { width: screenWidth } = Dimensions.get('window');
 const bannerWidth = screenWidth - 32;

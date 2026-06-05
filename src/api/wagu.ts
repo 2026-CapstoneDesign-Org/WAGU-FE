@@ -1,5 +1,5 @@
-import { RankingEntry } from '../data/rankings';
-import { MyList } from '../data/myLists';
+import type { RankingEntry } from '../data/rankings';
+import type { MyList } from '../data/myLists';
 
 import { ApiError, apiRequest, getApiBaseUrl } from './client';
 

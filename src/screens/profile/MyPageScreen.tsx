@@ -9,8 +9,8 @@ import ReviewIcon from '../../../assets/icons/review.svg';
 import SettingIcon from '../../../assets/icons/setting.svg';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../../components/BottomTabBar';
 import { ReliabilityBadge } from '../../components/ReliabilityBadge';
-import { MyList } from '../../data/myLists';
-import { restaurants as allRestaurants } from '../../data/restaurants';
+import { restaurants as allRestaurants } from '../../fixtures/restaurants';
+import type { MyList } from '../../data/myLists';
 
 const { width: screenWidth } = Dimensions.get('window');
 const HORIZONTAL_PADDING = 16;
@@ -526,4 +526,3 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
 });
-

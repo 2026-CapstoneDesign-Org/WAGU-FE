@@ -3,8 +3,8 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useMemo, useState } from 'react';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
-import { MyList, MyListRestaurant } from '../../data/myLists';
-import { restaurants as allRestaurants } from '../../data/restaurants';
+import { restaurants as allRestaurants } from '../../fixtures/restaurants';
+import type { MyList, MyListRestaurant } from '../../data/myLists';
 
 type MyListPlaceEditScreenProps = {
   list: MyList;

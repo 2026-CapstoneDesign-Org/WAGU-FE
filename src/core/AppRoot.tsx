@@ -56,11 +56,12 @@ import {
 import { ApiError, isAuthError, setAuthRefreshHandler } from '../api/client';
 import { uploadImageWithPresignedUrl } from '../api/upload';
 import { AppTab } from '../components/BottomTabBar';
-import { FriendTabKey, FriendUser, FollowTogglePayload } from '../data/myFriends';
-import { MyList } from '../data/myLists';
-import { MyReview } from '../data/myReviews';
-import { RankingEntry } from '../data/rankings';
-import { Restaurant, restaurants as initialRestaurantPool } from '../data/restaurants';
+import type { FriendTabKey, FriendUser, FollowTogglePayload } from '../data/myFriends';
+import type { MyList } from '../data/myLists';
+import type { MyReview } from '../data/myReviews';
+import type { RankingEntry } from '../data/rankings';
+import { restaurants as initialRestaurantPool } from '../fixtures/restaurants';
+import type { Restaurant } from '../data/restaurants';
 import { AddRestaurantToListRatingScreen } from '../screens/lists/AddRestaurantToListRatingScreen';
 import { AddRestaurantToListSelectScreen } from '../screens/lists/AddRestaurantToListSelectScreen';
 import { AiReservationFormScreen } from '../screens/ai/AiReservationFormScreen';
@@ -109,7 +110,7 @@ import { WorldCupBattleScreen } from '../screens/games/WorldCupBattleScreen';
 import { WorldCupResultScreen } from '../screens/games/WorldCupResultScreen';
 import { WorldCupStartScreen } from '../screens/games/WorldCupStartScreen';
 import { WriteReviewDraft, WriteReviewScreen } from '../screens/reviews/WriteReviewScreen';
-import { UserProfile } from '../data/userProfiles';
+import type { UserProfile } from '../data/userProfiles';
 import {
   AiReservationDraft,
   AiReservationResult,

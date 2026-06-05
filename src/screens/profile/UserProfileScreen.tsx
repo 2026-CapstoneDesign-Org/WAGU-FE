@@ -5,8 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
 import HeartIcon from '../../../assets/icons/heart.svg';
 import { ReliabilityBadge } from '../../components/ReliabilityBadge';
-import { restaurants as allRestaurants } from '../../data/restaurants';
-import { UserProfile } from '../../data/userProfiles';
+import { restaurants as allRestaurants } from '../../fixtures/restaurants';
+import type { UserProfile } from '../../data/userProfiles';
 
 const { width: screenWidth } = Dimensions.get('window');
 const HORIZONTAL_PADDING = 16;
@@ -562,4 +562,3 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.92)',
   },
 });
-

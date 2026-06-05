@@ -34,7 +34,7 @@ import {
   searchRestaurants,
 } from '../../api/wagu';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../../components/BottomTabBar';
-import { Restaurant } from '../../data/restaurants';
+import type { Restaurant } from '../../data/restaurants';
 
 const { height: screenHeight } = Dimensions.get('window');
 

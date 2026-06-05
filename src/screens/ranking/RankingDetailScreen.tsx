@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
 import SearchIcon from '../../../assets/icons/search.svg';
-import { RankingEntry } from '../../data/rankings';
+import type { RankingEntry } from '../../data/rankings';
 
 type RankingDetailVariant = 'local' | 'national' | 'region';
 

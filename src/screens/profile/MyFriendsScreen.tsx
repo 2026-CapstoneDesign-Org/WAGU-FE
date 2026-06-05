@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
 import { ReliabilityBadge } from '../../components/ReliabilityBadge';
-import {
+import type {
   FollowTogglePayload,
   FriendTabKey,
   FriendUser,

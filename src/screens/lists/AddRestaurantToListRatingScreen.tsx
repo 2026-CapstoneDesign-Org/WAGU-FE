@@ -4,8 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
 import { RatingStars } from '../../components/RatingStars';
-import { MyList } from '../../data/myLists';
-import { Restaurant } from '../../data/restaurants';
+import type { MyList } from '../../data/myLists';
+import type { Restaurant } from '../../data/restaurants';
 
 type RatingCategory = 'taste' | 'service' | 'value';
 
