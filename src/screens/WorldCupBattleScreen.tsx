@@ -6,7 +6,6 @@ import ArrowLeftIcon from '../../assets/icons/arrow-left.svg';
 import { getWorldCupCandidates } from '../api/wagu';
 import { WorldCupChoiceCard } from '../components/worldcup/WorldCupChoiceCard';
 import { WorldCupSelectionEffect } from '../components/worldcup/WorldCupSelectionEffect';
-import { worldCupMenus } from '../data/worldCupMenus';
 import { WorldCupBracketState, WorldCupCategory, WorldCupEntry } from '../types/worldCup';
 import { advanceWorldCup, createInitialWorldCupState, getCurrentWorldCupMatch } from '../utils/worldCup';
 
@@ -27,9 +26,9 @@ export function WorldCupBattleScreen({
   onComplete,
 }: WorldCupBattleScreenProps) {
   const [isLoading, setIsLoading] = useState(true);
-  const [bracketState, setBracketState] = useState<WorldCupBracketState>(() =>
-    createInitialWorldCupState(worldCupMenus, category, 8),
-  );
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [bracketState, setBracketState] = useState<WorldCupBracketState | null>(null);
+  const [categoryLabel, setCategoryLabel] = useState<string | null>(null);
   const [phase, setPhase] = useState<MatchPhase>('enter');
   const [selectedSide, setSelectedSide] = useState<SelectedSide>(null);
   const [effectKey, setEffectKey] = useState(0);
@@ -45,12 +44,12 @@ export function WorldCupBattleScreen({
   const rightTranslateX = useRef(new Animated.Value(24)).current;
   const rightTranslateY = useRef(new Animated.Value(12)).current;
   const rightRotate = useRef(new Animated.Value(0)).current;
-
-  const buildFallbackState = () => createInitialWorldCupState(worldCupMenus, category, 8);
-
-  const currentMatch = useMemo(() => getCurrentWorldCupMatch(bracketState), [bracketState]);
+  const currentMatch = useMemo(
+    () => (bracketState ? getCurrentWorldCupMatch(bracketState) : null),
+    [bracketState],
+  );
   const progressRatio =
-    bracketState.matches.length > 0
+    bracketState && bracketState.matches.length > 0
       ? (bracketState.currentMatchIndex + 1) / bracketState.matches.length
       : 0;
 
@@ -131,9 +130,13 @@ export function WorldCupBattleScreen({
   };
 
   useEffect(() => {
+    if (!bracketState) {
+      return;
+    }
+
     resetAnimatedValues();
     runEnterAnimation();
-  }, [bracketState.currentMatchIndex, bracketState.roundLabel]);
+  }, [bracketState?.currentMatchIndex, bracketState?.roundLabel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,12 +153,14 @@ export function WorldCupBattleScreen({
 
     const hydrateCandidates = async () => {
       if (!accessToken || category === 'all') {
-        setBracketState(buildFallbackState());
+        setBracketState(null);
+        setErrorMessage('월드컵 후보를 불러올 수 없어요.');
         setIsLoading(false);
         return;
       }
 
       setIsLoading(true);
+      setErrorMessage(null);
 
       try {
         const response = await getWorldCupCandidates(accessToken, {
@@ -171,19 +176,35 @@ export function WorldCupBattleScreen({
           category: normalizeCategory(response.category),
           id: item.id,
           imageUri: item.imageUrl,
-          kind: 'menu',
+          kind:
+            item.kind === 'CHICKEN_BRAND'
+              ? 'chicken-brand'
+              : item.kind === 'DESSERT_MENU'
+                ? 'dessert-menu'
+                : 'menu',
           title: item.name,
         }));
 
-        const nextState =
-          mappedEntries.length >= 2
-            ? createInitialWorldCupState(mappedEntries, normalizeCategory(response.category), 8)
-            : buildFallbackState();
+        if (mappedEntries.length < 2) {
+          setBracketState(null);
+          setCategoryLabel(response.categoryLabel ?? null);
+          setErrorMessage('월드컵 후보가 아직 충분하지 않아요.');
+          return;
+        }
 
-        setBracketState(nextState);
+        setCategoryLabel(response.categoryLabel ?? null);
+        setBracketState(
+          createInitialWorldCupState(
+            mappedEntries,
+            normalizeCategory(response.category),
+            response.roundSize,
+          ),
+        );
       } catch {
         if (!cancelled) {
-          setBracketState(buildFallbackState());
+          setBracketState(null);
+          setCategoryLabel(null);
+          setErrorMessage('월드컵 후보를 불러오지 못했어요.');
         }
       } finally {
         if (!cancelled) {
@@ -200,6 +221,10 @@ export function WorldCupBattleScreen({
   }, [accessToken, category]);
 
   const handleSelectionFinish = (winner: WorldCupEntry) => {
+    if (!bracketState) {
+      return;
+    }
+
     const { champion, nextState } = advanceWorldCup(bracketState, winner);
 
     if (champion) {
@@ -325,10 +350,24 @@ export function WorldCupBattleScreen({
     );
   }
 
+  if (errorMessage) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingScreen}>
+          <Text style={styles.errorLabel}>{errorMessage}</Text>
+          <Pressable onPress={onBack} style={styles.retryButton}>
+            <Text style={styles.retryButtonLabel}>돌아가기</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!currentMatch) {
     return null;
   }
 
+  const activeBracketState = bracketState!;
   const canInteract = phase === 'idle';
 
   return (
@@ -344,11 +383,12 @@ export function WorldCupBattleScreen({
 
         <View style={styles.metaWrap}>
           <View style={styles.metaCopy}>
-            <Text style={styles.roundLabel}>{bracketState.roundLabel}</Text>
+            <Text style={styles.roundLabel}>{activeBracketState.roundLabel}</Text>
             <Text style={styles.matchLabel}>
-              {Math.min(bracketState.currentMatchIndex + 1, bracketState.matches.length)} / {bracketState.matches.length}
+              {Math.min(activeBracketState.currentMatchIndex + 1, activeBracketState.matches.length)} / {activeBracketState.matches.length}
             </Text>
           </View>
+          {categoryLabel ? <Text style={styles.categoryLabel}>{categoryLabel}</Text> : null}
 
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
@@ -436,6 +476,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#5C5C5C',
   },
+  errorLabel: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '600',
+    color: '#4F4F4F',
+    textAlign: 'center',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -468,6 +515,12 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     justifyContent: 'space-between',
   },
+  categoryLabel: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+    color: '#7A6E67',
+  },
   roundLabel: {
     fontSize: 32,
     lineHeight: 38,
@@ -490,6 +543,21 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 999,
     backgroundColor: '#FF3B30',
+  },
+  retryButton: {
+    minWidth: 120,
+    minHeight: 46,
+    borderRadius: 16,
+    backgroundColor: '#111111',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  retryButtonLabel: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   battleWrap: {
     flex: 1,

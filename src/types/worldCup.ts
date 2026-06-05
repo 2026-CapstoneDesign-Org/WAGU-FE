@@ -1,12 +1,14 @@
 export type WorldCupCategory = 'all' | 'dessert' | 'korean' | 'night';
 
-export type WorldCupRoundSize = 8;
+export type WorldCupRoundSize = number;
+
+export type WorldCupEntryKind = 'chicken-brand' | 'dessert-menu' | 'menu';
 
 export type WorldCupEntry = {
   category: Exclude<WorldCupCategory, 'all'>;
   id: string;
   imageUri?: string;
-  kind: 'menu';
+  kind: WorldCupEntryKind;
   subtitle?: string;
   title: string;
 };
