@@ -20,27 +20,21 @@ import {
   getUnreadNotificationCount,
   getListDetail,
   getListLikeCount,
-  getListRecommendations,
   getUserRepresentativeList,
   getMyInfo,
   getMyLists,
   getReliabilityScore,
-  getRestaurantRecommendations,
   getRestaurantRankings,
   getUserInfo,
   getUserReviews,
   mapListDetailToMyList,
   mapListSummaryToMyList,
   mapRankingItems,
-  removeRestaurantFromList,
   searchRestaurants,
   setRepresentativeList,
   toggleListVisibility,
-  likeList,
   refreshAuthToken,
-  unlikeList,
   updateReview,
-  updateRestaurantInList,
   updateList,
   updateMyUser,
 } from '../api/wagu';
@@ -52,12 +46,18 @@ import { AppRootExperienceScreens } from './appRoot/screenRenderers/AppRootExper
 import { AppRootAccountScreens } from './appRoot/screenRenderers/AppRootAccountScreens';
 import { AppRootFlowScreens } from './appRoot/screenRenderers/AppRootFlowScreens';
 import { createAuthFlowHandlers } from './appRoot/handlers/createAuthFlowHandlers';
+import { createAddToListHandlers } from './appRoot/handlers/createAddToListHandlers';
 import { createFollowHandlers } from './appRoot/handlers/createFollowHandlers';
+import { createHomeRecommendationHandlers } from './appRoot/handlers/createHomeRecommendationHandlers';
 import { createMyFriendFollowHandlers } from './appRoot/handlers/createMyFriendFollowHandlers';
+import { createNavigationHandlers } from './appRoot/handlers/createNavigationHandlers';
+import { createMyListLikeHandlers } from './appRoot/handlers/createMyListLikeHandlers';
 import { createSessionHandlers } from './appRoot/handlers/createSessionHandlers';
 import { createMyListHandlers } from './appRoot/handlers/createMyListHandlers';
+import { createMyListRestaurantHandlers } from './appRoot/handlers/createMyListRestaurantHandlers';
 import { createReportHandlers } from './appRoot/handlers/createReportHandlers';
 import { createReviewHandlers } from './appRoot/handlers/createReviewHandlers';
+import { createTasteListHandler } from './appRoot/handlers/createTasteListHandler';
 import {
   HOME_PROFILE_ACCENT_COLORS,
   buildAiReservationResult,
@@ -71,6 +71,13 @@ import {
   retryAsync,
   sortFollowersForInitialView,
 } from './appRoot/utils/helpers';
+import {
+  delay,
+  getReadableApiErrorMessage,
+  isUserNotFoundApiError,
+  waitForServerUserReady,
+} from './appRoot/utils/serverSync';
+import { convertFiveStarToTenPoint } from './appRoot/utils/ratings';
 import type {
   AuthSession,
   FlowScreen,
@@ -1166,189 +1173,13 @@ export function AppRoot() {
     sortFollowersForInitialView,
   });
 
-  const hydrateHomeRecommendations = async (
-    token: string,
-    options?: {
-      cancelled?: () => boolean;
-      retryOnEmpty?: boolean;
-    },
-  ) => {
-    const applyRecommendations = async () => {
-      const [restaurantRecommendationsResult, recommendationsResult] =
-        await Promise.allSettled([
-          getRestaurantRecommendations(token),
-          getListRecommendations(token),
-        ]);
-
-      if (hasRejectedAuthError([restaurantRecommendationsResult, recommendationsResult])) {
-        const authError =
-          restaurantRecommendationsResult.status === 'rejected'
-            ? restaurantRecommendationsResult.reason
-            : recommendationsResult.status === 'rejected'
-              ? recommendationsResult.reason
-              : new Error('Authentication required.');
-
-        throw authError;
-      }
-
-      if (restaurantRecommendationsResult.status === 'fulfilled') {
-        console.log('[home recommendations][restaurants] success', {
-          count: restaurantRecommendationsResult.value.items.length,
-          ids: restaurantRecommendationsResult.value.items.map((item) => item.restaurantId),
-        });
-      } else {
-        console.log(
-          '[home recommendations][restaurants] failed',
-          restaurantRecommendationsResult.reason,
-        );
-      }
-
-      if (recommendationsResult.status === 'fulfilled') {
-        console.log('[home recommendations][lists] success', {
-          count: recommendationsResult.value.items.length,
-          listIds: recommendationsResult.value.items.map((item) => item.listId),
-          ownerIds: recommendationsResult.value.items.map((item) => item.owner.ownerId),
-        });
-      } else {
-        console.log('[home recommendations][lists] failed', recommendationsResult.reason);
-      }
-
-      return { recommendationsResult, restaurantRecommendationsResult };
-    };
-
-    let { restaurantRecommendationsResult, recommendationsResult } = await applyRecommendations();
-
-    if (
-      options?.retryOnEmpty &&
-      restaurantRecommendationsResult.status === 'fulfilled' &&
-      recommendationsResult.status === 'fulfilled' &&
-      restaurantRecommendationsResult.value.items.length === 0 &&
-      recommendationsResult.value.items.length === 0
-    ) {
-      await new Promise((resolve) => setTimeout(resolve, 600));
-
-      if (options.cancelled?.()) {
-        return;
-      }
-
-      ({ restaurantRecommendationsResult, recommendationsResult } = await applyRecommendations());
-    }
-
-    if (options?.cancelled?.()) {
-      return;
-    }
-
-    if (restaurantRecommendationsResult.status === 'fulfilled') {
-      setRecommendedRestaurantItems(
-        restaurantRecommendationsResult.value.items.map((item) => ({
-          id: `recommended-restaurant-${item.restaurantId}`,
-          imageUri: item.imageUrl,
-          name: item.restaurantName,
-          restaurantId: item.restaurantId,
-          restaurantName: item.restaurantName,
-        })),
-      );
-    } else {
-      setRecommendedRestaurantItems([]);
-    }
-
-    if (recommendationsResult.status === 'fulfilled') {
-      const uniqueRecommendations = recommendationsResult.value.items.reduce<
-        typeof recommendationsResult.value.items
-      >((accumulator, item) => {
-        if (accumulator.some((currentItem) => currentItem.owner.ownerId === item.owner.ownerId)) {
-          return accumulator;
-        }
-
-        accumulator.push(item);
-        return accumulator;
-      }, []);
-
-      const recommendedProfiles = await Promise.all(
-        uniqueRecommendations.map(async (item, index) => {
-          const [detailResult, followCountForOwnerResult, reliabilityResult] = await Promise.allSettled([
-            getUserRepresentativeList(token, item.owner.ownerId),
-            getFollowCount(token, item.owner.ownerId),
-            getReliabilityScore(token, item.owner.ownerId),
-          ]);
-
-          if (detailResult.status !== 'fulfilled') {
-            console.log('[home recommendations][lists] detail failed', {
-              listId: item.listId,
-              ownerId: item.owner.ownerId,
-              reason: detailResult.reason,
-            });
-          }
-
-          if (followCountForOwnerResult.status !== 'fulfilled') {
-            console.log('[home recommendations][lists] follow count failed', {
-              ownerId: item.owner.ownerId,
-              reason: followCountForOwnerResult.reason,
-            });
-          }
-
-          const representativeRestaurants =
-            detailResult.status === 'fulfilled'
-              ? detailResult.value.restaurants.slice(0, 5).map((restaurantItem) => ({
-                  address: restaurantItem.restaurant.address,
-                  id: String(restaurantItem.restaurant.id),
-                  imageUri: restaurantItem.restaurant.imageUrl,
-                  name: restaurantItem.restaurant.name,
-                }))
-              : [];
-
-          return {
-            card: {
-              id: String(item.owner.ownerId),
-              imageUri: item.owner.profileImageUrl,
-              name: item.owner.nickname,
-              reliabilityGrade:
-                reliabilityResult.status === 'fulfilled'
-                  ? normalizeReliabilityGrade(reliabilityResult.value.grade) ?? undefined
-                  : undefined,
-            },
-            profile: {
-              followerCount:
-                followCountForOwnerResult.status === 'fulfilled'
-                  ? String(followCountForOwnerResult.value.followerCount)
-                  : undefined,
-              id: String(item.owner.ownerId),
-              nickname: item.owner.nickname,
-              profileImageUrl: item.owner.profileImageUrl,
-              reliabilityGrade:
-                reliabilityResult.status === 'fulfilled'
-                  ? normalizeReliabilityGrade(reliabilityResult.value.grade) ?? undefined
-                  : undefined,
-              representativeAccentColor:
-                HOME_PROFILE_ACCENT_COLORS[index % HOME_PROFILE_ACCENT_COLORS.length],
-              representativeListIsLiked: item.isLiked ?? false,
-              representativeListId: String(item.listId),
-              representativeListTitle: item.title,
-              representativeRestaurants,
-            },
-          };
-        }),
-      );
-
-      if (options?.cancelled?.()) {
-        return;
-      }
-
-      const limitedRecommendedProfiles = recommendedProfiles.slice(0, 5);
-
-      console.log('[home recommendations][lists] hydrated', {
-        count: limitedRecommendedProfiles.length,
-        withRepresentativeRestaurants: recommendedProfiles.filter(
-          (item) => item.profile.representativeRestaurants.length > 0,
-        ).length,
-      });
-      setRecommendedMealFriendItems(limitedRecommendedProfiles.map((item) => item.card));
-      setRecommendedUserProfiles(limitedRecommendedProfiles.map((item) => item.profile));
-    } else {
-      setRecommendedMealFriendItems([]);
-      setRecommendedUserProfiles([]);
-    }
-  };
+  const { hydrateHomeRecommendations } = createHomeRecommendationHandlers({
+    hasRejectedAuthError,
+    homeProfileAccentColors: HOME_PROFILE_ACCENT_COLORS,
+    setRecommendedMealFriendItems,
+    setRecommendedRestaurantItems,
+    setRecommendedUserProfiles,
+  });
 
   const { handleDeleteMyReview, handleToggleUserReviewReaction, refreshMyReviews } =
     createReviewHandlers({
@@ -1607,24 +1438,83 @@ export function AppRoot() {
     };
   }, [session]);
 
-  const appendNewList = (title: string, selected: Restaurant[]) => {
-    const accentPalette = ['#F46A67', '#56CDB5', '#8361C8', '#F6B033', '#5D8DF4', '#E96DC0'];
-    const nextList: MyList = {
-      id: `my-list-${Date.now()}`,
-      title,
-      isRepresentative: false,
-      isPrivate: false,
-      restaurantCount: selected.length,
-      accentColor: accentPalette[myLists.length % accentPalette.length],
-      restaurants: selected.map((restaurant) => ({
-        id: restaurant.id,
-        name: restaurant.shortName || restaurant.name,
-        address: restaurant.address ?? '',
-      })),
-    };
-
-    setMyLists((current) => [...current, nextList]);
-  };
+  const {
+    appendNewList,
+    getAddToListRestaurant,
+    getFavoriteColor,
+    handleBackFromRankingDetail,
+    handleBackFromRestaurantDetail,
+    handleConfirmLadderCount,
+    handleConfirmSnailRaceCount,
+    handleStartWorldCup,
+    openAddRestaurantToListFlow,
+    openAiReservation,
+    openEditReview,
+    openLadderGame,
+    openNestedUserProfile,
+    openRankingDetail,
+    openRegionRankingDetail,
+    openReliabilityGuide,
+    openRestaurantDetail,
+    openSnailRace,
+    openUserProfileFromRestaurantDetail,
+    openWorldCup,
+    openWriteReview,
+  } = createNavigationHandlers({
+    activeTab,
+    addToListRestaurantId,
+    addToListRestaurantName,
+    addToListRestaurantSnapshot,
+    localRankingRegion,
+    myLists,
+    rankingDetail,
+    rankingEntries,
+    recommendedUserProfiles,
+    remoteUserProfiles,
+    restaurantDetailSource,
+    searchResultUserProfiles,
+    selectedUserProfileId,
+    sessionAccessToken: session?.accessToken,
+    userProfileSource,
+    visibleUserProfiles,
+    setActiveTab,
+    setAddToListRestaurantId,
+    setAddToListRestaurantName,
+    setAddToListRestaurantSnapshot,
+    setAddToListSource,
+    setAddToListTargetListIds,
+    setAiReservationDraft,
+    setAiReservationRestaurant,
+    setAiReservationResult,
+    setEditingReviewId,
+    setHomeRestoreAnimated,
+    setHomeRestoreKey,
+    setLadderPlayerCount,
+    setLadderSetup,
+    setMyPageRestoreAnimated,
+    setMyPageRestoreKey,
+    setRankingDetail,
+    setRankingRestoreAnimated,
+    setRankingRestoreKey,
+    setReliabilityGuideGrade,
+    setReliabilityGuideSource,
+    setRestaurantDetailInitialTab,
+    setRestaurantDetailSource,
+    setScreen,
+    setSelectedMyListId,
+    setSelectedRestaurantId,
+    setSelectedRestaurantName,
+    setSelectedUserProfileId,
+    setSnailRaceCount,
+    setUserProfileHistory,
+    setUserProfileSource,
+    setWorldCupCategory,
+    setWorldCupWinner,
+    setWriteReviewInitialContent,
+    setWriteReviewMode,
+    setWriteReviewRestaurantId,
+    setWriteReviewRestaurantName,
+  });
 
   const {
     handleDeleteMyList,
@@ -1636,6 +1526,37 @@ export function AppRoot() {
     session,
     setMyLists,
     setMyListLikeStateById,
+  });
+
+  const { handleRemoveRestaurantsFromMyList, handleUpdateRestaurantRatingsInMyList } =
+    createMyListRestaurantHandlers({
+      myLists,
+      session,
+      setMyLists,
+    });
+
+  const { handleToggleMyListLike } = createMyListLikeHandlers({
+    myListLikeStateById,
+    selectedUserProfileId,
+    selectedVisibleUserProfile,
+    session,
+    setMyListLikeCountById,
+    setMyListLikePendingIds,
+    setMyListLikeStateById,
+    setRecommendedUserProfiles,
+    setRemoteUserProfiles,
+    setSearchResultUserProfiles,
+  });
+
+  const { handleAddRestaurantToListComplete } = createAddToListHandlers({
+    addToListTargetListIds,
+    convertFiveStarToTenPoint,
+    getAddToListRestaurant,
+    getReadableApiErrorMessage,
+    session,
+    setCompletionSource,
+    setMyLists,
+    setScreen,
   });
 
   const { handleToggleMyFriendFollow } = createMyFriendFollowHandlers({
@@ -1655,314 +1576,6 @@ export function AppRoot() {
     syncFollowStateAcrossUserConnections,
   });
 
-  const handleRemoveRestaurantsFromMyList = async (
-    listId: string,
-    restaurantIds: string[],
-  ) => {
-    if (restaurantIds.length === 0) {
-      return;
-    }
-
-    const applyLocalRemove = () => {
-      setMyLists((current) =>
-        current.map((list) =>
-          list.id === listId
-            ? {
-                ...list,
-                restaurants: list.restaurants.filter(
-                  (restaurant) => !restaurantIds.includes(restaurant.id),
-                ),
-                restaurantCount: list.restaurants.filter(
-                  (restaurant) => !restaurantIds.includes(restaurant.id),
-                ).length,
-              }
-            : list,
-        ),
-      );
-    };
-
-    if (!session?.accessToken) {
-      applyLocalRemove();
-      return;
-    }
-
-    const parsedListId = Number(listId);
-
-    if (Number.isNaN(parsedListId)) {
-      applyLocalRemove();
-      return;
-    }
-
-    const currentList = myLists.find((list) => list.id === listId);
-
-    try {
-      const resolvedRestaurantIds = await Promise.all(
-        restaurantIds.map(async (restaurantId) => {
-          const parsedRestaurantId = Number(restaurantId);
-
-          if (!Number.isNaN(parsedRestaurantId)) {
-            return parsedRestaurantId;
-          }
-
-          const targetRestaurant = currentList?.restaurants.find(
-            (restaurant) => restaurant.id === restaurantId,
-          );
-
-          if (!targetRestaurant) {
-            throw new Error('restaurant_not_found');
-          }
-
-          const candidates = await searchRestaurants(session.accessToken!, targetRestaurant.name);
-          const matchedRestaurant =
-            candidates.find((item) => item.name === targetRestaurant.name) ?? candidates[0];
-
-          if (!matchedRestaurant) {
-            throw new Error('restaurant_not_found');
-          }
-
-          return matchedRestaurant.id;
-        }),
-      );
-
-      await Promise.all(
-        resolvedRestaurantIds.map((restaurantId) =>
-          removeRestaurantFromList(session.accessToken!, parsedListId, restaurantId),
-        ),
-      );
-      applyLocalRemove();
-    } catch {
-      Alert.alert('?덈궡', '媛寃뚮? ??젣?섏? 紐삵뻽?듬땲??');
-    }
-  };
-
-  const handleUpdateRestaurantRatingsInMyList = async (
-    listId: string,
-    restaurantId: string,
-    ratings: {
-      taste: number;
-      service: number;
-      value: number;
-    },
-  ) => {
-    const applyLocalUpdate = () => {
-      setMyLists((current) =>
-        current.map((list) =>
-          list.id === listId
-            ? {
-                ...list,
-                restaurants: list.restaurants.map((restaurant) =>
-                  restaurant.id === restaurantId
-                    ? {
-                        ...restaurant,
-                        ratings,
-                      }
-                    : restaurant,
-                ),
-              }
-            : list,
-        ),
-      );
-    };
-
-    if (!session?.accessToken) {
-      applyLocalUpdate();
-      return;
-    }
-
-    const parsedListId = Number(listId);
-
-    if (Number.isNaN(parsedListId)) {
-      applyLocalUpdate();
-      return;
-    }
-
-    const currentList = myLists.find((list) => list.id === listId);
-    const targetRestaurant = currentList?.restaurants.find(
-      (restaurant) => restaurant.id === restaurantId,
-    );
-
-    if (!targetRestaurant) {
-      return;
-    }
-
-    try {
-      const candidateRestaurantIds: number[] = [];
-      const parsedRestaurantId = Number(restaurantId);
-
-      if (!Number.isNaN(parsedRestaurantId)) {
-        candidateRestaurantIds.push(parsedRestaurantId);
-      }
-
-      const parsedListItemId = Number(targetRestaurant.listItemId);
-
-      if (!Number.isNaN(parsedListItemId) && !candidateRestaurantIds.includes(parsedListItemId)) {
-        candidateRestaurantIds.push(parsedListItemId);
-      }
-
-      if (candidateRestaurantIds.length === 0) {
-        const candidates = await searchRestaurants(session.accessToken, targetRestaurant.name);
-        const matchedRestaurant =
-          candidates.find((item) => item.name === targetRestaurant.name) ?? candidates[0];
-
-        if (!matchedRestaurant) {
-          throw new Error('restaurant_not_found');
-        }
-
-        candidateRestaurantIds.push(matchedRestaurant.id);
-      }
-
-      let updated = false;
-      let lastError: unknown = null;
-
-      for (const candidateRestaurantId of candidateRestaurantIds) {
-        try {
-          await updateRestaurantInList(session.accessToken, parsedListId, candidateRestaurantId, {
-            tasteScore: convertFiveStarToTenPoint(ratings.taste),
-            moodScore: convertFiveStarToTenPoint(ratings.service),
-            valueScore: convertFiveStarToTenPoint(ratings.value),
-          });
-          updated = true;
-          break;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-
-      if (!updated) {
-        throw lastError ?? new Error('update_failed');
-      }
-
-      applyLocalUpdate();
-    } catch {
-      Alert.alert('?덈궡', '媛寃??먯닔瑜??섏젙?섏? 紐삵뻽?듬땲??');
-    }
-  };
-
-  const handleToggleMyListLike = async (listId: string) => {
-    if (!session?.accessToken) {
-      return;
-    }
-
-    const parsedListId = Number(listId);
-
-    if (Number.isNaN(parsedListId)) {
-      return;
-    }
-
-    const hasStoredLikeState = Object.prototype.hasOwnProperty.call(myListLikeStateById, listId);
-    const profileBackedLikeState =
-      selectedVisibleUserProfile?.representativeListId === listId
-        ? selectedVisibleUserProfile.representativeListIsLiked ?? false
-        : false;
-    const isCurrentlyLiked = hasStoredLikeState
-      ? myListLikeStateById[listId]
-      : profileBackedLikeState;
-
-    setMyListLikePendingIds((current) =>
-      current.includes(listId) ? current : [...current, listId],
-    );
-
-    try {
-      if (isCurrentlyLiked) {
-        await unlikeList(session.accessToken, parsedListId);
-      } else {
-        await likeList(session.accessToken, parsedListId);
-      }
-
-      setMyListLikeStateById((current) => ({
-        ...current,
-        [listId]: !isCurrentlyLiked,
-      }));
-      setMyListLikeCountById((current) => ({
-        ...current,
-        [listId]: Math.max(0, (current[listId] ?? 0) + (isCurrentlyLiked ? -1 : 1)),
-      }));
-      if (selectedUserProfileId && selectedVisibleUserProfile?.representativeListId === listId) {
-        const applyNextLikeState = (profile: UserProfile) =>
-          profile.id === selectedUserProfileId
-            ? {
-                ...profile,
-                representativeListIsLiked: !isCurrentlyLiked,
-              }
-            : profile;
-
-        setRemoteUserProfiles((current) => current.map(applyNextLikeState));
-        setSearchResultUserProfiles((current) => current.map(applyNextLikeState));
-        setRecommendedUserProfiles((current) => current.map(applyNextLikeState));
-      }
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (!isCurrentlyLiked && (error.status === 400 || error.status === 409)) {
-          setMyListLikeStateById((current) => ({
-            ...current,
-            [listId]: true,
-          }));
-          if (selectedUserProfileId && selectedVisibleUserProfile?.representativeListId === listId) {
-            const applyNextLikeState = (profile: UserProfile) =>
-              profile.id === selectedUserProfileId
-                ? {
-                    ...profile,
-                    representativeListIsLiked: true,
-                  }
-                : profile;
-
-            setRemoteUserProfiles((current) => current.map(applyNextLikeState));
-            setSearchResultUserProfiles((current) => current.map(applyNextLikeState));
-            setRecommendedUserProfiles((current) => current.map(applyNextLikeState));
-          }
-
-          try {
-            const likeCount = await getListLikeCount(session.accessToken, parsedListId);
-            setMyListLikeCountById((current) => ({
-              ...current,
-              [listId]: likeCount,
-            }));
-          } catch {
-            // Keep the previous count if refresh fails.
-          }
-
-          return;
-        }
-
-        if (isCurrentlyLiked && (error.status === 400 || error.status === 404)) {
-          setMyListLikeStateById((current) => ({
-            ...current,
-            [listId]: false,
-          }));
-          if (selectedUserProfileId && selectedVisibleUserProfile?.representativeListId === listId) {
-            const applyNextLikeState = (profile: UserProfile) =>
-              profile.id === selectedUserProfileId
-                ? {
-                    ...profile,
-                    representativeListIsLiked: false,
-                  }
-                : profile;
-
-            setRemoteUserProfiles((current) => current.map(applyNextLikeState));
-            setSearchResultUserProfiles((current) => current.map(applyNextLikeState));
-            setRecommendedUserProfiles((current) => current.map(applyNextLikeState));
-          }
-
-          try {
-            const likeCount = await getListLikeCount(session.accessToken, parsedListId);
-            setMyListLikeCountById((current) => ({
-              ...current,
-              [listId]: likeCount,
-            }));
-          } catch {
-            // Keep the previous count if refresh fails.
-          }
-
-          return;
-        }
-      }
-
-      Alert.alert('?덈궡', '由ъ뒪??醫뗭븘?붿슂瑜??섏젙?섏? 紐삵뻽?듬땲??');
-    } finally {
-      setMyListLikePendingIds((current) => current.filter((id) => id !== listId));
-    }
-  };
-
   const handleBlockedOwnListLike = () => {
     if (Platform.OS === 'android') {
       ToastAndroid.show('내 리스트는 좋아요를 누를 수 없어요.', ToastAndroid.SHORT);
@@ -1972,447 +1585,24 @@ export function AppRoot() {
     Alert.alert('안내', '내 리스트는 좋아요를 누를 수 없어요.');
   };
 
-  const convertFiveStarToTenPoint = (value: number) => value * 2;
-
-  const delay = (ms: number) =>
-    new Promise<void>((resolve) => {
-      setTimeout(resolve, ms);
-    });
-
-  const isUserNotFoundApiError = (error: unknown) =>
-    error instanceof ApiError && error.message.includes('유저를 찾을 수 없습니다');
-
-  const getReadableApiErrorMessage = (error: unknown, fallback: string) => {
-    if (error instanceof ApiError && error.message) {
-      return error.message;
-    }
-
-    if (error instanceof Error && error.message) {
-      return error.message;
-    }
-
-    return fallback;
-  };
-
-  const waitForServerUserReady = async (token: string, attempts = 3) => {
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      try {
-        await getMyInfo(token);
-        return true;
-      } catch (error) {
-        if (attempt === attempts - 1) {
-          return false;
-        }
-
-        if (!isUserNotFoundApiError(error) && !isAuthError(error)) {
-          return false;
-        }
-
-        await delay(450 * (attempt + 1));
-      }
-    }
-
-    return false;
-  };
-
-  const createTasteList = async (
-    title: string,
-    selected: Restaurant[],
-    ratings: Record<string, Record<'맛' | '서비스' | '가성비', number>>,
-  ) => {
-    if (createTasteListLockRef.current) {
-      return;
-    }
-
-    createTasteListLockRef.current = true;
-
-    try {
-      if (!session?.accessToken) {
-        if (tasteFlowSource === 'my-lists' && title.trim()) {
-          appendNewList(title.trim(), selected);
-        }
-        return;
-      }
-
-      const internalRestaurants = selected.filter((restaurant) => !restaurant.externalPlaceId);
-      const externalRestaurants = selected.filter(
-        (restaurant): restaurant is Restaurant & { externalPlaceId: string } =>
-          Boolean(restaurant.externalPlaceId),
-      );
-
-      if (internalRestaurants.length === 0) {
-        throw new Error('리스트를 만들려면 검색된 가게를 한 곳 이상 선택해 주세요.');
-      }
-
-      if (internalRestaurants.length < 5) {
-        const missingCount = 5 - internalRestaurants.length;
-        throw new Error(
-          `외부 식당은 첫 리스트 생성의 최소 개수에 포함되지 않아요. 일반 가게를 ${missingCount}곳 더 선택해 주세요.`,
-        );
-      }
-
-      const resolvedRestaurants = await Promise.all(
-        internalRestaurants.map(async (restaurant) => {
-          const candidates = await searchRestaurants(session.accessToken, restaurant.name);
-          const matched =
-            candidates.find((item) => item.name === restaurant.name) ??
-            candidates.find((item) => item.name === restaurant.shortName) ??
-            candidates[0];
-
-          if (!matched) {
-            throw new Error(`${restaurant.name} 식당을 서버에서 찾지 못했어요.`);
-          }
-
-          return matched;
-        }),
-      );
-
-      const regionName =
-        resolvedRestaurants[0]?.regionName ??
-        selected[0]?.address?.split(' ')[0] ??
-        '용인';
-
-      const existingListCount = myLists.length;
-
-      let createdList: Awaited<ReturnType<typeof createList>> | null = null;
-
-      try {
-        const createListBody = {
-          isPublic: true,
-          title: title.trim(),
-          regionName,
-          restaurants: internalRestaurants.map((restaurant, index) => {
-            const rating = ratings[restaurant.id];
-            const resolvedRestaurant = resolvedRestaurants[index];
-
-            return {
-              restaurantId: resolvedRestaurant.id,
-              tasteScore: convertFiveStarToTenPoint(rating['맛']),
-              valueScore: convertFiveStarToTenPoint(rating['가성비']),
-              moodScore: convertFiveStarToTenPoint(rating['서비스']),
-            };
-          }),
-        };
-
-        let lastCreateListError: unknown = null;
-
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          try {
-            createdList = await createList(session.accessToken, createListBody);
-            lastCreateListError = null;
-            break;
-          } catch (error) {
-            lastCreateListError = error;
-
-            if (!isUserNotFoundApiError(error) || attempt === 2) {
-              throw error;
-            }
-
-            console.warn(
-              `[TasteList] createList user-not-found retry ${attempt + 1}/3`,
-              error,
-            );
-            await waitForServerUserReady(session.accessToken, 2);
-            await delay(500 * (attempt + 1));
-          }
-        }
-
-        if (lastCreateListError || !createdList) {
-          throw lastCreateListError;
-        }
-      } catch (error) {
-        console.error('[TasteList] createList failed', error);
-        Alert.alert(
-          '안내',
-          `리스트 생성 중 문제가 발생했어요.\n${getReadableApiErrorMessage(
-            error,
-            '다시 시도해 주세요.',
-          )}`,
-        );
-        return;
-      }
-
-      if (!createdList.isPublic) {
-        await toggleListVisibility(session.accessToken, createdList.id);
-      }
-
-      try {
-        await Promise.all(
-          externalRestaurants.map((restaurant) => {
-            const rating = ratings[restaurant.id];
-
-            return addExternalRestaurantToListFallback(session.accessToken!, createdList.id, {
-              externalPlaceId: restaurant.externalPlaceId,
-              searchQuery: restaurant.externalSearchQuery ?? restaurant.name,
-              tasteScore: convertFiveStarToTenPoint(rating['맛']),
-              valueScore: convertFiveStarToTenPoint(rating['가성비']),
-              moodScore: convertFiveStarToTenPoint(rating['서비스']),
-            });
-          }),
-        );
-      } catch (error) {
-        console.error('[TasteList] addExternalRestaurantToListFallback failed', error);
-        Alert.alert(
-          '안내',
-          `외부 가게 평점 저장 중 문제가 발생했어요.\n${getReadableApiErrorMessage(
-            error,
-            '다시 시도해 주세요.',
-          )}`,
-        );
-        return;
-      }
-
-      if (existingListCount === 0) {
-        await setRepresentativeList(session.accessToken, createdList.id);
-      }
-
-      await refreshMyLists(session.accessToken);
-
-      try {
-        await hydrateHomeRecommendations(session.accessToken, { retryOnEmpty: true });
-      } catch (error) {
-        console.log('[TasteList] home recommendations refresh failed', error);
-      }
-    } finally {
-      createTasteListLockRef.current = false;
-    }
-  };
-
-  const getFavoriteColor = (restaurantName: string) => {
-    const normalizedName = restaurantName.trim();
-    const resolvedRestaurant = initialRestaurantPool.find(
-      (restaurant) =>
-        restaurant.id === normalizedName ||
-        restaurant.name === normalizedName ||
-        restaurant.shortName === normalizedName,
-    );
-    const orderedLists = [
-      ...myLists.filter((list) => list.isRepresentative),
-      ...myLists.filter((list) => !list.isRepresentative),
-    ];
-
-    const matchedList = orderedLists.find((list) =>
-      list.restaurants.some(
-        (restaurant) =>
-          restaurant.id === resolvedRestaurant?.id ||
-          restaurant.name === resolvedRestaurant?.name ||
-          restaurant.name === resolvedRestaurant?.shortName ||
-          restaurant.name === normalizedName ||
-          restaurant.id === normalizedName,
-      ),
-    );
-
-    return matchedList?.accentColor ?? '#D9D9D9';
-  };
-
-  const resolveRestaurant = (restaurantName: string) =>
-    initialRestaurantPool.find(
-      (restaurant) =>
-        restaurant.id === restaurantName ||
-        restaurant.name === restaurantName ||
-        restaurant.shortName === restaurantName,
-    ) ?? null;
-
-  const getAddToListRestaurant = (): Restaurant | null => {
-    if (addToListRestaurantSnapshot) {
-      return addToListRestaurantSnapshot;
-    }
-
-    const fallbackName = addToListRestaurantName ?? addToListRestaurantId;
-
-    const matchedRestaurant =
-      initialRestaurantPool.find(
-        (restaurant) =>
-          restaurant.id === addToListRestaurantId ||
-          restaurant.name === addToListRestaurantId ||
-          restaurant.shortName === addToListRestaurantId,
-      ) ??
-      initialRestaurantPool.find(
-        (restaurant) =>
-          restaurant.name === addToListRestaurantName ||
-          restaurant.shortName === addToListRestaurantName,
-      );
-
-    if (matchedRestaurant) {
-      return matchedRestaurant;
-    }
-
-    if (!fallbackName) {
-      return null;
-    }
-
-    return {
-      id: addToListRestaurantId ?? fallbackName,
-      imageUri: undefined,
-      name: fallbackName,
-      photoUris: undefined,
-      shortName: fallbackName,
-      category: '留쏆쭛',
-    };
-  };
-
-  const openAddRestaurantToListFlow = (
-    restaurantInput: Restaurant | string,
-    source: 'restaurant-detail' | 'map',
-  ) => {
-    const fallbackName =
-      typeof restaurantInput === 'string'
-        ? restaurantInput
-        : restaurantInput.shortName || restaurantInput.name;
-    const restaurant =
-      typeof restaurantInput === 'string'
-        ? resolveRestaurant(restaurantInput)
-        : restaurantInput;
-
-    setAddToListSource(source);
-    setAddToListRestaurantSnapshot(restaurant ?? null);
-    setAddToListRestaurantId(restaurant?.id ?? fallbackName);
-    setAddToListRestaurantName(restaurant?.name ?? fallbackName);
-    setAddToListTargetListIds([]);
-    setScreen('add-to-list-select');
-  };
-
-  const handleAddRestaurantToListComplete = async (ratings: {
-    taste: number;
-    service: number;
-    value: number;
-  }) => {
-    const restaurant = getAddToListRestaurant();
-
-    if (!restaurant || addToListTargetListIds.length === 0) {
-      return;
-    }
-
-    let nextRestaurantId = restaurant.id;
-    let nextRestaurantName = restaurant.shortName || restaurant.name;
-    let nextRestaurantAddress = restaurant.address ?? '';
-
-    const applyLocalAdd = () => {
-      setMyLists((current) =>
-        current.map((list) => {
-          if (!addToListTargetListIds.includes(list.id)) {
-            return list;
-          }
-
-          if (list.restaurants.some((item) => item.id === restaurant.id)) {
-            return list;
-          }
-
-          return {
-            ...list,
-            restaurantCount: list.restaurantCount + 1,
-            restaurants: [
-              ...list.restaurants,
-              {
-                id: nextRestaurantId,
-                name: nextRestaurantName,
-                address: nextRestaurantAddress,
-                ratings,
-              },
-            ],
-          };
-        }),
-      );
-    };
-
-    if (session?.accessToken) {
-      try {
-        const parsedListIds = addToListTargetListIds.map((listId) => Number(listId));
-
-        if (parsedListIds.some((listId) => Number.isNaN(listId))) {
-          throw new Error('invalid_list_id');
-        }
-
-        const candidates = await searchRestaurants(session.accessToken, restaurant.name);
-        const matchedRestaurant =
-          candidates.find((item) => item.name === restaurant.name) ??
-          candidates.find((item) => item.name === restaurant.shortName) ??
-          candidates[0];
-
-        if (!matchedRestaurant) {
-          throw new Error('restaurant_not_found');
-        }
-
-        nextRestaurantId = String(matchedRestaurant.id);
-        nextRestaurantName = matchedRestaurant.name;
-        nextRestaurantAddress = matchedRestaurant.address ?? restaurant.address ?? '';
-
-        await Promise.all(
-          parsedListIds.map((listId) =>
-            addRestaurantToList(session.accessToken!, listId, {
-              restaurantId: matchedRestaurant.id,
-              tasteScore: convertFiveStarToTenPoint(ratings.taste),
-              valueScore: convertFiveStarToTenPoint(ratings.value),
-              moodScore: convertFiveStarToTenPoint(ratings.service),
-            }),
-          ),
-        );
-      } catch (error) {
-        console.error('[AddToList] addRestaurantToList failed', error);
-        Alert.alert(
-          '안내',
-          `리스트에 가게 점수를 저장하지 못했어요.\n${getReadableApiErrorMessage(
-            error,
-            '다시 시도해 주세요.',
-          )}`,
-        );
-        return;
-      }
-    }
-
-    applyLocalAdd();
-
-    setCompletionSource('add-to-list');
-    setScreen('complete');
-  };
-
-  const openRankingDetail = (variant: 'local' | 'national') => {
-    setRankingDetail({
-      items:
-        variant === 'local' ? rankingEntries.local.slice(0, 40) : rankingEntries.national.slice(0, 40),
-      source: 'tabs',
-      sourceTab: activeTab,
-      title: variant === 'local' ? `${localRankingRegion} 맛집 추천` : '전국 맛집 추천',
-      variant,
-    });
-    setScreen('ranking-detail');
-  };
-
-  const openRegionRankingDetail = (regionName?: string, regionDisplayName?: string) => {
-    const trimmedRegionName = regionName?.trim() ?? '';
-
-    if (!trimmedRegionName) {
-      return;
-    }
-
-    const trimmedDisplayName = regionDisplayName?.trim();
-
-    setRankingDetail({
-      isLoading: true,
-      items: [],
-      regionName: trimmedRegionName,
-      source: 'search-result',
-      title: `${trimmedDisplayName || trimmedRegionName} 맛집 추천`,
-      variant: 'region',
-    });
-    setScreen('ranking-detail');
-  };
-
-  const handleBackFromRankingDetail = () => {
-    if (!rankingDetail) {
-      return;
-    }
-
-    if (rankingDetail.source === 'search-result') {
-      setScreen('search-result');
-      setRankingDetail(null);
-      return;
-    }
-
-    setActiveTab(rankingDetail.sourceTab);
-    setScreen('tabs');
-    setRankingDetail(null);
-  };
+  const { createTasteList } = createTasteListHandler({
+    appendNewList,
+    convertFiveStarToTenPoint,
+    createTasteListLockRef,
+    delay,
+    getReadableApiErrorMessage,
+    hydrateHomeRecommendations,
+    isUserNotFoundApiError,
+    myLists,
+    refreshMyLists,
+    searchRestaurantsLocal: searchRestaurants,
+    session,
+    setMyLists,
+    setRepresentativeListRemote: setRepresentativeList,
+    tasteFlowSource,
+    toggleListVisibilityRemote: toggleListVisibility,
+    waitForServerUserReady,
+  });
 
   const handleSelectTab = (tab: AppTab) => {
     if (tab === 'home' && activeTab === 'home') {
@@ -2446,113 +1636,6 @@ export function AppRoot() {
     setRankingRestoreAnimated(false);
     setMyPageRestoreAnimated(false);
     setActiveTab(tab);
-  };
-
-  const openRestaurantDetail = (
-    restaurantName: string,
-    source: Exclude<RestaurantDetailSource, null>,
-    restaurantId?: number,
-  ) => {
-    setSelectedRestaurantName(restaurantName);
-    setSelectedRestaurantId(restaurantId);
-    setRestaurantDetailInitialTab('home');
-    setRestaurantDetailSource(source);
-    setScreen('restaurant-detail');
-  };
-
-  const openAiReservation = (restaurant: Restaurant) => {
-    if (!session?.accessToken) {
-      Alert.alert('안내', '로그인 후 이용해 주세요.');
-      setScreen('login');
-      return;
-    }
-
-    setAiReservationRestaurant({
-      address: restaurant.address,
-      category: restaurant.category,
-      id: Number(restaurant.id),
-      name: restaurant.name,
-      phone: restaurant.phone,
-    });
-    setAiReservationDraft((current) =>
-      current?.restaurant.name === restaurant.name ? current : null,
-    );
-    setAiReservationResult(null);
-    setScreen('ai-reservation-form');
-  };
-
-  const openReliabilityGuide = (
-    source: Exclude<ReliabilityGuideSource, null>,
-    grade?: string | null,
-  ) => {
-    setReliabilityGuideSource(source);
-    setReliabilityGuideGrade(grade ?? null);
-    setScreen('reliability-guide');
-  };
-
-  const openLadderGame = () => {
-    setScreen('ladder-start');
-  };
-
-  const openSnailRace = () => {
-    setScreen('snail-race-start');
-  };
-
-  const openWorldCup = () => {
-    setWorldCupWinner(null);
-    setScreen('worldcup-start');
-  };
-
-  const handleConfirmLadderCount = (count: number) => {
-    setLadderPlayerCount(count);
-    setLadderSetup(buildLadderSetup(count));
-    setScreen('ladder-play');
-  };
-
-  const handleConfirmSnailRaceCount = (count: number) => {
-    setSnailRaceCount(count);
-    setScreen('snail-race-play');
-  };
-
-  const handleStartWorldCup = (category: WorldCupCategory) => {
-    setWorldCupCategory(category);
-    setWorldCupWinner(null);
-    setScreen('worldcup-battle');
-  };
-
-  const openWriteReview = (restaurantName: string, restaurantId?: number) => {
-    if (!restaurantId) {
-      Alert.alert('??덇땀', '??몃뼣 ?類ｋ궖???븍뜄???삳뮉 餓λ쵐??癒?뼄. ?醫롫뻻 ????쇰뻻 ??뺣즲??곻폒?紐꾩뒄.');
-      return;
-    }
-
-    setWriteReviewRestaurantId(restaurantId);
-    setWriteReviewRestaurantName(restaurantName);
-    setWriteReviewInitialContent('');
-    setWriteReviewMode('create');
-    setEditingReviewId(null);
-    setRestaurantDetailInitialTab('review');
-    setScreen('write-review');
-  };
-
-  const openEditReview = (
-    reviewId: number,
-    restaurantName: string,
-    restaurantId: number | undefined,
-    content?: string,
-  ) => {
-    if (!restaurantId) {
-      Alert.alert('?덈궡', '?앸떦 ?뺣낫瑜??뺤씤?섏? 紐삵빐 由щ럭瑜??섏젙?????놁뒿?덈떎.');
-      return;
-    }
-
-    setWriteReviewRestaurantId(restaurantId);
-    setWriteReviewRestaurantName(restaurantName);
-    setWriteReviewInitialContent(content ?? '');
-    setWriteReviewMode('edit');
-    setEditingReviewId(reviewId);
-    setRestaurantDetailInitialTab('review');
-    setScreen('write-review');
   };
 
   const handleSubmitRestaurantReview = async (draft: WriteReviewDraft) => {
@@ -2598,91 +1681,6 @@ export function AppRoot() {
 
     setRestaurantDetailInitialTab('review');
     setScreen('restaurant-detail');
-  };
-
-  const openUserProfileFromRestaurantDetail = (authorName: string) => {
-    const matchedProfile = visibleUserProfiles.find((item) => item.nickname === authorName);
-
-    if (!matchedProfile) {
-      return;
-    }
-
-    setUserProfileSource({ type: 'restaurant-detail' });
-    setSelectedUserProfileId(matchedProfile.id);
-    setScreen('user-profile');
-  };
-
-  const openNestedUserProfile = (userId: string, source: UserProfileSource) => {
-    if (selectedUserProfileId) {
-      setUserProfileHistory((current) => [
-        ...current,
-        {
-          userId: selectedUserProfileId,
-          source: userProfileSource,
-        },
-      ]);
-    }
-
-    setUserProfileSource(source);
-    setSelectedUserProfileId(userId);
-    setScreen('user-profile');
-  };
-
-  const handleBackFromRestaurantDetail = () => {
-    if (!restaurantDetailSource) {
-      setScreen('tabs');
-      return;
-    }
-
-    if (restaurantDetailSource.type === 'search-result') {
-      setScreen('search-result');
-      return;
-    }
-
-    if (restaurantDetailSource.type === 'my-reviews') {
-      setScreen('my-reviews');
-      return;
-    }
-
-    if (restaurantDetailSource.type === 'user-reviews') {
-      setSelectedUserProfileId(restaurantDetailSource.userId);
-      setScreen('user-reviews');
-      return;
-    }
-
-    if (restaurantDetailSource.type === 'my-list-detail') {
-      setSelectedMyListId(restaurantDetailSource.listId);
-      setScreen('my-list-detail');
-      return;
-    }
-
-    if (restaurantDetailSource.type === 'user-profile') {
-      setSelectedUserProfileId(restaurantDetailSource.userId);
-      setScreen('user-profile');
-      return;
-    }
-
-    if (restaurantDetailSource.type === 'tabs') {
-      setActiveTab(restaurantDetailSource.tab);
-      if (restaurantDetailSource.tab === 'home') {
-        setHomeRestoreAnimated(false);
-        setHomeRestoreKey((current) => current + 1);
-      } else if (restaurantDetailSource.tab === 'ranking') {
-        setRankingRestoreAnimated(false);
-        setRankingRestoreKey((current) => current + 1);
-      } else if (restaurantDetailSource.tab === 'my') {
-        setMyPageRestoreAnimated(false);
-        setMyPageRestoreKey((current) => current + 1);
-      }
-      setScreen('tabs');
-      return;
-    }
-
-    if (restaurantDetailSource.detail.source === 'tabs') {
-      setActiveTab(restaurantDetailSource.detail.sourceTab);
-    }
-    setRankingDetail(restaurantDetailSource.detail);
-    setScreen('ranking-detail');
   };
 
   const {
