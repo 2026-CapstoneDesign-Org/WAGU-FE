@@ -17,8 +17,7 @@ import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
-import { MOCK_DATA_ENABLED } from '../../config/mockData';
-import { MyReview, myReviews } from '../../data/myReviews';
+import { MyReview } from '../../data/myReviews';
 import { ReviewMediaItem } from '../../types/reviews';
 
 const REVIEW_IMAGE_SIZE = 172;
@@ -109,7 +108,7 @@ export function MyReviewsScreen({
   onBack,
   onDeleteReview,
   onOpenRestaurantDetail,
-  reviewsData = MOCK_DATA_ENABLED ? myReviews : [],
+  reviewsData = [],
   title = '내 리뷰',
 }: MyReviewsScreenProps) {
   const insets = useSafeAreaInsets();

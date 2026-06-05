@@ -14,13 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
 import { ReliabilityBadge } from '../../components/ReliabilityBadge';
-import { MOCK_DATA_ENABLED } from '../../config/mockData';
 import {
   FollowTogglePayload,
   FriendTabKey,
   FriendUser,
-  MY_FOLLOWER_USERS,
-  MY_FOLLOWING_USERS,
 } from '../../data/myFriends';
 
 type MyFriendsScreenProps = {
@@ -150,27 +147,19 @@ export function MyFriendsScreen({
   const pagerRef = useRef<ScrollView | null>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
   const [activeTab, setActiveTab] = useState<FriendTabKey>(initialTab);
-  const [followingUsers, setFollowingUsers] = useState(
-    followingUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWING_USERS : []),
-  );
+  const [followingUsers, setFollowingUsers] = useState(followingUsersData ?? []);
   const [followerUsers, setFollowerUsers] = useState(() =>
-    sortFollowersForInitialView(
-      followerUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : []),
-    ),
+    sortFollowersForInitialView(followerUsersData ?? []),
   );
   const [followOverrides, setFollowOverrides] = useState<Record<string, boolean>>({});
   const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
 
   useEffect(() => {
-    setFollowingUsers(followingUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWING_USERS : []));
+    setFollowingUsers(followingUsersData ?? []);
   }, [followingUsersData]);
 
   useEffect(() => {
-    setFollowerUsers(
-      sortFollowersForInitialView(
-        followerUsersData ?? (MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : []),
-      ),
-    );
+    setFollowerUsers(sortFollowersForInitialView(followerUsersData ?? []));
   }, [followerUsersData, preserveListOnToggle]);
 
   useEffect(() => {

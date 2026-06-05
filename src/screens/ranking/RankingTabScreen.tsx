@@ -3,7 +3,7 @@ import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../../components/BottomTabBar';
-import { localRankingEntries, nationalRankingEntries, RankingEntry } from '../../data/rankings';
+import { RankingEntry } from '../../data/rankings';
 
 const { width: screenWidth } = Dimensions.get('window');
 const rankingPageWidth = screenWidth - 32;
@@ -159,7 +159,7 @@ export function RankingTabScreen({
             accentTitle="용인"
             title=" 맛집 순위"
             initialScrollX={initialScrollState?.localRankingX ?? 0}
-            items={(localRankingItems ?? localRankingEntries).slice(0, 20)}
+            items={(localRankingItems ?? []).slice(0, 20)}
             onScrollPositionChange={(x) => onScrollStateChange?.({ localRankingX: x })}
             onPressItem={onOpenRestaurantDetail}
             onPressMore={onPressLocalRanking}
@@ -168,7 +168,7 @@ export function RankingTabScreen({
           <RankingPreviewSection
             title="전국 맛집 순위"
             initialScrollX={initialScrollState?.nationalRankingX ?? 0}
-            items={(nationalRankingItems ?? nationalRankingEntries).slice(0, 20)}
+            items={(nationalRankingItems ?? []).slice(0, 20)}
             onScrollPositionChange={(x) => onScrollStateChange?.({ nationalRankingX: x })}
             onPressItem={onOpenRestaurantDetail}
             onPressMore={onPressNationalRanking}

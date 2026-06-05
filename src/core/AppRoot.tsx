@@ -56,14 +56,11 @@ import {
 import { ApiError, isAuthError, setAuthRefreshHandler } from '../api/client';
 import { uploadImageWithPresignedUrl } from '../api/upload';
 import { AppTab } from '../components/BottomTabBar';
-import { MOCK_DATA_ENABLED } from '../config/mockData';
-import { FriendTabKey, FriendUser, FollowTogglePayload, MY_FOLLOWER_USERS, MY_FOLLOWING_USERS } from '../data/myFriends';
-import { userFriendConnectionsByUserId } from '../data/userFriendConnections';
-import { initialMyLists, MyList } from '../data/myLists';
-import { MyReview, myReviews } from '../data/myReviews';
-import { localRankingEntries, nationalRankingEntries, RankingEntry } from '../data/rankings';
+import { FriendTabKey, FriendUser, FollowTogglePayload } from '../data/myFriends';
+import { MyList } from '../data/myLists';
+import { MyReview } from '../data/myReviews';
+import { RankingEntry } from '../data/rankings';
 import { Restaurant, restaurants as initialRestaurantPool } from '../data/restaurants';
-import { userReviewsByUserId } from '../data/userReviews';
 import { AddRestaurantToListRatingScreen } from '../screens/lists/AddRestaurantToListRatingScreen';
 import { AddRestaurantToListSelectScreen } from '../screens/lists/AddRestaurantToListSelectScreen';
 import { AiReservationFormScreen } from '../screens/ai/AiReservationFormScreen';
@@ -112,7 +109,7 @@ import { WorldCupBattleScreen } from '../screens/games/WorldCupBattleScreen';
 import { WorldCupResultScreen } from '../screens/games/WorldCupResultScreen';
 import { WorldCupStartScreen } from '../screens/games/WorldCupStartScreen';
 import { WriteReviewDraft, WriteReviewScreen } from '../screens/reviews/WriteReviewScreen';
-import { UserProfile, userProfiles } from '../data/userProfiles';
+import { UserProfile } from '../data/userProfiles';
 import {
   AiReservationDraft,
   AiReservationResult,
@@ -504,24 +501,23 @@ type AuthSession = {
 };
 
 export function AppRoot() {
-  const fallbackMyLists = MOCK_DATA_ENABLED ? initialMyLists : [];
-  const fallbackFollowerCount = MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS.length : 0;
-  const fallbackFollowingUsers = MOCK_DATA_ENABLED ? MY_FOLLOWING_USERS : [];
-  const fallbackFollowerUsers = MOCK_DATA_ENABLED ? MY_FOLLOWER_USERS : [];
-  const fallbackUserProfiles = MOCK_DATA_ENABLED ? userProfiles : [];
-  const visibleUserReviewsByUserId = MOCK_DATA_ENABLED ? userReviewsByUserId : {};
-  const visibleUserFriendConnectionsByUserId = MOCK_DATA_ENABLED
-    ? userFriendConnectionsByUserId
-    : {};
-  const fallbackRankingEntries = MOCK_DATA_ENABLED
-    ? {
-        local: localRankingEntries,
-        national: nationalRankingEntries,
-      }
-    : {
-        local: [] as RankingEntry[],
-        national: [] as RankingEntry[],
-      };
+  const fallbackMyLists: MyList[] = [];
+  const fallbackFollowerCount = 0;
+  const fallbackFollowingUsers: FriendUser[] = [];
+  const fallbackFollowerUsers: FriendUser[] = [];
+  const fallbackUserProfiles: UserProfile[] = [];
+  const visibleUserReviewsByUserId: Record<string, MyReview[]> = {};
+  const visibleUserFriendConnectionsByUserId: Record<
+    string,
+    {
+      followers: FriendUser[];
+      following: FriendUser[];
+    }
+  > = {};
+  const fallbackRankingEntries = {
+    local: [] as RankingEntry[],
+    national: [] as RankingEntry[],
+  };
   const fallbackLocalRankingRegion = '용인';
   const initialHomeScrollState: HomeScrollState = {
     bannerLoopIndex: 1,
@@ -573,7 +569,7 @@ export function AppRoot() {
   const [myFollowingUsers, setMyFollowingUsers] = useState<FriendUser[]>(fallbackFollowingUsers);
   const [myFollowerUsers, setMyFollowerUsers] =
     useState<FriendUser[]>(sortFollowersForInitialView(fallbackFollowerUsers));
-  const [myReviewItems, setMyReviewItems] = useState<MyReview[]>(MOCK_DATA_ENABLED ? myReviews : []);
+  const [myReviewItems, setMyReviewItems] = useState<MyReview[]>([]);
   const [remoteUserReviewsByUserId, setRemoteUserReviewsByUserId] = useState<
     Record<string, MyReview[]>
   >({});
@@ -2262,22 +2258,20 @@ export function AppRoot() {
           return;
         }
 
-        if (!MOCK_DATA_ENABLED) {
-          setFollowerCount(0);
-          setMyUserId(null);
-          setMyFollowingUsers([]);
-          setMyFollowerUsers([]);
-          setRecommendedRestaurantItems([]);
-          setRecommendedMealFriendItems([]);
-          setRecommendedUserProfiles([]);
-          setHasUnreadNews(false);
-          setRankingEntries({
-            local: [],
-            national: [],
-          });
-          setLocalRankingRegion(fallbackLocalRankingRegion);
-          setMyLists([]);
-        }
+        setFollowerCount(0);
+        setMyUserId(null);
+        setMyFollowingUsers([]);
+        setMyFollowerUsers([]);
+        setRecommendedRestaurantItems([]);
+        setRecommendedMealFriendItems([]);
+        setRecommendedUserProfiles([]);
+        setHasUnreadNews(false);
+        setRankingEntries({
+          local: [],
+          national: [],
+        });
+        setLocalRankingRegion(fallbackLocalRankingRegion);
+        setMyLists([]);
 
         setScreen((current) => (current === 'auth-loading' ? 'tabs' : current));
       }

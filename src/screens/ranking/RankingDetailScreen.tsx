@@ -14,14 +14,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ArrowLeftIcon from '../../../assets/icons/arrow-left.svg';
 import SearchIcon from '../../../assets/icons/search.svg';
-import { MOCK_DATA_ENABLED } from '../../config/mockData';
-import { localRankingEntries, nationalRankingEntries } from '../../data/rankings';
+import { RankingEntry } from '../../data/rankings';
 
 type RankingDetailVariant = 'local' | 'national' | 'region';
 
 type RankingDetailScreenProps = {
   isLoading?: boolean;
-  items?: typeof localRankingEntries;
+  items?: RankingEntry[];
   onBack: () => void;
   onOpenRestaurantDetail?: (restaurantName: string) => void;
   title?: string;
@@ -43,15 +42,7 @@ export function RankingDetailScreen({
   const isDraggingRef = useRef(false);
   const searchVisibleRef = useRef(true);
 
-  const rankingItems =
-    items ??
-    (MOCK_DATA_ENABLED
-      ? variant === 'local'
-        ? localRankingEntries.slice(0, 40)
-        : variant === 'national'
-          ? nationalRankingEntries.slice(0, 40)
-          : []
-      : []);
+  const rankingItems = items ?? [];
 
   const headerTitle =
     title ??

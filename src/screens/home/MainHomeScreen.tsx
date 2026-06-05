@@ -17,7 +17,6 @@ import HeartIcon from '../../../assets/icons/heart.svg';
 import SearchIcon from '../../../assets/icons/search.svg';
 import { AppTab, BottomTabBar, TAB_BAR_HEIGHT } from '../../components/BottomTabBar';
 import { ReliabilityBadge } from '../../components/ReliabilityBadge';
-import { MOCK_DATA_ENABLED } from '../../config/mockData';
 import { localRankingEntries, nationalRankingEntries, RankingEntry } from '../../data/rankings';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -477,7 +476,7 @@ export function MainHomeScreen({
   const featuredRestaurants = featuredRestaurantItems ?? [];
   const localRanking = (localRankingItems ?? localRankingEntries).slice(0, 20);
   const localRankingTitle = `${localRankingRegion} 맛집 추천`;
-  const mealFriendProfiles = mealFriendItems ?? (MOCK_DATA_ENABLED ? mealFriends : []);
+  const mealFriendProfiles = mealFriendItems ?? [];
   const nationalRanking = (nationalRankingItems ?? nationalRankingEntries).slice(0, 20);
 
   const clearAutoSlideTimer = () => {
@@ -713,7 +712,7 @@ export function MainHomeScreen({
             <HorizontalProfileSection
               title="WAGU 인플루언서"
               initialScrollX={initialScrollState?.influencersX ?? 0}
-              items={MOCK_DATA_ENABLED ? influencers : []}
+              items={[]}
               onPressItem={onOpenUserProfile}
               onScrollPositionChange={(x) => onScrollStateChange?.({ influencersX: x })}
               restoreScrollKey={restoreScrollKey}

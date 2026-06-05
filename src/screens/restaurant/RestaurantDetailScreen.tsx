@@ -41,15 +41,14 @@ import {
   voteReview,
 } from '../../api/wagu';
 import ClockIcon from '../../../assets/icons/clock.svg';
-import { MOCK_DATA_ENABLED } from '../../config/mockData';
 import LocationIcon from '../../../assets/icons/location.svg';
 import ParkingIcon from '../../../assets/icons/parking.svg';
 import PhoneIcon from '../../../assets/icons/phone.svg';
 import ShopIcon from '../../../assets/icons/shop.svg';
 import StarIcon from '../../../assets/icons/star.svg';
 import TrashIcon from '../../../assets/icons/trash.svg';
-import { Restaurant, RestaurantMenuItem, restaurants } from '../../data/restaurants';
-import { RestaurantReview, restaurantReviews } from '../../data/restaurantReviews';
+import { Restaurant, RestaurantMenuItem } from '../../data/restaurants';
+import { RestaurantReview } from '../../data/restaurantReviews';
 import { ReviewMediaItem } from '../../types/reviews';
 
 type RestaurantDetailTab = 'home' | 'menu' | 'review' | 'photo';
@@ -1778,28 +1777,17 @@ export function RestaurantDetailScreen({
 
   const restaurantMeta = useMemo(
     () => {
-      const matchedRestaurant = MOCK_DATA_ENABLED
-        ? restaurants.find(
-            (item) => item.name === restaurantName || item.shortName === restaurantName,
-          )
-        : undefined;
-      const matchedMeta = MOCK_DATA_ENABLED
-        ? restaurantMetaByName[restaurantName] ??
-          (matchedRestaurant
-            ? restaurantMetaByName[matchedRestaurant.name] ??
-              restaurantMetaByName[matchedRestaurant.shortName]
-            : undefined)
-        : undefined;
-      const baseRestaurantMeta = MOCK_DATA_ENABLED ? defaultRestaurantMeta : emptyRestaurantMeta;
-        const remotePhotoUris = remoteRestaurant ? getRestaurantPhotoUris(remoteRestaurant) : [];
-        const remoteMenuItems = mapRemoteMenuItems(remoteRestaurant?.menus);
-        const remoteOpeningHours = buildOpeningHoursText(remoteRestaurant ?? undefined);
-        const remoteOpeningHoursCollapsed = buildOpeningHoursCollapsedText(remoteRestaurant ?? undefined);
-        const remoteOpeningHoursRows = buildOpeningHoursRows(remoteRestaurant ?? undefined);
-        const remoteOpeningHoursStatus = buildOpeningHoursStatus(remoteRestaurant ?? undefined);
-        const remoteParkingLots = buildParkingLots(remoteRestaurant ?? undefined);
-        const remoteParkingSummary = buildParkingSummary(remoteRestaurant ?? undefined);
-        const remoteFeatures = buildFeaturesText(remoteRestaurant ?? undefined);
+      const remotePhotoUris = remoteRestaurant ? getRestaurantPhotoUris(remoteRestaurant) : [];
+      const remoteMenuItems = mapRemoteMenuItems(remoteRestaurant?.menus);
+      const remoteOpeningHours = buildOpeningHoursText(remoteRestaurant ?? undefined);
+      const remoteOpeningHoursCollapsed = buildOpeningHoursCollapsedText(
+        remoteRestaurant ?? undefined,
+      );
+      const remoteOpeningHoursRows = buildOpeningHoursRows(remoteRestaurant ?? undefined);
+      const remoteOpeningHoursStatus = buildOpeningHoursStatus(remoteRestaurant ?? undefined);
+      const remoteParkingLots = buildParkingLots(remoteRestaurant ?? undefined);
+      const remoteParkingSummary = buildParkingSummary(remoteRestaurant ?? undefined);
+      const remoteFeatures = buildFeaturesText(remoteRestaurant ?? undefined);
       const remoteAddress =
         remoteRestaurant?.roadAddress?.trim() ||
         remoteRestaurant?.address?.trim() ||
@@ -1814,109 +1802,50 @@ export function RestaurantDetailScreen({
         '';
 
       return {
-        ...baseRestaurantMeta,
-        ...(matchedRestaurant
-          ? {
-              category: matchedRestaurant.category,
-                photoUris: matchedRestaurant.photoUris,
-                reviewCount: matchedRestaurant.reviewCount,
-                address: matchedRestaurant.address,
-                openingHours: matchedRestaurant.openingHours,
-                openingHoursCollapsed: matchedRestaurant.openingHours,
-                openingHoursRows: [],
-                openingHoursStatus: '',
-                parkingLots: [],
-                parkingSummary: '',
-                phone: matchedRestaurant.phone,
-                features: matchedRestaurant.features,
-                menuItems: matchedRestaurant.menuItems,
-            }
-          : {}),
-        ...(remoteRestaurant
-          ? {
-              category: remoteCategory,
-                photoUris: remotePhotoUris,
-                address: remoteAddress,
-                regionName: remoteRestaurant.regionName,
-                openingHours: remoteOpeningHours,
-                openingHoursCollapsed: remoteOpeningHoursCollapsed,
-                openingHoursRows: remoteOpeningHoursRows,
-                openingHoursStatus: remoteOpeningHoursStatus,
-                parkingLots: remoteParkingLots,
-                parkingSummary: remoteParkingSummary,
-                phone: remotePhone,
-                features: remoteFeatures,
-                menuItems: remoteMenuItems,
-            }
-          : {}),
-        ...matchedMeta,
-        category:
-          remoteCategory ||
-          matchedRestaurant?.category ||
-          matchedMeta?.category ||
-          baseRestaurantMeta.category,
+        ...emptyRestaurantMeta,
+        category: remoteCategory || emptyRestaurantMeta.category,
         photoUris:
           (remotePhotoUris.length ? remotePhotoUris : undefined) ??
-          matchedRestaurant?.photoUris ??
-          matchedMeta?.photoUris ??
-          baseRestaurantMeta.photoUris,
-        reviewCount:
-          matchedRestaurant?.reviewCount ??
-          matchedMeta?.reviewCount ??
-          baseRestaurantMeta.reviewCount,
+          emptyRestaurantMeta.photoUris,
+        reviewCount: emptyRestaurantMeta.reviewCount,
         address:
           remoteAddress ||
-          matchedRestaurant?.address ||
-          matchedMeta?.address ||
-          baseRestaurantMeta.address,
+          emptyRestaurantMeta.address,
         regionName:
           remoteRestaurant?.regionName ??
-          matchedMeta?.regionName ??
-          baseRestaurantMeta.regionName,
-          openingHours:
-            remoteOpeningHours ||
-            matchedRestaurant?.openingHours ||
-            matchedMeta?.openingHours ||
-            baseRestaurantMeta.openingHours,
-          openingHoursCollapsed:
-            remoteOpeningHoursCollapsed ||
-            matchedMeta?.openingHoursCollapsed ||
-            matchedRestaurant?.openingHours ||
-            baseRestaurantMeta.openingHours,
+          emptyRestaurantMeta.regionName,
+        openingHours:
+          remoteOpeningHours ||
+          emptyRestaurantMeta.openingHours,
+        openingHoursCollapsed:
+          remoteOpeningHoursCollapsed ||
+          emptyRestaurantMeta.openingHoursCollapsed,
           openingHoursRows:
             remoteOpeningHoursRows.length > 0
               ? remoteOpeningHoursRows
-              : matchedMeta?.openingHoursRows || [],
+              : [],
           openingHoursStatus:
             remoteOpeningHoursStatus ||
-            matchedMeta?.openingHoursStatus ||
             '',
           parkingLots:
             remoteParkingLots.length > 0
               ? remoteParkingLots
-              : matchedMeta?.parkingLots || [],
+              : [],
           parkingSummary:
             remoteParkingSummary ||
-            matchedMeta?.parkingSummary ||
             '',
           phone:
             remotePhone ||
-          matchedRestaurant?.phone ||
-          matchedMeta?.phone ||
-          baseRestaurantMeta.phone,
+          emptyRestaurantMeta.phone,
         features:
           remoteFeatures ||
-          matchedRestaurant?.features ||
-          matchedMeta?.features ||
-          baseRestaurantMeta.features,
+          emptyRestaurantMeta.features,
         menuItems:
           (remoteMenuItems.length ? remoteMenuItems : undefined) ??
-          matchedRestaurant?.menuItems ??
-          matchedMeta?.menuItems ??
-          baseRestaurantMeta.menuItems,
+          emptyRestaurantMeta.menuItems,
       };
     },
-    [remoteRestaurant, restaurantName],
+    [remoteRestaurant],
   );
 
   const visiblePhotoUris = useMemo(
@@ -1925,18 +1854,14 @@ export function RestaurantDetailScreen({
   );
 
   const addToListRestaurant = useMemo<Restaurant>(() => {
-    const matchedRestaurant = MOCK_DATA_ENABLED
-      ? restaurants.find((item) => item.name === restaurantName || item.shortName === restaurantName)
-      : undefined;
-
     return {
       address: restaurantMeta.address,
       category: restaurantMeta.category || '맛집',
-      id: String(remoteRestaurant?.id ?? matchedRestaurant?.id ?? restaurantName),
-      imageUri: restaurantMeta.photoUris[0] ?? matchedRestaurant?.imageUri,
-      name: remoteRestaurant?.name ?? matchedRestaurant?.name ?? restaurantName,
+      id: String(remoteRestaurant?.id ?? restaurantName),
+      imageUri: restaurantMeta.photoUris[0],
+      name: remoteRestaurant?.name ?? restaurantName,
       photoUris: restaurantMeta.photoUris,
-      shortName: matchedRestaurant?.shortName ?? remoteRestaurant?.name ?? restaurantName,
+      shortName: remoteRestaurant?.name ?? restaurantName,
     };
   }, [
     remoteRestaurant?.id,
@@ -1949,20 +1874,12 @@ export function RestaurantDetailScreen({
 
   const restaurantReviewList = useMemo(() => {
     const resolvedRestaurantName = remoteRestaurant?.name ?? restaurantName;
-    const matchedRestaurant = MOCK_DATA_ENABLED
-      ? restaurants.find((item) => item.name === restaurantName || item.shortName === restaurantName)
-      : undefined;
-    const reviewSource =
-      reviewsData ??
-      remoteReviews ??
-      (MOCK_DATA_ENABLED ? restaurantReviews : []);
+    const reviewSource = reviewsData ?? remoteReviews ?? [];
 
     const filteredReviews = reviewSource.filter(
           (review) =>
             review.restaurantName === resolvedRestaurantName ||
-            review.restaurantName === restaurantName ||
-            review.restaurantName === matchedRestaurant?.name ||
-            review.restaurantName === matchedRestaurant?.shortName,
+            review.restaurantName === restaurantName,
         );
 
     const reviewsWithFollowState = filteredReviews.map((review) => ({
@@ -2014,7 +1931,7 @@ export function RestaurantDetailScreen({
   const hasHeroPhotos = restaurantMeta.photoUris.length > 0;
 
   const handleToggleReviewFollow = (reviewId: string) => {
-    const reviewSource = remoteReviews ?? reviewsData ?? (MOCK_DATA_ENABLED ? restaurantReviews : []);
+    const reviewSource = remoteReviews ?? reviewsData ?? [];
     const targetReview = reviewSource.find((review) => review.id === reviewId);
 
     if (targetReview?.isOwner || reviewFollowPendingIds[reviewId]) {
@@ -2082,7 +1999,7 @@ export function RestaurantDetailScreen({
     reviewId: string,
     reaction: Exclude<ReviewReaction, null>,
   ) => {
-    const reviewSource = remoteReviews ?? reviewsData ?? (MOCK_DATA_ENABLED ? restaurantReviews : []);
+    const reviewSource = remoteReviews ?? reviewsData ?? [];
     const targetReview = reviewSource.find((review) => review.id === reviewId);
 
     if (targetReview?.isOwner || reviewVotePendingIds[reviewId]) {
