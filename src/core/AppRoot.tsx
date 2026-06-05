@@ -6,19 +6,13 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import {
-  ApiReservation,
   addExternalRestaurantToListFallback,
   addRestaurantToList,
-  cancelReviewVote,
-  createReport,
   createRestaurantReview,
   createList,
-  deleteMyUser,
-  deleteReview,
   deleteList,
   formatBirthDate,
   formatGenderLabel,
-  followUser,
   getFollowers,
   getFollowCount,
   getFollowStatus,
@@ -41,21 +35,52 @@ import {
   removeRestaurantFromList,
   searchRestaurants,
   setRepresentativeList,
-  signupProfile,
   toggleListVisibility,
   likeList,
-  unfollowUser,
   refreshAuthToken,
   unlikeList,
   updateReview,
   updateRestaurantInList,
   updateList,
   updateMyUser,
-  voteReview,
 } from '../api/wagu';
 import { ApiError, isAuthError, setAuthRefreshHandler } from '../api/client';
 import { uploadImageWithPresignedUrl } from '../api/upload';
 import { AppTab } from '../components/BottomTabBar';
+import { AppRootTabScreens } from './appRoot/screenRenderers/AppRootTabScreens';
+import { AppRootExperienceScreens } from './appRoot/screenRenderers/AppRootExperienceScreens';
+import { AppRootAccountScreens } from './appRoot/screenRenderers/AppRootAccountScreens';
+import { AppRootFlowScreens } from './appRoot/screenRenderers/AppRootFlowScreens';
+import { createAuthFlowHandlers } from './appRoot/handlers/createAuthFlowHandlers';
+import { createFollowHandlers } from './appRoot/handlers/createFollowHandlers';
+import { createMyFriendFollowHandlers } from './appRoot/handlers/createMyFriendFollowHandlers';
+import { createSessionHandlers } from './appRoot/handlers/createSessionHandlers';
+import { createMyListHandlers } from './appRoot/handlers/createMyListHandlers';
+import { createReportHandlers } from './appRoot/handlers/createReportHandlers';
+import { createReviewHandlers } from './appRoot/handlers/createReviewHandlers';
+import {
+  HOME_PROFILE_ACCENT_COLORS,
+  buildAiReservationResult,
+  buildFriendUserFromSources,
+  createSearchResultUserProfile,
+  formatApiReviewDate,
+  hydrateFriendUsersWithReliability,
+  mapApiReviewToMyReview,
+  mapFollowUsersToFriendUsers,
+  mergeUserProfiles,
+  retryAsync,
+  sortFollowersForInitialView,
+} from './appRoot/utils/helpers';
+import type {
+  AuthSession,
+  FlowScreen,
+  RankingDetailState,
+  ReliabilityGuideSource,
+  RestaurantDetailSource,
+  SearchResultTabKey,
+  UserProfileHistoryEntry,
+  UserProfileSource,
+} from './appRoot/types';
 import type { FriendTabKey, FriendUser, FollowTogglePayload } from '../types/myFriends';
 import type { MyList } from '../types/myLists';
 import type { MyReview } from '../types/myReviews';
@@ -72,25 +97,19 @@ import { DeleteAccountScreen } from '../screens/profile/DeleteAccountScreen';
 import { EditNicknameScreen } from '../screens/profile/EditNicknameScreen';
 import { LadderGamePlayScreen } from '../screens/games/LadderGamePlayScreen';
 import { LadderGameStartScreen } from '../screens/games/LadderGameStartScreen';
-import {
-  HomeProfileCardItem,
-  HomeRestaurantCardItem,
-  HomeScrollState,
-  MainHomeScreen,
-} from '../screens/home/MainHomeScreen';
-import { MapScreen } from '../screens/map/MapScreen';
+import type { HomeProfileCardItem, HomeRestaurantCardItem, HomeScrollState } from '../screens/home/MainHomeScreen';
 import { MapSearchScreen } from '../screens/map/MapSearchScreen';
 import { LoginProvider, MyInfoScreen } from '../screens/profile/MyInfoScreen';
 import { MyFriendsScreen } from '../screens/profile/MyFriendsScreen';
 import { MyListDetailScreen } from '../screens/lists/MyListDetailScreen';
 import { MyListPlaceEditScreen } from '../screens/lists/MyListPlaceEditScreen';
 import { MyListsScreen } from '../screens/lists/MyListsScreen';
-import { MyPageScreen, MyPageScrollState } from '../screens/profile/MyPageScreen';
+import type { MyPageScrollState } from '../screens/profile/MyPageScreen';
 import { MyReviewsScreen } from '../screens/reviews/MyReviewsScreen';
 import { NewsScreen } from '../screens/home/NewsScreen';
 import { OnboardingLoginScreen } from '../screens/auth/OnboardingLoginScreen';
 import { RankingDetailScreen } from '../screens/ranking/RankingDetailScreen';
-import { RankingTabScreen, RankingTabScrollState } from '../screens/ranking/RankingTabScreen';
+import type { RankingTabScrollState } from '../screens/ranking/RankingTabScreen';
 import { RegistrationCompleteScreen } from '../screens/auth/RegistrationCompleteScreen';
 import { ReliabilityGuideScreen } from '../screens/profile/ReliabilityGuideScreen';
 import { RestaurantDetailScreen } from '../screens/restaurant/RestaurantDetailScreen';
@@ -111,83 +130,12 @@ import { WorldCupResultScreen } from '../screens/games/WorldCupResultScreen';
 import { WorldCupStartScreen } from '../screens/games/WorldCupStartScreen';
 import { WriteReviewDraft, WriteReviewScreen } from '../screens/reviews/WriteReviewScreen';
 import type { UserProfile } from '../types/userProfiles';
-import {
-  AiReservationDraft,
-  AiReservationResult,
-} from '../types/aiReservation';
+import type { AiReservationDraft, AiReservationResult } from '../types/aiReservation';
 import { LadderGameSetup } from '../types/ladderGame';
 import { WorldCupCategory, WorldCupEntry } from '../types/worldCup';
 import { normalizeReliabilityGrade } from '../utils/reliability';
 import { buildLadderSetup } from '../utils/ladderGame';
-import {
-  clearStoredSession,
-  readStoredSession,
-  writeStoredSession,
-} from './sessionStorage';
-
-type SearchResultTabKey = 'restaurant' | 'user' | 'region';
-
-type FlowScreen =
-  | 'auth-loading'
-  | 'login'
-  | 'signup-nickname'
-  | 'signup-profile'
-  | 'taste'
-  | 'taste-list-name'
-  | 'rating'
-  | 'complete'
-  | 'add-to-list-select'
-  | 'add-to-list-rating'
-  | 'tabs'
-  | 'ai-chat'
-  | 'news'
-  | 'search'
-  | 'search-result'
-  | 'map-search'
-  | 'settings'
-  | 'my-info'
-  | 'my-friends'
-  | 'user-friends'
-  | 'my-lists'
-  | 'my-list-detail'
-  | 'my-list-place-edit'
-  | 'my-reviews'
-  | 'user-reviews'
-  | 'write-review'
-  | 'edit-nickname'
-  | 'delete-account'
-  | 'restaurant-detail'
-  | 'ai-reservation-form'
-  | 'ai-reservation-pending'
-  | 'ai-reservation-result'
-  | 'ladder-start'
-  | 'ladder-play'
-  | 'snail-race-start'
-  | 'snail-race-play'
-  | 'worldcup-start'
-  | 'worldcup-battle'
-  | 'worldcup-result'
-  | 'reliability-guide'
-  | 'ranking-detail'
-  | 'user-profile';
-
-type RankingDetailState =
-  | {
-      items: RankingEntry[];
-      source: 'tabs';
-      sourceTab: AppTab;
-      title: string;
-      variant: 'local' | 'national';
-    }
-  | {
-      isLoading: boolean;
-      items: RankingEntry[];
-      regionName: string;
-      source: 'search-result';
-      title: string;
-      variant: 'region';
-    }
-  | null;
+import { readStoredSession } from './sessionStorage';
 
 function AuthLoadingScreen() {
   return (
@@ -196,310 +144,6 @@ function AuthLoadingScreen() {
     </View>
   );
 }
-
-type RestaurantDetailSource =
-  | { type: 'search-result' }
-  | { type: 'my-reviews' }
-  | { type: 'user-reviews'; userId: string }
-  | { type: 'my-list-detail'; listId: string }
-  | { type: 'user-profile'; userId: string }
-  | { type: 'tabs'; tab: AppTab }
-  | { type: 'ranking-detail'; detail: NonNullable<RankingDetailState> }
-  | null;
-
-type UserProfileSource =
-  | { type: 'my-friends'; tab: FriendTabKey }
-  | { type: 'user-friends'; userId: string; tab: FriendTabKey }
-  | { type: 'search-result' }
-  | { type: 'home' }
-  | { type: 'restaurant-detail' }
-  | null;
-
-type UserProfileHistoryEntry = {
-  userId: string;
-  source: UserProfileSource;
-};
-
-type ReliabilityGuideSource = 'my-page' | 'user-profile' | null;
-
-function sortFollowersForInitialView(users: FriendUser[]) {
-  return [...users].sort((left, right) => {
-    if (left.isFollowing === right.isFollowing) {
-      return 0;
-    }
-
-    return left.isFollowing ? 1 : -1;
-  });
-}
-
-function mapFollowUsersToFriendUsers(
-  users: Array<{ nickname: string; userId: number }>,
-  followingUserIds: Set<number>,
-) {
-  return users.map((user) => ({
-    id: String(user.userId),
-    isFollowing: followingUserIds.has(user.userId),
-    name: user.nickname,
-    reliabilityGrade: undefined,
-    reviewCount: 0,
-    showFollowAction: true,
-  }));
-}
-
-async function hydrateFriendUsersWithReliability(
-  token: string,
-  users: Array<{ nickname: string; userId: number }>,
-  followingUserIds: Set<number>,
-) {
-  const results = await Promise.allSettled(
-    users.map(async (user) => {
-      const reliability = await getReliabilityScore(token, user.userId).catch(() => null);
-
-      return {
-        id: String(user.userId),
-        isFollowing: followingUserIds.has(user.userId),
-        name: user.nickname,
-        reliabilityGrade: normalizeReliabilityGrade(reliability?.grade) ?? undefined,
-        reviewCount: 0,
-        showFollowAction: true,
-      } satisfies FriendUser;
-    }),
-  );
-
-  return results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
-}
-
-function buildFriendUserFromSources(
-  userId: string,
-  sources: Array<FriendUser[]>,
-  fallbackProfiles: UserProfile[],
-) {
-  const matchedUser = sources.flat().find((user) => user.id === userId);
-
-  if (matchedUser) {
-    return { ...matchedUser };
-  }
-
-  const targetProfile = fallbackProfiles.find((profile) => profile.id === userId);
-
-  if (!targetProfile) {
-    return null;
-  }
-
-  return {
-    id: userId,
-    isFollowing: true,
-    name: targetProfile.nickname,
-    reliabilityGrade: targetProfile.reliabilityGrade,
-    reviewCount: Number(targetProfile.reviewCount ?? 0) || 0,
-    showFollowAction: true,
-  } satisfies FriendUser;
-}
-
-const HOME_PROFILE_ACCENT_COLORS = [
-  '#F46A67',
-  '#56CDB5',
-  '#8361C8',
-  '#F6B033',
-  '#5D8DF4',
-  '#E96DC0',
-];
-
-const retryAsync = async <T,>(
-  operation: () => Promise<T>,
-  attempts = 3,
-  delayMs = 450,
-): Promise<T> => {
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error;
-
-      if (attempt === attempts - 1) {
-        break;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-  }
-
-  throw lastError;
-};
-
-function mergeUserProfiles(
-  primaryProfiles: UserProfile[],
-  fallbackProfiles: UserProfile[],
-) {
-  const mergedProfiles = [...primaryProfiles];
-  const existingIds = new Set(primaryProfiles.map((profile) => profile.id));
-
-  fallbackProfiles.forEach((profile) => {
-    if (existingIds.has(profile.id)) {
-      return;
-    }
-
-    mergedProfiles.push(profile);
-  });
-
-  return mergedProfiles;
-}
-
-function createSearchResultUserProfile(user: {
-  id: string;
-  nickname: string;
-  profileImageUrl?: string;
-  reliabilityGrade?: string;
-}): UserProfile {
-  const numericId = Number(user.id);
-  const accentColor =
-    HOME_PROFILE_ACCENT_COLORS[
-      Number.isFinite(numericId)
-        ? Math.abs(numericId) % HOME_PROFILE_ACCENT_COLORS.length
-        : 0
-    ];
-
-  return {
-    id: user.id,
-    nickname: user.nickname,
-    profileImageUrl: user.profileImageUrl,
-    reliabilityGrade: user.reliabilityGrade,
-    reviewCount: '0',
-    representativeAccentColor: accentColor,
-    representativeListIsLiked: false,
-    representativeListId: undefined,
-    representativeListTitle: '대표 리스트',
-    representativeRestaurants: [],
-  };
-}
-
-function formatApiReviewDate(createdAt?: string) {
-  if (!createdAt) {
-    return '';
-  }
-
-  const parsed = new Date(createdAt);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return createdAt.replaceAll('-', '.').slice(0, 10);
-  }
-
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, '0');
-  const day = String(parsed.getDate()).padStart(2, '0');
-
-  return `${year}.${month}.${day}`;
-}
-
-function mapApiReviewToMyReview(review: {
-  id: number;
-  content: string;
-  createdAt: string;
-  dislikeCount: number;
-  imageUrls?: string[];
-  likeCount: number;
-  myVoteType?: 'DISLIKE' | 'LIKE';
-  restaurant?: {
-    id: number;
-    imageUrl?: string;
-    name: string;
-    regionName?: string;
-  };
-  restaurantName?: string;
-  categoryName?: string;
-}): MyReview {
-  return {
-    id: String(review.id),
-    myReaction:
-      review.myVoteType === 'LIKE'
-        ? 'like'
-        : review.myVoteType === 'DISLIKE'
-          ? 'dislike'
-          : null,
-    restaurantId: review.restaurant ? String(review.restaurant.id) : undefined,
-    restaurantImageUri: review.restaurant?.imageUrl,
-    restaurantName: review.restaurant?.name ?? review.restaurantName ?? '식당 정보 없음',
-    category: review.categoryName ?? review.restaurant?.regionName ?? '',
-    date: formatApiReviewDate(review.createdAt),
-    content: review.content,
-    likes: review.likeCount,
-    dislikes: review.dislikeCount,
-    imageUris: review.imageUrls ?? [],
-  };
-}
-
-function buildAiReservationResult(
-  draft: AiReservationDraft,
-  reservation: ApiReservation,
-): AiReservationResult {
-  if (reservation.status === 'CONFIRMED') {
-    return {
-      detail:
-        reservation.aiSummary ??
-        `${draft.reservationDateLabel} ${draft.reservationTimeLabel}에 ${draft.partySize}명 예약으로 정리했어요.`,
-      status: 'confirmed',
-      summary:
-        reservation.resultMessage ?? 'AI가 매장과 통화해 예약 가능하다는 답변을 받았어요.',
-      title: '예약 완료',
-    };
-  }
-
-  if (reservation.status === 'UNAVAILABLE') {
-    return {
-      detail:
-        reservation.failureReason ??
-        reservation.aiSummary ??
-        '매장에서 해당 시간대는 예약이 어렵다고 안내했어요.',
-      status: 'rejected',
-      summary:
-        reservation.resultMessage ?? '매장에서 해당 시간 예약이 어렵다고 답변했어요.',
-      title: '예약 실패',
-    };
-  }
-
-  if (reservation.status === 'NEEDS_CONFIRMATION') {
-    return {
-      detail:
-        reservation.aiSummary ??
-        reservation.failureReason ??
-        '매장에서 추가 확인이 필요하다고 안내했어요.',
-      status: 'needs-confirmation',
-      summary: reservation.resultMessage ?? '추가 확인이 필요한 예약으로 접수되었어요.',
-      title: '추가 확인 필요',
-    };
-  }
-
-  if (reservation.status === 'CANCELED') {
-    return {
-      detail:
-        reservation.resultMessage ??
-        reservation.failureReason ??
-        '예약 요청이 취소되었어요.',
-      status: 'canceled',
-      summary: '예약 요청이 더 이상 진행되지 않았어요.',
-      title: '예약 취소',
-    };
-  }
-
-  return {
-    detail:
-      reservation.failureReason ??
-      reservation.aiSummary ??
-      '전화를 받지 않아 예약 가능 여부를 확인하지 못했어요.',
-    status: 'no-answer',
-    summary:
-      reservation.resultMessage ?? '매장과 연결되지 않아 예약 확인을 마치지 못했어요.',
-    title: '전화 연결 실패',
-  };
-}
-
-type AuthSession = {
-  accessToken: string;
-  needsProfile?: boolean | null;
-  refreshToken: string | null;
-};
 
 export function AppRoot() {
   const fallbackMyLists: MyList[] = [];
@@ -805,48 +449,33 @@ export function AppRoot() {
     return Array.from(restaurantsById.values());
   }, [myLists]);
 
-  const applyStoredSession = async (
-    provider: LoginProvider,
-    nextSession: AuthSession,
-  ) => {
-    setLoginProvider(provider);
-    setSession(nextSession);
-    await writeStoredSession({
-      accessToken: nextSession.accessToken,
-      provider,
-      refreshToken: nextSession.refreshToken,
-    });
-  };
-
-  const clearAuthSession = async () => {
-    setSession(null);
-    setMyUserId(null);
-    setNickname('먹부림');
-    setProfileImageUrl(null);
-    setBirthDateLabel(null);
-    setGenderLabel(null);
-    setPendingNickname(null);
-    setRequiresProfileSetup(false);
-    setMyReliabilityGrade(null);
-    setMyReliabilityScore(null);
-    setMyHonorTitle(null);
-    setMyHonorPeriod(null);
-    setMyReviewItems([]);
-    setMyLists([]);
-    setMyFollowingUsers([]);
-    setMyFollowerUsers([]);
-    setFollowerCount(0);
-    setRecommendedRestaurantItems([]);
-    setRecommendedMealFriendItems([]);
-    setRecommendedUserProfiles([]);
-    setRankingEntries({
-      local: [],
-      national: [],
-    });
-    setLocalRankingRegion(fallbackLocalRankingRegion);
-    setScreen('login');
-    await clearStoredSession();
-  };
+  const { applyStoredSession, clearAuthSession } = createSessionHandlers({
+    fallbackLocalRankingRegion,
+    setBirthDateLabel,
+    setFollowerCount,
+    setGenderLabel,
+    setLocalRankingRegion,
+    setLoginProvider,
+    setMyFollowerUsers,
+    setMyFollowingUsers,
+    setMyHonorPeriod,
+    setMyHonorTitle,
+    setMyLists,
+    setMyReliabilityGrade,
+    setMyReliabilityScore,
+    setMyReviewItems,
+    setMyUserId,
+    setNickname,
+    setPendingNickname,
+    setProfileImageUrl,
+    setRankingEntries,
+    setRecommendedMealFriendItems,
+    setRecommendedRestaurantItems,
+    setRecommendedUserProfiles,
+    setRequiresProfileSetup,
+    setScreen,
+    setSession,
+  });
 
   const hasRejectedAuthError = (
     results: PromiseSettledResult<unknown>[],
@@ -1514,202 +1143,28 @@ export function AppRoot() {
     };
   }, [screen, selectedRepresentativeListId, selectedUserProfileId, session?.accessToken]);
 
-  const handleToggleUserProfileFollow = async (userId: string, nextIsFollowing: boolean) => {
-    if (!session?.accessToken) {
-      return;
-    }
-
-    const parsedUserId = Number(userId);
-
-    if (Number.isNaN(parsedUserId)) {
-      Alert.alert('팔로우를 변경하지 못했습니다.');
-      return;
-    }
-
-    setUserProfileFollowPendingIds((current) =>
-      current.includes(userId) ? current : [...current, userId],
-    );
-
-    try {
-      if (nextIsFollowing) {
-        await followUser(session.accessToken, parsedUserId);
-      } else {
-        await unfollowUser(session.accessToken, parsedUserId);
-      }
-
-      setUserProfileFollowStateById((current) => ({
-        ...current,
-        [userId]: nextIsFollowing,
-      }));
-      setRemoteUserProfiles((current) =>
-        current.map((profile) =>
-          profile.id === userId
-            ? {
-                ...profile,
-                followerCount: profile.followerCount
-                  ? String(Math.max(0, Number(profile.followerCount) + (nextIsFollowing ? 1 : -1)))
-                  : profile.followerCount,
-              }
-            : profile,
-        ),
-      );
-      setMyFollowingUsers((current) => {
-        if (nextIsFollowing) {
-          if (current.some((user) => user.id === userId)) {
-            return current;
-          }
-
-          const targetProfile =
-            remoteUserProfiles.find((profile) => profile.id === userId) ??
-            searchResultUserProfiles.find((profile) => profile.id === userId) ??
-            recommendedUserProfiles.find((profile) => profile.id === userId) ??
-            fallbackUserProfiles.find((profile) => profile.id === userId);
-
-          if (!targetProfile) {
-            return current;
-          }
-
-          return [
-            ...current,
-            {
-              id: userId,
-              isFollowing: true,
-              name: targetProfile.nickname,
-              reviewCount: Number(targetProfile.reviewCount ?? 0) || 0,
-              showFollowAction: true,
-            },
-          ];
-        }
-
-        return current.filter((user) => user.id !== userId);
-      });
-      setMyFollowerUsers((current) =>
-        sortFollowersForInitialView(
-          current.map((user) =>
-            user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
-          ),
-        ),
-      );
-    } catch {
-      Alert.alert('팔로우를 변경하지 못했습니다.');
-    } finally {
-      setUserProfileFollowPendingIds((current) => current.filter((id) => id !== userId));
-    }
-  };
-
-  const handleCreateReport = async (
-    targetType: 'REVIEW' | 'USER',
-    targetId: number,
-    reason: string,
-  ) => {
-    if (!session?.accessToken) {
-      Alert.alert('안내', '로그인 후 이용해 주세요.');
-      return;
-    }
-
-    try {
-      await createReport(session.accessToken, {
-        targetType,
-        targetId,
-        reason,
-      });
-      Alert.alert('안내', '신고가 접수되었습니다.');
-    } catch (error) {
-      const message =
-        error instanceof ApiError
-          ? `[${error.status}] ${error.message || '신고를 접수하지 못했습니다.'}`
-          : '신고를 접수하지 못했습니다.';
-      Alert.alert('안내', message);
-    }
-  };
-
-  const handleReportReview = (reviewId: string, reason: string) => {
-    const parsedReviewId = Number(reviewId);
-
-    if (Number.isNaN(parsedReviewId)) {
-      Alert.alert('안내', '신고 대상을 확인하지 못했습니다.');
-      return;
-    }
-
-    void handleCreateReport('REVIEW', parsedReviewId, reason);
-  };
-
-  const handleReportUser = (userId: string, reason: string) => {
-    const parsedUserId = Number(userId);
-
-    if (Number.isNaN(parsedUserId)) {
-      Alert.alert('안내', '신고 대상을 확인하지 못했습니다.');
-      return;
-    }
-
-    void handleCreateReport('USER', parsedUserId, reason);
-  };
-
-  const syncFollowStateAcrossScreens = (userId: string, nextIsFollowing: boolean) => {
-    setUserProfileFollowStateById((current) => ({
-      ...current,
-      [userId]: nextIsFollowing,
-    }));
-    setMyFollowingUsers((current) => {
-      if (nextIsFollowing) {
-        if (current.some((user) => user.id === userId)) {
-          return current;
-        }
-
-        const targetProfile =
-          remoteUserProfiles.find((profile) => profile.id === userId) ??
-          searchResultUserProfiles.find((profile) => profile.id === userId) ??
-          recommendedUserProfiles.find((profile) => profile.id === userId) ??
-          fallbackUserProfiles.find((profile) => profile.id === userId);
-
-        if (!targetProfile) {
-          return current;
-        }
-
-        return [
-          ...current,
-          {
-            id: userId,
-            isFollowing: true,
-            name: targetProfile.nickname,
-            reviewCount: Number(targetProfile.reviewCount ?? 0) || 0,
-            showFollowAction: true,
-          },
-        ];
-      }
-
-      return current.filter((user) => user.id !== userId);
-    });
-    setMyFollowerUsers((current) =>
-      sortFollowersForInitialView(
-        current.map((user) =>
-          user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
-        ),
-        ),
-      );
-  };
-
-  const syncFollowStateAcrossUserConnections = (userId: string, nextIsFollowing: boolean) => {
-    setUserProfileFollowStateById((current) => ({
-      ...current,
-      [userId]: nextIsFollowing,
-    }));
-    setRemoteUserFriendConnectionsByUserId((current) => {
-      const nextEntries = Object.entries(current).map(([profileId, connections]) => [
-        profileId,
-        {
-          followers: connections.followers.map((user) =>
-            user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
-          ),
-          following: connections.following.map((user) =>
-            user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
-          ),
-        },
-      ]);
-
-      return Object.fromEntries(nextEntries);
-      });
-  };
+  const { handleReportReview, handleReportUser } = createReportHandlers({
+    session,
+  });
+  const {
+    handleToggleUserProfileFollow,
+    syncFollowStateAcrossScreens,
+    syncFollowStateAcrossUserConnections,
+  } = createFollowHandlers({
+    fallbackUserProfiles,
+    myFollowerUsers,
+    recommendedUserProfiles,
+    remoteUserProfiles,
+    searchResultUserProfiles,
+    session,
+    setMyFollowerUsers,
+    setMyFollowingUsers,
+    setRemoteUserFriendConnectionsByUserId,
+    setRemoteUserProfiles,
+    setUserProfileFollowPendingIds,
+    setUserProfileFollowStateById,
+    sortFollowersForInitialView,
+  });
 
   const hydrateHomeRecommendations = async (
     token: string,
@@ -1895,148 +1350,15 @@ export function AppRoot() {
     }
   };
 
-  const refreshMyReviews = async (token: string, userId: number) => {
-    const reviews = await getUserReviews(token, userId);
-    setMyReviewItems(reviews.map(mapApiReviewToMyReview));
-  };
-
-  const applyStoredReviewReaction = (
-    items: MyReview[],
-    reviewId: string,
-    nextReaction: 'dislike' | 'like' | null,
-  ) =>
-    items.map((review) => {
-      if (review.id !== reviewId) {
-        return review;
-      }
-
-      const previousReaction = review.myReaction ?? null;
-      let likes = review.likes;
-      let dislikes = review.dislikes;
-
-      if (previousReaction === 'like') {
-        likes = Math.max(0, likes - 1);
-      } else if (previousReaction === 'dislike') {
-        dislikes = Math.max(0, dislikes - 1);
-      }
-
-      if (nextReaction === 'like') {
-        likes += 1;
-      } else if (nextReaction === 'dislike') {
-        dislikes += 1;
-      }
-
-      return {
-        ...review,
-        dislikes,
-        likes,
-        myReaction: nextReaction,
-      };
+  const { handleDeleteMyReview, handleToggleUserReviewReaction, refreshMyReviews } =
+    createReviewHandlers({
+      mapApiReviewToMyReview,
+      myUserId,
+      session,
+      setMyReviewItems,
+      setRemoteUserReviewsByUserId,
+      setReviewReactionPendingIds,
     });
-
-  const handleToggleUserReviewReaction = async (
-    reviewId: string,
-    nextReaction: 'dislike' | 'like' | null,
-  ) => {
-    if (!session?.accessToken) {
-      return false;
-    }
-
-    const parsedReviewId = Number(reviewId);
-
-    if (Number.isNaN(parsedReviewId)) {
-      Alert.alert('안내', '리뷰 반응을 변경하지 못했습니다.');
-      return false;
-    }
-
-    setReviewReactionPendingIds((current) =>
-      current.includes(reviewId) ? current : [...current, reviewId],
-    );
-
-    try {
-      if (nextReaction === null) {
-        await cancelReviewVote(session.accessToken, parsedReviewId);
-      } else {
-        await voteReview(session.accessToken, parsedReviewId, {
-          voteType: nextReaction === 'like' ? 'LIKE' : 'DISLIKE',
-        });
-      }
-
-      setMyReviewItems((current) => applyStoredReviewReaction(current, reviewId, nextReaction));
-      setRemoteUserReviewsByUserId((current) =>
-        Object.fromEntries(
-          Object.entries(current).map(([userId, reviews]) => [
-            userId,
-            applyStoredReviewReaction(reviews, reviewId, nextReaction),
-          ]),
-        ),
-      );
-
-      return true;
-    } catch {
-      Alert.alert('안내', '리뷰 반응을 변경하지 못했습니다.');
-      return false;
-    } finally {
-      setReviewReactionPendingIds((current) => current.filter((id) => id !== reviewId));
-    }
-  };
-
-  const handleDeleteMyReview = async (reviewId: string) => {
-    if (!session?.accessToken) {
-      return false;
-    }
-
-    const parsedReviewId = Number(reviewId);
-
-    if (Number.isNaN(parsedReviewId)) {
-      Alert.alert('안내', '리뷰를 삭제하지 못했습니다.');
-      return false;
-    }
-
-    const syncMyReviewsFromServer = async () => {
-      if (myUserId === null) {
-        setMyReviewItems((current) => current.filter((review) => review.id !== reviewId));
-        return false;
-      }
-
-      const reviews = await getUserReviews(session.accessToken, myUserId);
-      const mappedReviews = reviews.map(mapApiReviewToMyReview);
-      const stillExists = mappedReviews.some((review) => review.id === reviewId);
-
-      setMyReviewItems(mappedReviews);
-      setRemoteUserReviewsByUserId((current) => ({
-        ...current,
-        [String(myUserId)]: mappedReviews,
-      }));
-
-      return stillExists;
-    };
-
-    try {
-      await deleteReview(session.accessToken, parsedReviewId);
-      const stillExists = await syncMyReviewsFromServer();
-
-      if (stillExists) {
-        Alert.alert('안내', '리뷰를 삭제하지 못했습니다.');
-        return false;
-      }
-
-      return true;
-    } catch {
-      try {
-        const stillExists = await syncMyReviewsFromServer();
-
-        if (!stillExists) {
-          return true;
-        }
-      } catch {
-        // Ignore sync fallback failures and surface the original delete failure below.
-      }
-
-      Alert.alert('안내', '리뷰를 삭제하지 못했습니다.');
-      return false;
-    }
-  };
 
   useEffect(() => {
     if (!session?.accessToken) {
@@ -2304,376 +1626,34 @@ export function AppRoot() {
     setMyLists((current) => [...current, nextList]);
   };
 
-  const refreshMyLists = async (accessToken: string) => {
-    const summaries = await getMyLists(accessToken);
-    const listHydrationResults = await Promise.all(
-      summaries.map(async (summary, index) => {
-        try {
-          const detail = await getListDetail(accessToken, summary.id);
-          return {
-            isLiked: detail.isLiked ?? summary.isLiked ?? false,
-            list: mapListDetailToMyList(detail, index),
-          };
-        } catch {
-          return {
-            isLiked: summary.isLiked ?? false,
-            list: mapListSummaryToMyList(summary, index),
-          };
-        }
-      }),
-    );
+  const {
+    handleDeleteMyList,
+    handleRenameMyList,
+    handleSetRepresentativeMyList,
+    handleToggleMyListPrivacy,
+    refreshMyLists,
+  } = createMyListHandlers({
+    session,
+    setMyLists,
+    setMyListLikeStateById,
+  });
 
-    setMyLists(listHydrationResults.map((item) => item.list));
-    setMyListLikeStateById(
-      Object.fromEntries(listHydrationResults.map((item) => [item.list.id, item.isLiked])),
-    );
-    return listHydrationResults.map((item) => item.list);
-  };
-
-  const buildNextListsAfterDelete = (lists: MyList[], targetId: string) => {
-    const nextLists = lists.filter((list) => list.id !== targetId);
-
-    if (!nextLists.some((list) => list.isRepresentative) && nextLists.length > 0) {
-      return nextLists.map((list, index) => ({
-        ...list,
-        isRepresentative: index === 0,
-        isPrivate: index === 0 ? false : list.isPrivate,
-      }));
-    }
-
-    return nextLists;
-  };
-
-  const handleRenameMyList = async (listId: string, title: string) => {
-    const trimmedTitle = title.trim();
-
-    if (!trimmedTitle) {
-      return;
-    }
-
-    const applyLocalRename = () => {
-      setMyLists((current) =>
-        current.map((list) =>
-          list.id === listId
-            ? {
-                ...list,
-                title: trimmedTitle,
-              }
-            : list,
-        ),
-      );
-    };
-
-    if (!session?.accessToken) {
-      applyLocalRename();
-      return;
-    }
-
-    const parsedListId = Number(listId);
-
-    if (Number.isNaN(parsedListId)) {
-      applyLocalRename();
-      return;
-    }
-
-    await updateList(session.accessToken, parsedListId, {
-      title: trimmedTitle,
-    });
-    applyLocalRename();
-  };
-
-  const handleToggleMyListPrivacy = async (listId: string) => {
-    const applyLocalToggle = () => {
-      setMyLists((current) =>
-        current.map((list) =>
-          list.id === listId
-            ? {
-                ...list,
-                isPrivate: !list.isPrivate,
-              }
-            : list,
-        ),
-      );
-    };
-
-    if (!session?.accessToken) {
-      applyLocalToggle();
-      return;
-    }
-
-    const parsedListId = Number(listId);
-
-    if (Number.isNaN(parsedListId)) {
-      applyLocalToggle();
-      return;
-    }
-
-    await toggleListVisibility(session.accessToken, parsedListId);
-    applyLocalToggle();
-  };
-
-  const handleSetRepresentativeMyList = async (listId: string) => {
-    const applyLocalRepresentative = () => {
-      setMyLists((current) =>
-        current.map((list) => ({
-          ...list,
-          isRepresentative: list.id === listId,
-          isPrivate: list.id === listId ? false : list.isPrivate,
-        })),
-      );
-    };
-
-    if (!session?.accessToken) {
-      applyLocalRepresentative();
-      return;
-    }
-
-    const parsedListId = Number(listId);
-
-    if (Number.isNaN(parsedListId)) {
-      applyLocalRepresentative();
-      return;
-    }
-
-    await setRepresentativeList(session.accessToken, parsedListId);
-    applyLocalRepresentative();
-  };
-
-  const handleDeleteMyList = async (listId: string) => {
-    const applyLocalDelete = () => {
-      setMyLists((current) => buildNextListsAfterDelete(current, listId));
-    };
-
-    if (!session?.accessToken) {
-      applyLocalDelete();
-      return;
-    }
-
-    const parsedListId = Number(listId);
-
-    if (Number.isNaN(parsedListId)) {
-      applyLocalDelete();
-      return;
-    }
-
-    await deleteList(session.accessToken, parsedListId);
-    applyLocalDelete();
-  };
-
-  const handleToggleMyFriendFollow = async ({
-    nextIsFollowing,
-    sourceTab,
-    userId,
-  }: FollowTogglePayload) => {
-    if (!session?.accessToken) {
-      return false;
-    }
-
-    const parsedUserId = Number(userId);
-
-    if (Number.isNaN(parsedUserId)) {
-      Alert.alert('안내', '팔로우를 변경하지 못했습니다.');
-      return false;
-    }
-
-    try {
-      if (nextIsFollowing) {
-        await followUser(session.accessToken, parsedUserId);
-      } else {
-        await unfollowUser(session.accessToken, parsedUserId);
-      }
-    } catch (error) {
-      try {
-        const followStatus = await getFollowStatus(session.accessToken, parsedUserId);
-        const currentIsFollowing = Boolean(followStatus);
-
-        if (currentIsFollowing === nextIsFollowing) {
-          syncFollowStateAcrossUserConnections(userId, nextIsFollowing);
-
-          if (sourceTab === 'following') {
-            const nextFollowUser = buildFriendUserFromSources(
-              userId,
-              [
-                myFollowerUsers,
-                myFollowingUsers,
-                ...Object.values(remoteUserFriendConnectionsByUserId).map((connection) => [
-                  ...connection.followers,
-                  ...connection.following,
-                ]),
-              ],
-              mergeUserProfiles(
-                mergeUserProfiles(
-                  remoteUserProfiles,
-                  mergeUserProfiles(searchResultUserProfiles, recommendedUserProfiles),
-                ),
-                fallbackUserProfiles,
-              ),
-            );
-
-            setMyFollowingUsers((current) => {
-              if (nextIsFollowing) {
-                if (!nextFollowUser || current.some((user) => user.id === userId)) {
-                  return current;
-                }
-
-                return [...current, { ...nextFollowUser, isFollowing: true }];
-              }
-
-              return current.filter((user) => user.id !== userId);
-            });
-            setMyFollowerUsers((current) =>
-              sortFollowersForInitialView(
-                current.map((user) =>
-                  user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
-                ),
-              ),
-            );
-            return true;
-          }
-
-          let targetFollower: FriendUser | null = null;
-
-          setMyFollowerUsers((current) =>
-            sortFollowersForInitialView(
-              current.map((user) => {
-                if (user.id !== userId) {
-                  return user;
-                }
-
-                targetFollower = { ...user, isFollowing: nextIsFollowing };
-                return targetFollower;
-              }),
-            ),
-          );
-
-          setMyFollowingUsers((current) => {
-            if (nextIsFollowing) {
-              if (!targetFollower || current.some((user) => user.id === userId)) {
-                return current;
-              }
-
-              return [...current, targetFollower];
-            }
-
-            return current.filter((user) => user.id !== userId);
-          });
-
-          return true;
-        }
-      } catch {
-        // Ignore follow status reconciliation errors and fall through to message handling.
-      }
-
-      if (error instanceof ApiError) {
-        const normalizedMessage = error.message.replace(/\s/g, '');
-        const isAlreadyFollowingError =
-          nextIsFollowing &&
-          (normalizedMessage.includes('이미팔로우') || normalizedMessage.includes('이미팔로잉'));
-        const isAlreadyUnfollowedError =
-          !nextIsFollowing &&
-          (error.status === 404 ||
-            normalizedMessage.includes('이미언팔로우') ||
-            normalizedMessage.includes('팔로우상태가아닙') ||
-            normalizedMessage.includes('팔로우하지않'));
-
-        if (!(isAlreadyFollowingError || isAlreadyUnfollowedError)) {
-          Alert.alert('안내', error.message || '팔로우를 변경하지 못했습니다.');
-          return false;
-        }
-      } else {
-        Alert.alert('안내', '팔로우를 변경하지 못했습니다.');
-        return false;
-      }
-    }
-
-    syncFollowStateAcrossUserConnections(userId, nextIsFollowing);
-
-    if (sourceTab === 'following') {
-      const nextFollowUser = buildFriendUserFromSources(
-        userId,
-        [
-          myFollowerUsers,
-          myFollowingUsers,
-          ...Object.values(remoteUserFriendConnectionsByUserId).map((connection) => [
-            ...connection.followers,
-            ...connection.following,
-          ]),
-        ],
-        mergeUserProfiles(
-          mergeUserProfiles(
-            remoteUserProfiles,
-            mergeUserProfiles(searchResultUserProfiles, recommendedUserProfiles),
-          ),
-          fallbackUserProfiles,
-        ),
-      );
-
-      setMyFollowingUsers((current) => {
-        if (nextIsFollowing) {
-          if (!nextFollowUser || current.some((user) => user.id === userId)) {
-            return current;
-          }
-
-          return [...current, { ...nextFollowUser, isFollowing: true }];
-        }
-
-        return current.filter((user) => user.id !== userId);
-      });
-      setMyFollowerUsers((current) =>
-        sortFollowersForInitialView(
-          current.map((user) =>
-            user.id === userId ? { ...user, isFollowing: nextIsFollowing } : user,
-          ),
-        ),
-      );
-      return true;
-    }
-
-    const nextFollowUser = buildFriendUserFromSources(
-      userId,
-      [
-        myFollowerUsers,
-        myFollowingUsers,
-        ...Object.values(remoteUserFriendConnectionsByUserId).map((connection) => [
-          ...connection.followers,
-          ...connection.following,
-        ]),
-      ],
-      mergeUserProfiles(
-        mergeUserProfiles(
-          remoteUserProfiles,
-          mergeUserProfiles(searchResultUserProfiles, recommendedUserProfiles),
-        ),
-        fallbackUserProfiles,
-      ),
-    );
-
-    setMyFollowerUsers((current) =>
-      sortFollowersForInitialView(
-        current.map((user) => {
-          if (user.id !== userId) {
-            return user;
-          }
-
-          return { ...user, isFollowing: nextIsFollowing };
-        }),
-      ),
-    );
-
-    setMyFollowingUsers((current) => {
-      if (nextIsFollowing) {
-        if (!nextFollowUser || current.some((user) => user.id === userId)) {
-          return current;
-        }
-
-        return [...current, { ...nextFollowUser, isFollowing: true }];
-      }
-
-      return current.filter((user) => user.id !== userId);
-    });
-
-    return true;
-  };
+  const { handleToggleMyFriendFollow } = createMyFriendFollowHandlers({
+    buildFriendUserFromSources,
+    fallbackUserProfiles,
+    mergeUserProfiles,
+    myFollowerUsers,
+    myFollowingUsers,
+    recommendedUserProfiles,
+    remoteUserFriendConnectionsByUserId,
+    remoteUserProfiles,
+    searchResultUserProfiles,
+    session,
+    setMyFollowerUsers,
+    setMyFollowingUsers,
+    sortFollowersForInitialView,
+    syncFollowStateAcrossUserConnections,
+  });
 
   const handleRemoveRestaurantsFromMyList = async (
     listId: string,
@@ -3620,28 +2600,6 @@ export function AppRoot() {
     setScreen('restaurant-detail');
   };
 
-  const handleUpdateProfileImage = async (selection: {
-    fileName?: string | null;
-    mimeType?: string | null;
-    uri: string;
-  }) => {
-    if (!session?.accessToken) {
-      throw new Error('로그인이 필요합니다.');
-    }
-
-    const uploadedImageUrl = await uploadImageWithPresignedUrl({
-      fileName: selection.fileName,
-      mimeType: selection.mimeType,
-      token: session.accessToken,
-      type: 'PROFILE',
-      uri: selection.uri,
-    });
-
-    await updateMyUser(session.accessToken, { profileImageUrl: uploadedImageUrl });
-    setProfileImageUrl(uploadedImageUrl);
-    return uploadedImageUrl;
-  };
-
   const openUserProfileFromRestaurantDetail = (authorName: string) => {
     const matchedProfile = visibleUserProfiles.find((item) => item.nickname === authorName);
 
@@ -3727,859 +2685,412 @@ export function AppRoot() {
     setScreen('ranking-detail');
   };
 
-  const handleLoginSuccess = async (
-    provider: LoginProvider,
-    nextSession: AuthSession,
-  ) => {
-    await applyStoredSession(provider, nextSession);
-    setActiveTab('home');
+  const {
+    handleDeleteAccount,
+    handleLoginSuccess,
+    handleLogout,
+    handleSignupNicknameSubmit,
+    handleSignupProfileSubmit,
+    handleUpdateProfileImage,
+  } = createAuthFlowHandlers({
+    applyStoredSession,
+    clearAuthSession,
+    hydrateHomeRecommendations,
+    pendingNickname,
+    requiresProfileSetup,
+    session,
+    setActiveTab,
+    setBirthDateLabel,
+    setGenderLabel,
+    setNickname,
+    setPendingNickname,
+    setProfileImageUrl,
+    setRequiresProfileSetup,
+    setScreen,
+    setSelectedRestaurants,
+    setTasteFlowSource,
+    setTasteListName,
+    waitForServerUserReady,
+  });
 
-    try {
-      const me = await getMyInfo(nextSession.accessToken);
-      const lists = await getMyLists(nextSession.accessToken);
-
-      setNickname(me.nickname);
-      setProfileImageUrl(me.profileImageUrl ?? null);
-      setBirthDateLabel(formatBirthDate(me));
-      setGenderLabel(formatGenderLabel(me.gender));
-
-      const derivedNeedsProfile =
-        !me.birthYear || !me.birthMonth || !me.birthDay || !me.gender;
-      const needsSignupProfile = nextSession.needsProfile ?? derivedNeedsProfile;
-
-      setRequiresProfileSetup(needsSignupProfile);
-
-      if (lists.length === 0) {
-        setTasteFlowSource('onboarding');
-        setScreen('signup-nickname');
+  const experienceScreen = AppRootExperienceScreens({
+    accessToken: session?.accessToken,
+    aiReservationDraft,
+    aiReservationRestaurant,
+    aiReservationResult,
+    getFavoriteColor,
+    handleBackFromRestaurantDetail,
+    handleConfirmLadderCount,
+    handleConfirmSnailRaceCount,
+    handleStartWorldCup,
+    handleSubmitRestaurantReview,
+    homeRestoreAfterReturn: () => {
+      setActiveTab('home');
+      setHomeRestoreAnimated(false);
+      setHomeRestoreKey((current) => current + 1);
+      setScreen('tabs');
+    },
+    ladderPlayerCount,
+    ladderSetup,
+    mapSearchQuery,
+    myUserFollowingIds: myFollowingUsers
+      .map((user) => Number(user.id))
+      .filter((userId) => Number.isFinite(userId)),
+    myUserId,
+    onAiReservationError: (message) => {
+      Alert.alert('안내', message);
+      setScreen('ai-reservation-form');
+    },
+    onBackFromAiChat: () => setScreen('tabs'),
+    onBackFromReliabilityGuide: () => {
+      if (reliabilityGuideSource === 'user-profile') {
+        setScreen('user-profile');
         return;
       }
 
-      if (needsSignupProfile) {
-        setScreen('signup-profile');
+      setActiveTab('my');
+      setScreen('tabs');
+    },
+    onBackFromWriteReview: () => {
+      setRestaurantDetailInitialTab('review');
+      setScreen('restaurant-detail');
+    },
+    onBackToRestaurantDetail: () => setScreen('restaurant-detail'),
+    onChangeLadderPlayerCount: setLadderPlayerCount,
+    onChangeSnailRaceCount: setSnailRaceCount,
+    onClearSearchBar: () => {
+      setSearchScreenInitialQuery('');
+      setSearchQuery('');
+      setScreen('search');
+    },
+    onCompleteReservation: (reservation) => {
+      const nextResult = buildAiReservationResult(aiReservationDraft!, reservation);
+      setAiReservationResult(nextResult);
+      setScreen('ai-reservation-result');
+    },
+    onGoToMapSearchResult: (query) => {
+      setMapSearchQuery(query);
+      setActiveTab('map');
+      setScreen('tabs');
+    },
+    onMapSearchClose: () => {
+      setActiveTab('map');
+      setScreen('tabs');
+    },
+    onNewsBack: async () => {
+      if (session?.accessToken) {
+        try {
+          const unreadCount = await getUnreadNotificationCount(session.accessToken);
+          setHasUnreadNews(unreadCount > 0);
+        } catch {
+          setHasUnreadNews(false);
+        }
+      } else {
+        setHasUnreadNews(false);
+      }
+
+      setScreen('tabs');
+    },
+    onOpenAiReservation: openAiReservation,
+    onOpenAddToListFromRestaurantDetail: (restaurant) =>
+      openAddRestaurantToListFlow(restaurant, 'restaurant-detail'),
+    onOpenEditReview: openEditReview,
+    onOpenRegionRanking: openRegionRankingDetail,
+    onOpenRestaurantDetailFromSearch: (restaurantName, restaurantId) =>
+      openRestaurantDetail(restaurantName, { type: 'search-result' }, restaurantId),
+    onOpenSearch: (query) => {
+      setSearchScreenInitialQuery(query);
+      setSearchQuery(query);
+      setSearchResultTab('restaurant');
+      setScreen('search-result');
+    },
+    onOpenSearchResultUserProfile: (user) => {
+      setSearchResultUserProfiles((current) => {
+        if (current.some((item) => item.id === user.id)) {
+          return current;
+        }
+
+        return [...current, createSearchResultUserProfile(user)];
+      });
+      setUserProfileSource({ type: 'search-result' });
+      setSelectedUserProfileId(user.id);
+      setScreen('user-profile');
+    },
+    onOpenUserProfileFromRestaurantDetail: openUserProfileFromRestaurantDetail,
+    onOpenWriteReview: openWriteReview,
+    onReportReview: handleReportReview,
+    onReservationDraftChange: setAiReservationDraft,
+    onRetryReservation: () => {
+      setAiReservationResult(null);
+      setScreen('ai-reservation-form');
+    },
+    onSearchResultBack: () => {
+      setActiveTab('home');
+      setHomeRestoreAnimated(false);
+      setHomeRestoreKey((current) => current + 1);
+      setScreen('tabs');
+    },
+    onSearchResultQueryChange: setSearchQuery,
+    onSearchResultTabChange: setSearchResultTab,
+    onSearchScreenClose: () => {
+      setSearchScreenInitialQuery('');
+      setScreen('tabs');
+    },
+    onSearchScreenOpenFromResult: () => {
+      setSearchScreenInitialQuery(searchQuery);
+      setScreen('search');
+    },
+    onSetAiReservationResult: setAiReservationResult,
+    onSetScreen: setScreen,
+    onSetWorldCupWinner: setWorldCupWinner,
+    onSyncReviewAuthorFollowChange: syncFollowStateAcrossScreens,
+    query: searchQuery,
+    reliabilityGuideGrade,
+    restaurantDetailInitialTab,
+    screen,
+    searchResultTab,
+    searchScreenInitialQuery,
+    selectedRestaurantId,
+    selectedRestaurantName,
+    sessionAccessToken: session?.accessToken,
+    setWorldCupWinnerAndOpenResult: (winner) => {
+      setWorldCupWinner(winner);
+      setScreen('worldcup-result');
+    },
+    snailRaceCount,
+    worldCupCategory,
+    worldCupWinner,
+    writeReviewInitialContent,
+    writeReviewMode,
+    writeReviewRestaurantName,
+  });
+
+  const accountScreen = AppRootAccountScreens({
+    birthDateLabel,
+    fallbackSelectedUserProfile,
+    followerUsers: myFollowerUsers,
+    followingUsers: myFollowingUsers,
+    genderLabel,
+    handleBackFromRankingDetail,
+    handleBlockedOwnListLike,
+    handleDeleteAccount,
+    handleDeleteMyList,
+    handleDeleteMyReview,
+    handleDeleteRestaurantsFromMyList: handleRemoveRestaurantsFromMyList,
+    handleLogout,
+    handleMyFriendFollowToggle: handleToggleMyFriendFollow,
+    handleMyListRename: handleRenameMyList,
+    handleMyListSetRepresentative: handleSetRepresentativeMyList,
+    handleMyListTogglePrivacy: handleToggleMyListPrivacy,
+    handleOpenRestaurantDetail: openRestaurantDetail,
+    handleReportUser: handleReportUser,
+    handleToggleMyListLike: handleToggleMyListLike,
+    handleToggleReviewReaction: handleToggleUserReviewReaction,
+    handleToggleUserProfileFollow: handleToggleUserProfileFollow,
+    handleUpdateProfileImage,
+    handleUpdateRestaurantRatingsInMyList,
+    loginProvider,
+    myFriendsInitialTab,
+    myListLikeCountById,
+    myListLikePendingIds,
+    myListLikeStateById,
+    myLists,
+    myReviewItems,
+    myUserId,
+    nickname,
+    onBackFromHomeUserProfile: () => {
+      setActiveTab('home');
+      setHomeRestoreAnimated(false);
+      setHomeRestoreKey((current) => current + 1);
+      setScreen('tabs');
+    },
+    onBackToMyInfo: () => setScreen('my-info'),
+    onBackToSettings: () => setScreen('settings'),
+    onChangeMyFriendsTab: setMyFriendsInitialTab,
+    onCreateMyList: () => {
+      setTasteFlowSource('my-lists');
+      setSelectedRestaurants([]);
+      setTasteListName('');
+      setScreen('taste-list-name');
+    },
+    onOpenNestedUserProfile: openNestedUserProfile,
+    onOpenReliabilityGuideFromUserProfile: () =>
+      openReliabilityGuide('user-profile', selectedVisibleUserProfile?.reliabilityGrade),
+    onOpenUserProfileFromMyFriends: (userId) => {
+      setUserProfileSource({ type: 'my-friends', tab: myFriendsInitialTab });
+      setSelectedUserProfileId(userId);
+      setScreen('user-profile');
+    },
+    onSetMyFriendsInitialTab: setMyFriendsInitialTab,
+    onSetMyLists: setMyLists,
+    onSetNicknameAndReturn: (nextNickname) => {
+      setNickname(nextNickname);
+      setScreen('my-info');
+    },
+    onSetScreen: setScreen,
+    onSetSelectedMyListId: setSelectedMyListId,
+    onSetSelectedUserProfileId: setSelectedUserProfileId,
+    onSetUserProfileHistory: setUserProfileHistory,
+    onSetUserProfileSource: setUserProfileSource,
+    profileImageUrl,
+    rankingDetail,
+    reviewReactionPendingIds,
+    reviewsByUserId: userReviewsById,
+    screen,
+    selectedMyListId,
+    selectedUserProfileId,
+    selectedUserProfileIsFollowing,
+    selectedVisibleUserProfile,
+    userFriendConnectionsById,
+    userProfileFollowPendingIds,
+    userProfileHistory,
+    userProfileSource,
+    visibleUserProfiles,
+  });
+
+  const flowScreen = AppRootFlowScreens({
+    accessToken: session?.accessToken,
+    addToListRestaurant: getAddToListRestaurant() ?? initialRestaurantPool[0],
+    addToListSource,
+    addToListTargetListIds,
+    completionSource,
+    myLists,
+    nickname,
+    onAddToListSelectionComplete: (listIds) => {
+      setAddToListTargetListIds(listIds);
+      setScreen('add-to-list-rating');
+    },
+    onBackFromAddToListSelect: () => {
+      if (addToListSource === 'restaurant-detail') {
+        setScreen('restaurant-detail');
+        return;
+      }
+
+      setActiveTab('map');
+      setScreen('tabs');
+    },
+    onBackFromComplete: () => {
+      if (completionSource === 'add-to-list') {
+        const nextSource = addToListSource;
+        setAddToListSource(null);
+        setAddToListRestaurantSnapshot(null);
+        setAddToListRestaurantId(null);
+        setAddToListRestaurantName(null);
+        setAddToListTargetListIds([]);
+        setCompletionSource('taste-flow');
+
+        if (nextSource === 'restaurant-detail') {
+          setScreen('restaurant-detail');
+          return;
+        }
+
+        setActiveTab('map');
+        setScreen('tabs');
+        return;
+      }
+
+      if (tasteFlowSource === 'my-lists') {
+        setTasteFlowSource('onboarding');
+        setSelectedRestaurants([]);
+        setTasteListName('');
+        setScreen('my-lists');
         return;
       }
 
       setScreen('tabs');
-    } catch {
-      setRequiresProfileSetup(nextSession.needsProfile ?? true);
-      setTasteFlowSource('onboarding');
-      setScreen('signup-nickname');
-    }
-  };
-
-  const handleSignupNicknameSubmit = async (nextNickname: string) => {
-    setNickname(nextNickname);
-    setPendingNickname(nextNickname);
-
-    if (!requiresProfileSetup && session?.accessToken) {
-      try {
-        await updateMyUser(session.accessToken, { nickname: nextNickname });
-        setPendingNickname(null);
-      } catch {
-        // Keep the local nickname and try again during later onboarding steps.
+      setActiveTab('home');
+    },
+    onBackFromTasteListName: () =>
+      setScreen(tasteFlowSource === 'my-lists' ? 'my-lists' : 'signup-profile'),
+    onCompleteTasteRating: async (ratings) => {
+      if (tasteListName.trim()) {
+        await createTasteList(tasteListName.trim(), selectedRestaurants, ratings);
       }
-    }
-
-    if (requiresProfileSetup) {
-      setScreen('signup-profile');
-      return;
-    }
-
-    setTasteFlowSource('onboarding');
-    setTasteListName('');
-    setSelectedRestaurants([]);
-    setScreen('taste-list-name');
-  };
-
-  const handleSignupProfileSubmit = async (profile: {
-    birthDay: number;
-    birthMonth: number;
-    birthYear: number;
-    gender: 'FEMALE' | 'MALE';
-  }) => {
-    if (!session?.accessToken) {
-      throw new Error('濡쒓렇???뺣낫媛 ?놁뼱???꾨줈?꾩쓣 ??ν븷 ???놁뼱??');
-    }
-
-    if (pendingNickname) {
-      try {
-        console.log('[signup profile] syncing pending nickname');
-        await updateMyUser(session.accessToken, { nickname: pendingNickname });
-        setPendingNickname(null);
-        console.log('[signup profile] pending nickname synced');
-      } catch {
-        console.log('[signup profile] pending nickname sync failed');
-        // Proceed with profile save even if nickname sync needs to be retried later.
-      }
-    }
-
-    console.log('[signup profile] submitting profile');
-    await signupProfile(session.accessToken, profile);
-    console.log('[signup profile] profile submitted');
-    setBirthDateLabel(`${profile.birthYear}년 ${profile.birthMonth}월 ${profile.birthDay}일`);
-    setGenderLabel(profile.gender === 'MALE' ? '남성' : '여성');
-    setRequiresProfileSetup(false);
-    console.log('[signup profile] waiting for server user ready');
-    await waitForServerUserReady(session.accessToken, 4);
-    console.log('[signup profile] server user ready');
-    console.log('[signup profile] hydrating home recommendations');
-    await hydrateHomeRecommendations(session.accessToken, { retryOnEmpty: true });
-    console.log('[signup profile] home recommendations hydrated');
-    console.log('[signup profile] loading lists');
-    const lists = await getMyLists(session.accessToken);
-    console.log('[signup profile] lists loaded', { count: lists.length });
-    setTasteFlowSource('onboarding');
-    if (lists.length === 0) {
-      setTasteListName('');
-      setSelectedRestaurants([]);
-      console.log('[signup profile] routing to taste-list-name');
-      setScreen('taste-list-name');
-      return;
-    }
-
-    console.log('[signup profile] routing to tabs');
-    setScreen('tabs');
-  };
-
-  const handleLogout = async () => {
-    await clearAuthSession();
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!session?.accessToken) {
-      Alert.alert('안내', '로그인 상태를 확인해 주세요.');
-      return;
-    }
-
-    try {
-      await deleteMyUser(session.accessToken);
-      await clearAuthSession();
-    } catch (error) {
-      const message =
-        error instanceof ApiError
-          ? error.message || '회원탈퇴를 진행하지 못했습니다.'
-          : '회원탈퇴를 진행하지 못했습니다.';
-      Alert.alert('안내', message);
-    }
-  };
+      setCompletionSource('taste-flow');
+      setScreen('complete');
+    },
+    onFlowLoginSuccess: handleLoginSuccess,
+    onOpenAddToListRatingBack: () => setScreen('add-to-list-select'),
+    onOpenRatingBack: () => setScreen('taste'),
+    onOpenSignupNicknameBack: () => setScreen('login'),
+    onOpenSignupProfileBack: () => setScreen('signup-nickname'),
+    onOpenTasteBack: () => setScreen('taste-list-name'),
+    onSelectTasteRestaurants: setSelectedRestaurants,
+    onSetScreen: setScreen,
+    onSetTasteListName: setTasteListName,
+    onSubmitAddToListRating: handleAddRestaurantToListComplete,
+    onSubmitSignupNickname: handleSignupNicknameSubmit,
+    onSubmitSignupProfile: handleSignupProfileSubmit,
+    screen,
+    selectedRestaurants,
+    tasteFlowSource,
+    tasteListName,
+  });
 
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" backgroundColor="#FFFFFF" />
       {screen === 'auth-loading' ? (
         <AuthLoadingScreen />
-      ) : screen === 'login' ? (
-        <OnboardingLoginScreen
-          onLoginSuccess={(provider, nextSession) =>
-            void handleLoginSuccess(provider as LoginProvider, nextSession)
-          }
-        />
-      ) : screen === 'signup-nickname' ? (
-        <SignupNicknameScreen
-          initialNickname=""
-          onBack={() => setScreen('login')}
-          onSubmit={handleSignupNicknameSubmit}
-        />
-      ) : screen === 'signup-profile' ? (
-        <SignupProfileScreen
-          nickname={nickname}
-          onBack={() => setScreen('signup-nickname')}
-          onSubmit={handleSignupProfileSubmit}
-        />
-      ) : screen === 'taste-list-name' ? (
-        <TasteListNameScreen
-          nickname={nickname}
-          mode={tasteFlowSource === 'my-lists' ? 'new-list' : 'first-list'}
-          onBack={() =>
-            setScreen(tasteFlowSource === 'my-lists' ? 'my-lists' : 'signup-profile')
-          }
-          onSubmit={(name) => {
-            setTasteListName(name);
-            setScreen('taste');
-          }}
-        />
-      ) : screen === 'taste' ? (
-        <TasteSelectionScreen
+      ) : flowScreen ? (
+        flowScreen
+      ) : experienceScreen ? (
+        experienceScreen
+      ) : accountScreen ? (
+        accountScreen
+      ) : (
+        <AppRootTabScreens
           accessToken={session?.accessToken}
-          onBack={() => setScreen('taste-list-name')}
-          onConfirm={(restaurants) => {
-            setSelectedRestaurants(restaurants);
-            setScreen('rating');
-          }}
-        />
-      ) : screen === 'rating' ? (
-        <TasteRatingScreen
-          listName={tasteListName}
-          restaurants={selectedRestaurants}
-          onBack={() => setScreen('taste')}
-          onSubmit={async (ratings) => {
-            if (tasteListName.trim()) {
-              await createTasteList(tasteListName.trim(), selectedRestaurants, ratings);
-            }
-            setCompletionSource('taste-flow');
-            setScreen('complete');
-          }}
-        />
-      ) : screen === 'add-to-list-select' ? (
-        <AddRestaurantToListSelectScreen
-          restaurant={getAddToListRestaurant() ?? initialRestaurantPool[0]}
-          lists={myLists}
-          onBack={() => {
-            if (addToListSource === 'restaurant-detail') {
-              setScreen('restaurant-detail');
-              return;
-            }
-
-            setActiveTab('map');
-            setScreen('tabs');
-          }}
-          onSelectLists={(listIds) => {
-            setAddToListTargetListIds(listIds);
-            setScreen('add-to-list-rating');
-          }}
-        />
-      ) : screen === 'add-to-list-rating' ? (
-        <AddRestaurantToListRatingScreen
-          restaurant={getAddToListRestaurant() ?? initialRestaurantPool[0]}
-          lists={myLists.filter((item) => addToListTargetListIds.includes(item.id))}
-          onBack={() => setScreen('add-to-list-select')}
-          onSubmit={handleAddRestaurantToListComplete}
-        />
-      ) : screen === 'complete' ? (
-        <RegistrationCompleteScreen
-          onComplete={() => {
-            if (completionSource === 'add-to-list') {
-              const nextSource = addToListSource;
-              setAddToListSource(null);
-              setAddToListRestaurantSnapshot(null);
-              setAddToListRestaurantId(null);
-              setAddToListRestaurantName(null);
-              setAddToListTargetListIds([]);
-              setCompletionSource('taste-flow');
-
-              if (nextSource === 'restaurant-detail') {
-                setScreen('restaurant-detail');
-                return;
-              }
-
-              setActiveTab('map');
-              setScreen('tabs');
-              return;
-            }
-
-            if (tasteFlowSource === 'my-lists') {
-              setTasteFlowSource('onboarding');
-              setSelectedRestaurants([]);
-              setTasteListName('');
-              setScreen('my-lists');
-              return;
-            }
-
-            setScreen('tabs');
-            setActiveTab('home');
-          }}
-        />
-      ) : screen === 'ai-chat' ? (
-        <AiChatScreen onBack={() => setScreen('tabs')} />
-      ) : screen === 'news' ? (
-        <NewsScreen
-          accessToken={session?.accessToken}
-          onBack={async () => {
-            if (session?.accessToken) {
-              try {
-                const unreadCount = await getUnreadNotificationCount(session.accessToken);
-                setHasUnreadNews(unreadCount > 0);
-              } catch {
-                setHasUnreadNews(false);
-              }
-            } else {
-              setHasUnreadNews(false);
-            }
-
-            setScreen('tabs');
-          }}
-        />
-        ) : screen === 'search' ? (
-          <SearchScreen
-            initialQuery={searchScreenInitialQuery}
-            onClose={() => {
-              setSearchScreenInitialQuery('');
-              setScreen('tabs');
-            }}
-            onSearch={(query) => {
-              setSearchScreenInitialQuery(query);
-              setSearchQuery(query);
-              setSearchResultTab('restaurant');
-              setScreen('search-result');
-            }}
-          />
-        ) : screen === 'search-result' ? (
-          <SearchResultScreen
-            accessToken={session?.accessToken}
-            onClearSearchBar={() => {
-              setSearchScreenInitialQuery('');
-              setSearchQuery('');
-              setScreen('search');
-            }}
-            myUserId={myUserId}
-            query={searchQuery}
-            initialTab={searchResultTab}
-            onBack={() => {
-              setActiveTab('home');
-              setHomeRestoreAnimated(false);
-              setHomeRestoreKey((current) => current + 1);
-              setScreen('tabs');
-            }}
-            onPressSearchBar={() => {
-              setSearchScreenInitialQuery(searchQuery);
-              setScreen('search');
-            }}
-            onChangeTab={setSearchResultTab}
-            onOpenRegionRanking={openRegionRankingDetail}
-            onOpenRestaurantDetail={(restaurantName, restaurantId) =>
-              openRestaurantDetail(restaurantName, { type: 'search-result' }, restaurantId)
-            }
-          onOpenUserProfile={(user) => {
-            setSearchResultUserProfiles((current) => {
-              if (current.some((item) => item.id === user.id)) {
-                return current;
-              }
-
-              return [...current, createSearchResultUserProfile(user)];
-            });
-            setUserProfileSource({ type: 'search-result' });
-            setSelectedUserProfileId(user.id);
-            setScreen('user-profile');
-          }}
-          onSearch={(query) => setSearchQuery(query)}
-        />
-      ) : screen === 'map-search' ? (
-        <MapSearchScreen
-          initialQuery={mapSearchQuery}
-          onClose={() => {
-            setActiveTab('map');
-            setScreen('tabs');
-          }}
-          onSearch={(query) => {
-            setMapSearchQuery(query);
-            setActiveTab('map');
-            setScreen('tabs');
-          }}
-        />
-      ) : screen === 'restaurant-detail' ? (
-        <RestaurantDetailScreen
-          accessToken={session?.accessToken}
-          currentUserId={myUserId}
-          followingUserIds={myFollowingUsers
-            .map((user) => Number(user.id))
-            .filter((userId) => Number.isFinite(userId))}
-          initialTab={restaurantDetailInitialTab}
-          restaurantId={selectedRestaurantId}
-          restaurantName={selectedRestaurantName}
-          onBack={handleBackFromRestaurantDetail}
-          favoriteColor={getFavoriteColor(selectedRestaurantName)}
-          onOpenAiReservation={openAiReservation}
-          onAddToList={(restaurant) =>
-            openAddRestaurantToListFlow(restaurant, 'restaurant-detail')
-          }
-          onEditReview={openEditReview}
-          onOpenUserProfile={openUserProfileFromRestaurantDetail}
-          onReportReview={handleReportReview}
-          onReviewAuthorFollowChange={syncFollowStateAcrossScreens}
-          onOpenWriteReview={openWriteReview}
-        />
-      ) : screen === 'ai-reservation-form' && aiReservationRestaurant ? (
-        <AiReservationFormScreen
-          restaurant={aiReservationRestaurant}
-          initialDraft={aiReservationDraft}
-          onBack={() => setScreen('restaurant-detail')}
-          onSubmit={(draft) => {
-            setAiReservationDraft(draft);
-            setAiReservationResult(null);
-            setScreen('ai-reservation-pending');
-          }}
-        />
-      ) : screen === 'ai-reservation-pending' &&
-        aiReservationDraft &&
-        aiReservationRestaurant &&
-        session?.accessToken ? (
-        <AiReservationPendingScreen
-          accessToken={session.accessToken}
-          draft={aiReservationDraft}
-          restaurantId={aiReservationRestaurant.id}
-          onComplete={(reservation) => {
-            const nextResult = buildAiReservationResult(aiReservationDraft, reservation);
-            setAiReservationResult(nextResult);
-            setScreen('ai-reservation-result');
-          }}
-          onError={(message) => {
-            Alert.alert('안내', message);
-            setScreen('ai-reservation-form');
-          }}
-        />
-      ) : screen === 'ai-reservation-result' && aiReservationDraft && aiReservationResult ? (
-        <AiReservationResultScreen
-          draft={aiReservationDraft}
-          result={aiReservationResult}
-          onBack={() => setScreen('restaurant-detail')}
-          onGoHome={() => {
-            setActiveTab('home');
-            setHomeRestoreAnimated(false);
-            setHomeRestoreKey((current) => current + 1);
-            setScreen('tabs');
-          }}
-          onRetry={() => {
-            setAiReservationResult(null);
-            setScreen('ai-reservation-form');
-          }}
-        />
-      ) : screen === 'ladder-start' ? (
-        <LadderGameStartScreen
-          initialCount={ladderPlayerCount}
-          onBack={() => {
-            setActiveTab('home');
-            setHomeRestoreAnimated(false);
-            setHomeRestoreKey((current) => current + 1);
-            setScreen('tabs');
-          }}
-          onChangeCount={setLadderPlayerCount}
-          onConfirm={handleConfirmLadderCount}
-        />
-      ) : screen === 'ladder-play' ? (
-        <LadderGamePlayScreen
-          setup={ladderSetup}
-          onBack={() => setScreen('ladder-start')}
-        />
-      ) : screen === 'snail-race-start' ? (
-        <SnailRaceStartScreen
-          initialCount={snailRaceCount}
-          onBack={() => {
-            setActiveTab('home');
-            setHomeRestoreAnimated(false);
-            setHomeRestoreKey((current) => current + 1);
-            setScreen('tabs');
-          }}
-          onChangeCount={setSnailRaceCount}
-          onConfirm={handleConfirmSnailRaceCount}
-        />
-      ) : screen === 'snail-race-play' ? (
-        <SnailRacePlayScreen
-          racerCount={snailRaceCount}
-          onBack={() => setScreen('snail-race-start')}
-        />
-      ) : screen === 'worldcup-start' ? (
-        <WorldCupStartScreen
-          onBack={() => {
-            setActiveTab('home');
-            setHomeRestoreAnimated(false);
-            setHomeRestoreKey((current) => current + 1);
-            setScreen('tabs');
-          }}
-          onSelectCategory={handleStartWorldCup}
-        />
-      ) : screen === 'worldcup-battle' ? (
-        <WorldCupBattleScreen
-          accessToken={session?.accessToken}
-          category={worldCupCategory}
-          onBack={() => setScreen('worldcup-start')}
-          onComplete={(winner) => {
-            setWorldCupWinner(winner);
-            setScreen('worldcup-result');
-          }}
-        />
-      ) : screen === 'worldcup-result' && worldCupWinner ? (
-        <WorldCupResultScreen
-          winner={worldCupWinner}
-          onBackToHome={() => {
-            setActiveTab('home');
-            setHomeRestoreAnimated(false);
-            setHomeRestoreKey((current) => current + 1);
-            setScreen('tabs');
-          }}
-          onRestart={() => {
-            setWorldCupWinner(null);
-            setScreen('worldcup-battle');
-          }}
-        />
-      ) : screen === 'reliability-guide' ? (
-        <ReliabilityGuideScreen
-          currentGrade={reliabilityGuideGrade}
-          onBack={() => {
-            if (reliabilityGuideSource === 'user-profile') {
-              setScreen('user-profile');
-              return;
-            }
-
-            setActiveTab('my');
-            setScreen('tabs');
-          }}
-        />
-      ) : screen === 'write-review' ? (
-        <WriteReviewScreen
-          initialContent={writeReviewInitialContent}
-          restaurantName={writeReviewRestaurantName || selectedRestaurantName}
-          onBack={() => {
-            setRestaurantDetailInitialTab('review');
-            setScreen('restaurant-detail');
-          }}
-          onSubmit={handleSubmitRestaurantReview}
-          submitLabel={writeReviewMode === 'edit' ? '리뷰 수정' : '리뷰 등록'}
-          title={writeReviewMode === 'edit' ? '리뷰 수정' : '리뷰 쓰기'}
-        />
-      ) : screen === 'settings' ? (
-        <SettingsScreen
-          onBack={() => setScreen('tabs')}
-          onLogout={() => void handleLogout()}
-          onOpenMyInfo={() => setScreen('my-info')}
-          onOpenDeleteAccount={() => setScreen('delete-account')}
-        />
-      ) : screen === 'my-info' ? (
-        <MyInfoScreen
-          onBack={() => setScreen('settings')}
-          onOpenEditNickname={() => setScreen('edit-nickname')}
-          onUpdateProfileImage={handleUpdateProfileImage}
-          loginProvider={loginProvider}
-          profileImageUrl={profileImageUrl}
-          genderLabel={genderLabel}
-          birthDateLabel={birthDateLabel}
-          nickname={nickname}
-        />
-      ) : screen === 'my-friends' ? (
-          <MyFriendsScreen
-            currentUserId={myUserId !== null ? String(myUserId) : null}
-            followerUsersData={myFollowerUsers}
-            followingUsersData={myFollowingUsers}
-            initialTab={myFriendsInitialTab}
-          onBack={() => setScreen('tabs')}
-          onChangeTab={setMyFriendsInitialTab}
-          onToggleFollow={handleToggleMyFriendFollow}
-          onOpenUserProfile={(userId) => {
-            setUserProfileSource({ type: 'my-friends', tab: myFriendsInitialTab });
-            setSelectedUserProfileId(userId);
-            setScreen('user-profile');
-          }}
-        />
-      ) : screen === 'user-friends' && selectedUserProfileId ? (
-        <MyFriendsScreen
-          currentUserId={myUserId !== null ? String(myUserId) : null}
-          initialTab={myFriendsInitialTab}
-          preserveListOnToggle
-          title={
-            (visibleUserProfiles.find((item) => item.id === selectedUserProfileId)?.nickname ??
-              '') + '님의 밥친구'
-          }
-          followingUsersData={
-            userFriendConnectionsById[selectedUserProfileId]?.following ?? []
-          }
-          followerUsersData={
-            userFriendConnectionsById[selectedUserProfileId]?.followers ?? []
-          }
-            onBack={() => setScreen('user-profile')}
-            onChangeTab={setMyFriendsInitialTab}
-            onToggleFollow={handleToggleMyFriendFollow}
-            onOpenUserProfile={(userId) => {
-              openNestedUserProfile(userId, {
-                type: 'user-friends',
-                userId: selectedUserProfileId,
-                tab: myFriendsInitialTab,
-              });
-            }}
-          />
-      ) : screen === 'my-lists' ? (
-        <MyListsScreen
-          lists={myLists}
-          onBack={() => setScreen('tabs')}
-          onChangeLists={setMyLists}
-          onCreateList={() => {
-            setTasteFlowSource('my-lists');
-            setSelectedRestaurants([]);
-            setTasteListName('');
-            setScreen('taste-list-name');
-          }}
-          onOpenList={(listId) => {
-            setSelectedMyListId(listId);
-            setScreen('my-list-detail');
-          }}
-          onDeleteList={handleDeleteMyList}
-          onSetRepresentativeList={handleSetRepresentativeMyList}
-          onRenameList={handleRenameMyList}
-          onToggleListPrivacy={handleToggleMyListPrivacy}
-        />
-      ) : screen === 'my-list-detail' && selectedMyListId ? (
-        <MyListDetailScreen
-          list={myLists.find((item) => item.id === selectedMyListId) ?? myLists[0]}
-          isLiked={myListLikeStateById[selectedMyListId] ?? false}
-          isLikePending={myListLikePendingIds.includes(selectedMyListId)}
-          likeCount={myListLikeCountById[selectedMyListId] ?? 0}
-          lists={myLists}
-          onBack={() => setScreen('my-lists')}
-          onChangeLists={setMyLists}
-          onOpenPlaceEdit={() => setScreen('my-list-place-edit')}
-          onOpenRestaurantDetail={(restaurantName) =>
-            openRestaurantDetail(restaurantName, {
-              type: 'my-list-detail',
-              listId: selectedMyListId,
-            })
-          }
-          onToggleLike={handleBlockedOwnListLike}
-          onRenameList={handleRenameMyList}
-          onRemoveRestaurants={handleRemoveRestaurantsFromMyList}
-          onUpdateRestaurantRatings={handleUpdateRestaurantRatingsInMyList}
-        />
-      ) : screen === 'my-list-place-edit' && selectedMyListId ? (
-        <MyListPlaceEditScreen
-          list={myLists.find((item) => item.id === selectedMyListId) ?? myLists[0]}
-          lists={myLists}
-          onBack={() => setScreen('my-list-detail')}
-          onChangeLists={setMyLists}
-          onDeleteRestaurants={handleRemoveRestaurantsFromMyList}
-        />
-      ) : screen === 'my-reviews' ? (
-        <MyReviewsScreen
-          onBack={() => setScreen('tabs')}
-          onDeleteReview={handleDeleteMyReview}
-          onOpenRestaurantDetail={(restaurantName) =>
-            openRestaurantDetail(restaurantName, { type: 'my-reviews' })
-          }
-          reviewsData={myReviewItems}
-          title="내 리뷰"
-        />
-      ) : screen === 'user-reviews' && selectedUserProfileId ? (
-        <UserReviewsScreen
-          title={
-              (selectedVisibleUserProfile?.nickname ?? '') + '님의 리뷰'
-          }
-          reviews={userReviewsById[selectedUserProfileId] ?? []}
-          pendingReactionIds={reviewReactionPendingIds}
-          onBack={() => setScreen('user-profile')}
-          onOpenRestaurantDetail={(restaurantName) =>
-            openRestaurantDetail(restaurantName, {
-              type: 'user-reviews',
-              userId: selectedUserProfileId,
-            })
-          }
-          onToggleReaction={handleToggleUserReviewReaction}
-        />
-      ) : screen === 'edit-nickname' ? (
-        <EditNicknameScreen
-          initialNickname={nickname}
-          onBack={() => setScreen('my-info')}
-          onSubmit={(nextNickname) => {
-            setNickname(nextNickname);
-            setScreen('my-info');
-          }}
-        />
-      ) : screen === 'delete-account' ? (
-        <DeleteAccountScreen
-          onBack={() => setScreen('settings')}
-          onSubmit={() => void handleDeleteAccount()}
-        />
-      ) : screen === 'user-profile' && selectedUserProfileId ? (
-        <UserProfileScreen
-          isFollowLoading={userProfileFollowPendingIds.includes(selectedUserProfileId)}
-          isFollowing={selectedUserProfileIsFollowing}
-          isOwnProfile={myUserId !== null && Number(selectedUserProfileId) === myUserId}
-          onOpenReliabilityGuide={() =>
-            openReliabilityGuide(
-              'user-profile',
-              selectedVisibleUserProfile?.reliabilityGrade,
-            )
-          }
-          onFollowToggle={(nextIsFollowing) =>
-            void handleToggleUserProfileFollow(selectedUserProfileId, nextIsFollowing)
-          }
-          profile={selectedVisibleUserProfile ?? fallbackSelectedUserProfile!}
-          onToggleRepresentativeLike={(listId) => void handleToggleMyListLike(listId)}
-          representativeLikeCount={
-            (() => {
-              const selectedProfile = selectedVisibleUserProfile;
-              const representativeListId = selectedProfile?.representativeListId;
-              return representativeListId
-                ? myListLikeCountById[representativeListId] ?? 0
-                : undefined;
-            })()
-          }
-          representativeIsLikePending={
-            (() => {
-              const selectedProfile = selectedVisibleUserProfile;
-              const representativeListId = selectedProfile?.representativeListId;
-              return representativeListId
-                ? myListLikePendingIds.includes(representativeListId)
-                : false;
-            })()
-          }
-            representativeIsLiked={
-              (() => {
-                const selectedProfile = selectedVisibleUserProfile;
-                const representativeListId = selectedProfile?.representativeListId;
-                const hasStoredLikeState = representativeListId
-                  ? Object.prototype.hasOwnProperty.call(
-                      myListLikeStateById,
-                      representativeListId,
-                    )
-                  : false;
-                return representativeListId
-                  ? hasStoredLikeState
-                    ? myListLikeStateById[representativeListId]
-                    : selectedProfile?.representativeListIsLiked ?? false
-                  : selectedProfile?.representativeListIsLiked ?? false;
-              })()
-            }
-          onBack={() => {
-            if (userProfileSource?.type === 'search-result') {
-              setScreen('search-result');
-              return;
-            }
-
-              if (userProfileSource?.type === 'home') {
-                setActiveTab('home');
-                setHomeRestoreAnimated(false);
-                setHomeRestoreKey((current) => current + 1);
-                setScreen('tabs');
-                return;
-              }
-
-              if (userProfileSource?.type === 'restaurant-detail') {
-                setScreen('restaurant-detail');
-                return;
-              }
-
-              if (userProfileSource?.type === 'user-friends') {
-                const previousProfile = userProfileHistory[userProfileHistory.length - 1];
-                setSelectedUserProfileId(userProfileSource.userId);
-                setUserProfileSource(previousProfile?.source ?? null);
-                setUserProfileHistory((current) => current.slice(0, -1));
-                setMyFriendsInitialTab(userProfileSource.tab);
-                setScreen('user-friends');
-                return;
-              }
-
-            if (userProfileSource?.type === 'my-friends') {
-              setMyFriendsInitialTab(userProfileSource.tab);
-              setScreen('my-friends');
-              return;
-            }
-
-            setScreen('my-friends');
-          }}
-          onOpenFollowers={() => {
-            setMyFriendsInitialTab('followers');
-            setScreen('user-friends');
-          }}
-          onOpenFollowing={() => {
-            setMyFriendsInitialTab('following');
-            setScreen('user-friends');
-          }}
-          onOpenReviews={() => setScreen('user-reviews')}
-          onOpenRestaurantDetail={(restaurantName) =>
-            openRestaurantDetail(restaurantName, {
-              type: 'user-profile',
-              userId: selectedUserProfileId,
-            })
-          }
-          onReportUser={
-            selectedUserProfileId
-              ? (reason) => void handleReportUser(selectedUserProfileId, reason)
-              : undefined
-          }
-        />
-      ) : screen === 'ranking-detail' && rankingDetail ? (
-        <RankingDetailScreen
-          onBack={handleBackFromRankingDetail}
-          isLoading={rankingDetail.variant === 'region' ? rankingDetail.isLoading : false}
-          items={rankingDetail.items}
-          onOpenRestaurantDetail={(restaurantName) =>
-            openRestaurantDetail(restaurantName, {
-              type: 'ranking-detail',
-              detail: rankingDetail,
-            })
-          }
-          title={rankingDetail.title}
-          variant={rankingDetail.variant}
-        />
-      ) : activeTab === 'home' ? (
-        <MainHomeScreen
-          featuredRestaurantItems={recommendedRestaurantItems}
+          activeTab={activeTab}
+          followerCount={followerCount}
+          getFavoriteColor={getFavoriteColor}
           hasUnreadNews={hasUnreadNews}
-          initialScrollState={homeScrollState}
-          localRankingItems={rankingEntries.local}
+          homeRestoreAnimated={homeRestoreAnimated}
+          homeRestoreKey={homeRestoreKey}
+          homeScrollState={homeScrollState}
           localRankingRegion={localRankingRegion}
-          mealFriendItems={recommendedMealFriendItems}
-          nationalRankingItems={rankingEntries.national}
-          onOpenRestaurantDetail={(restaurantName, restaurantId) =>
-            openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'home' }, restaurantId)
+          mapListRestaurants={mapListRestaurants}
+          mapSearchQuery={mapSearchQuery}
+          myHonorPeriod={myHonorPeriod ?? undefined}
+          myHonorTitle={myHonorTitle ?? undefined}
+          myListLikeCountById={myListLikeCountById}
+          myListLikePendingIds={myListLikePendingIds}
+          myListLikeStateById={myListLikeStateById}
+          myLists={myLists}
+          myPageRestoreAnimated={myPageRestoreAnimated}
+          myPageRestoreKey={myPageRestoreKey}
+          myPageScrollState={myPageScrollState}
+          myReliabilityGrade={myReliabilityGrade ?? undefined}
+          myReviewItemsLength={myReviewItems.length}
+          nickname={nickname}
+          rankingEntries={rankingEntries}
+          rankingRestoreAnimated={rankingRestoreAnimated}
+          rankingRestoreKey={rankingRestoreKey}
+          rankingScrollState={rankingScrollState}
+          recommendedMealFriendItems={recommendedMealFriendItems}
+          recommendedRestaurantItems={recommendedRestaurantItems}
+          onChangeHomeScrollState={(nextState) =>
+            setHomeScrollState((current) => ({ ...current, ...nextState }))
           }
-          onOpenUserProfile={(userId) => {
+          onChangeMyPageScrollState={(nextState) =>
+            setMyPageScrollState((current) => ({ ...current, ...nextState }))
+          }
+          onChangeRankingScrollState={(nextState) =>
+            setRankingScrollState((current) => ({ ...current, ...nextState }))
+          }
+          onClearMapSearch={() => setMapSearchQuery('')}
+          onOpenAddRestaurantFromMap={(restaurant) =>
+            openAddRestaurantToListFlow(restaurant, 'map')
+          }
+          onOpenAiChat={() => setScreen('ai-chat')}
+          onOpenHomeUserProfile={(userId) => {
             setUserProfileSource({ type: 'home' });
             setSelectedUserProfileId(userId);
             setScreen('user-profile');
           }}
-          onPressAi={() => setScreen('ai-chat')}
-          onPressLadderGame={openLadderGame}
-          onPressSnailRace={openSnailRace}
-          onPressWorldCup={openWorldCup}
-          onPressNews={() => setScreen('news')}
-          onPressLocalRanking={() => openRankingDetail('local')}
-          onPressNationalRanking={() => openRankingDetail('national')}
-          onPressSearch={() => {
-              setSearchScreenInitialQuery('');
-              setScreen('search');
-            }}
-          onScrollStateChange={(nextState) =>
-            setHomeScrollState((current) => ({ ...current, ...nextState }))
-          }
-          onSelectTab={handleSelectTab}
-          restoreAnimated={homeRestoreAnimated}
-          restoreScrollKey={homeRestoreKey}
-        />
-      ) : activeTab === 'ranking' ? (
-        <RankingTabScreen
-          initialScrollState={rankingScrollState}
-          localRankingItems={rankingEntries.local}
-          nationalRankingItems={rankingEntries.national}
-          onOpenRestaurantDetail={(restaurantName) =>
-            openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'ranking' })
-          }
-          onPressLocalRanking={() => openRankingDetail('local')}
-          onPressNationalRanking={() => openRankingDetail('national')}
-          onScrollStateChange={(nextState) =>
-            setRankingScrollState((current) => ({ ...current, ...nextState }))
-          }
-          onSelectTab={handleSelectTab}
-          restoreAnimated={rankingRestoreAnimated}
-          restoreScrollKey={rankingRestoreKey}
-        />
-      ) : activeTab === 'map' ? (
-        <MapScreen
-          accessToken={session?.accessToken}
-          mapRestaurantsData={mapListRestaurants}
-          onOpenRestaurantDetail={(restaurantName) =>
-            openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'map' })
-          }
-          onAddToList={(restaurantName) =>
-            openAddRestaurantToListFlow(restaurantName, 'map')
-          }
-          getFavoriteColor={getFavoriteColor}
-          onPressSearchBar={() => setScreen('map-search')}
-          searchQuery={mapSearchQuery}
-          onClearSearch={() => setMapSearchQuery('')}
-          onSelectTab={handleSelectTab}
-        />
-      ) : (
-        <MyPageScreen
-          followerCount={followerCount}
-          honorPeriod={myHonorPeriod ?? undefined}
-          honorTitle={myHonorTitle ?? undefined}
-          initialScrollState={myPageScrollState}
-          nickname={nickname}
-          myLists={myLists}
-          onOpenReliabilityGuide={() =>
-            openReliabilityGuide(
-              'my-page',
-              myReliabilityGrade ?? undefined,
-            )
-          }
+          onOpenLadderGame={openLadderGame}
+          onOpenLocalRanking={() => openRankingDetail('local')}
+          onOpenMapSearch={() => setScreen('map-search')}
           onOpenMyFollowers={() => {
             setMyFriendsInitialTab('followers');
             setScreen('my-friends');
@@ -4589,51 +3100,26 @@ export function AppRoot() {
             setScreen('my-friends');
           }}
           onOpenMyLists={() => setScreen('my-lists')}
+          onOpenMyReviews={() => setScreen('my-reviews')}
+          onOpenNationalRanking={() => openRankingDetail('national')}
+          onOpenNews={() => setScreen('news')}
           onOpenRepresentativeList={(listId) => {
             setSelectedMyListId(listId);
             setScreen('my-list-detail');
           }}
-          onOpenRestaurantDetail={(restaurantName) =>
-            openRestaurantDetail(restaurantName, { type: 'tabs', tab: 'my' })
+          onOpenRestaurantDetail={(restaurantName, sourceTab, restaurantId) =>
+            openRestaurantDetail(restaurantName, { type: 'tabs', tab: sourceTab }, restaurantId)
           }
-          onOpenMyReviews={() => setScreen('my-reviews')}
-          onToggleRepresentativeLike={handleBlockedOwnListLike}
-          representativeLikeCount={
-            (() => {
-              const representativeList =
-                myLists.find((item) => item.isRepresentative) ?? myLists[0];
-              return representativeList
-                ? myListLikeCountById[representativeList.id] ?? 0
-                : undefined;
-            })()
-          }
-          representativeIsLikePending={
-            (() => {
-              const representativeList =
-                myLists.find((item) => item.isRepresentative) ?? myLists[0];
-              return representativeList
-                ? myListLikePendingIds.includes(representativeList.id)
-                : false;
-            })()
-          }
-          representativeIsLiked={
-            (() => {
-              const representativeList =
-                myLists.find((item) => item.isRepresentative) ?? myLists[0];
-              return representativeList
-                ? myListLikeStateById[representativeList.id] ?? false
-                : false;
-            })()
-          }
-          onScrollStateChange={(nextState) =>
-            setMyPageScrollState((current) => ({ ...current, ...nextState }))
-          }
+          onOpenReliabilityGuide={(grade) => openReliabilityGuide('my-page', grade)}
+          onOpenSearch={() => {
+            setSearchScreenInitialQuery('');
+            setScreen('search');
+          }}
           onOpenSettings={() => setScreen('settings')}
+          onOpenSnailRace={openSnailRace}
+          onOpenWorldCup={openWorldCup}
           onSelectTab={handleSelectTab}
-          reliabilityGrade={myReliabilityGrade ?? undefined}
-          reviewCount={myReviewItems.length}
-          restoreAnimated={myPageRestoreAnimated}
-          restoreScrollKey={myPageRestoreKey}
+          onToggleRepresentativeLike={handleBlockedOwnListLike}
         />
       )}
     </SafeAreaProvider>
